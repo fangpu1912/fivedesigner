@@ -57,6 +57,7 @@ projects/
 *.key
 *.pem
 *.p12
+.tauri/update-keys
 
 # AI Provider configs with keys
 ai-config.local.json

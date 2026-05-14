@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 
 import { open, save, confirm } from '@tauri-apps/plugin-dialog'
 import { writeFile } from '@tauri-apps/plugin-fs'
+import { check as checkUpdate, type Update } from '@tauri-apps/plugin-updater'
+import { relaunch } from '@tauri-apps/plugin-process'
 import {
   Save,
   Key,
@@ -32,6 +34,7 @@ import {
   Edit2,
   FileJson,
   Settings2,
+  Download,
 } from 'lucide-react'
 
 import { VendorConfigPanel } from '@/components/settings/VendorConfigPanel'
@@ -294,6 +297,9 @@ export function Settings() {
   })
 
   const [cacheSize, setCacheSize] = useState('0 MB')
+  const [updateInfo, setUpdateInfo] = useState<Update | null>(null)
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
@@ -1049,6 +1055,34 @@ export function Settings() {
     calculateCacheSize()
     toast({ title: `已清理 ${keysToRemove.length} 项缓存数据` })
   }
+
+  const handleCheckUpdate = useCallback(async () => {
+    setIsCheckingUpdate(true)
+    try {
+      const update = await checkUpdate()
+      setUpdateInfo(update ?? null)
+      if (!update) {
+        toast({ title: '已是最新版本', description: `v1.0.0` })
+      }
+    } catch (error) {
+      toast({ title: '检查更新失败', description: String(error), variant: 'destructive' })
+    } finally {
+      setIsCheckingUpdate(false)
+    }
+  }, [toast])
+
+  const handleInstallUpdate = useCallback(async () => {
+    if (!updateInfo) return
+    setIsDownloading(true)
+    try {
+      await updateInfo.downloadAndInstall()
+      await relaunch()
+    } catch (error) {
+      toast({ title: '更新安装失败', description: String(error), variant: 'destructive' })
+    } finally {
+      setIsDownloading(false)
+    }
+  }, [updateInfo, toast])
 
   const handleExportSettings = async () => {
     try {
@@ -2010,6 +2044,48 @@ export function Settings() {
 
         <TabsContent value="other">
           <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>关于 FiveDesigner</CardTitle>
+                <CardDescription>版本信息和更新检查</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">当前版本</p>
+                    <p className="text-xs text-muted-foreground">v1.0.0</p>
+                  </div>
+                  <div className="flex gap-2">
+                    {updateInfo ? (
+                      <Button onClick={handleInstallUpdate} disabled={isDownloading}>
+                        {isDownloading ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Download className="w-4 h-4 mr-2" />
+                        )}
+                        {isDownloading ? '下载中...' : `更新到 ${updateInfo.version}`}
+                      </Button>
+                    ) : (
+                      <Button variant="outline" onClick={handleCheckUpdate} disabled={isCheckingUpdate}>
+                        {isCheckingUpdate ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                        )}
+                        {isCheckingUpdate ? '检查中...' : '检查更新'}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                {updateInfo && (
+                  <div className="p-3 bg-muted rounded-lg">
+                    <p className="text-sm font-medium mb-1">更新内容</p>
+                    <p className="text-xs text-muted-foreground whitespace-pre-wrap">{updateInfo.body || '暂无更新说明'}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle>剪映专业版</CardTitle>
