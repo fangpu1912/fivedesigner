@@ -1,0 +1,2811 @@
+﻿可灵AI 3.0系列模型API文档快手内部文档请勿外传
+可灵3.0系列模型已正式上线，完整文档请移步「可灵AI」新系统 API 接口文档；当前文档不再更新。感谢您的理解与支持。
+文档更新记录：
+【2026.2.10】“文生视频”与“图生视频”支持智能分镜，模型会根据提示词内容智能切分内容实现多镜头效果，相关参数"multi_shot":  "intelligence"。
+【2026.2.5】新主体支持绑定音色。生成视频时，建议通过主体来指定音色，效果更好。同步更新文档：仅保留适用新模型的参数。
+【2026.2.3】
+细化有指定音色时的计费策略，边际成本比未指定音色多消耗2积分；涉及kling-v3视频模型。
+增加有参考视频和生成有声视频的互斥关系；涉及kling-v3-omni视频模型。
+增加创建主体限制，仅通过视频定制的主体支持绑定音色。
+【2026.2.2】新建文档。
+能力地图
+视频生成
+kling-v3-omni
+std（3s～15s）
+pro（3s～15s）
+文生视频
+单镜头视频生成
+✅
+✅
+多镜头视频生成
+✅
+✅
+声音控制
+❌
+❌
+其他
+-
+-
+图生视频
+单镜头视频生成
+✅
+✅
+多镜头视频生成
+✅
+✅
+首尾帧（一镜到底）
+✅
+✅
+主体控制
+（视频角色主体+多图主体）
+✅
+✅
+视频参考
+✅（仅3s～10s）
+✅（仅3s～10s）
+声音控制
+❌
+❌
+其他
+-
+-
+kling-video-o1
+std（3s～10s）
+pro（3s～10s）
+文生视频
+单镜头视频生成
+✅（仅5s、10s）
+✅（仅5s、10s）
+声音控制
+❌
+❌
+其他
+-
+-
+图生视频
+单镜头视频生成（仅首帧）
+✅（仅5s、10s）
+✅（仅5s、10s）
+首尾帧（一镜到底）
+✅
+✅
+主体控制
+（仅多图主体）
+✅
+✅
+视频参考（含视频编辑）
+✅
+✅
+声音控制
+❌
+❌
+其他
+-
+-
+kling-v3
+std（3～15s）
+pro（3～15s）
+文生视频
+单镜头视频生成
+✅
+✅
+多镜头视频生成
+✅
+✅
+声音控制
+❌
+❌
+其他
+-
+-
+图生视频
+单镜头视频生成（仅首帧）
+✅
+✅
+多镜头视频生成
+✅
+✅
+首尾帧（一镜到底）
+✅
+✅
+主体控制
+（视频角色主体+多图主体）
+✅
+✅
+动作控制
+（即将上线）
+（即将上线）
+声音控制
+❌
+❌
+其他
+-
+-
+图片生成
+kling-v3-omni
+自定义长宽比（1K/2K/4K）
+智能长宽比
+文生图
+单图生成
+✅
+✅
+其他
+-
+-
+图生图
+单图生成
+✅
+✅
+组图生成
+✅
+✅
+主体控制
+（仅多图主体）
+✅
+✅
+其他
+-
+-
+kling-image-o1
+自定义长宽比（1K/2K）
+智能长宽比
+文生图
+单图生成
+✅
+-
+其他
+-
+-
+图生图
+单图生成
+✅
+✅
+主体控制
+（仅多图主体）
+✅
+✅
+其他
+-
+-
+kling-v3
+自定义长宽比（1K/2K）
+智能长宽比
+文生图
+单图生成
+✅
+-
+其他
+-
+-
+图生图
+单图生成
+✅
+-
+主体控制
+（仅多图主体）
+✅
+-
+其他
+-
+-
+API说明
+【Omni-Video】创建任务
+网络协议
+https
+请求地址
+/v1/videos/omni-video
+请求方法
+POST
+请求格式
+application/json
+响应格式
+application/json
+请求头
+字段
+值
+描述
+Content-Type
+application/json
+数据交换格式
+Authorization
+鉴权信息，参考接口鉴权
+鉴权信息，参考接口鉴权
+请求体
+字段
+类型
+必填
+默认值
+描述
+model_name
+string
+可选
+kling-video-o1
+模型名称
+枚举值：kling-video-o1, kling-v3-omni
+multi_shot
+boolean
+可选
+false
+是否生成多镜头视频
+当前参数为true时，prompt参数无效
+当前参数为false时，shot_type参数及multi_prompt参数无效
+shot_type
+string
+可选
+空
+分镜方式
+枚举值：customize
+当multi_shot参数为true时，当前参数必填
+prompt
+string
+可选
+空
+文本提示词，可包含正向描述和负向描述
+可将提示词模板化来满足不同的视频生成需求
+Omni模型可通过Prompt与主体、图片、视频等内容实现多种能力
+通过<<<>>>的格式来指定某个主体、图片、视频，如：<<<element_1>>>、<<<image_1>>>、<<<video_1>>>
+更多信息详见：可灵视频 3.0 Omni 使用指南
+长度不能超过2500个字符
+当multi_shot参数为false或shot-type参数为intelligence时，当前参数不得为空
+不同模型版本支持能力范围不同，详见上文能力地图
+multi_prompt
+array
+可选
+空
+各分镜信息，如提示词、时长等
+通过index、prompt、duration参数定义分镜序号及相应提示词和时长，其中：
+最多支持6个分镜，最小支持1个分镜
+每个分镜相关内容的最大长度不超过512
+每个分镜的时长不大于当前任务的总时长，不小于1
+所有分镜的时长之和等于当前任务的总时长
+用key:value承载，如下：
+"multi_prompt":[
+{
+"index":int,
+    "prompt": "string",
+    "duration": "5"
+  },
+  {
+"index":int,
+    "prompt": "string",
+    "duration": "5"
+  }
+]
+当mult_shot参数为true且shot_type参数为customize时，当前参数不得为空
+image_list
+array
+可选
+空
+参考图列表
+包括主体、场景、风格等参考图片，也可作为首帧或尾帧生成视频；当作为首帧或尾帧生成视频时：
+通过type参数来定义图片是否为首尾帧：first_frame为首帧，end_frame为尾帧
+暂时不支持仅尾帧，即有尾帧图时必须有首帧图
+使用首帧或首尾帧生成视频时，不能使用视频编辑功能；
+用key:value承载，如下：
+"image_list":[
+{
+"image_url":"image_url",
+    "type":"first_frame"
+  },
+  {
+"image_url":"image_url",
+    "type":"end_frame"
+  }
+]
+支持传入图片Base64编码或图片URL（确保可访问）
+图片格式支持.jpg / .jpeg / .png
+图片文件大小不能超过10MB，图片宽高尺寸不小于300px，图片宽高比要在1:2.5 ~ 2.5:1之间
+参考图片数量与有无参考视频、参考主体数量有关，其中：
+有参考视频时，参考图片数量和参考主体数量之和不得超过4；
+无参考视频时，参考图片数量和参考主体数量之和不得超过7；
+参考图片数量超过2时，不支持设置尾帧；
+image_url参数值不得为空
+不同模型版本支持能力范围不同，详见上文能力地图
+element_list
+array
+可选
+空
+参考主体列表
+基于主体库中主体的ID配置，用key:value承载，如下：
+"element_list":[
+{
+"element_id":long
+  },
+  {
+"element_id":long
+  }
+]
+参考主体数量与有无参考视频、参考图片数量有关，其中：
+如果使用首帧生视频或首尾帧生视频时，最多支持3个主体；
+有参考视频时，参考图片数量和参考主体数量之和不得超过4，且不支持使用视频角色主体；
+无参考视频时，参考图片数量和参考主体数量之和不得超过7；
+主体分为视频定制主体（简称：视频角色主体）和图片定制主体（简称：多图主体），适用范围不同，请注意区分
+更多主体信息详见：可灵「主体库 3.0」使用指南
+不同模型版本支持能力范围不同，详见上文能力地图
+video_list
+array
+可选
+空
+参考视频，通过URL方式获取
+可作为特征参考视频，也可作为待编辑视频，默认为待编辑视频；可选择性保留视频原声
+通过refer_type参数区分参考视频类型：feature为特征参考视频，base为待编辑视频
+参考视频为待编辑视频时，不能定义视频首尾帧
+通过keep_original_sound参数选择是否保留视频原声，yes为保留，no为不保留；当前参数对特征参考视频（feature）也生效
+有参考视频时，sound参数值只能为off
+用key:value承载，如下：
+"video_list":[
+{
+"video_url":"video_url",
+    "refer_type":"base",
+    "keep_original_sound":"yes"
+  }
+]
+视频格式仅支持MP4/MOV
+视频时长不少于3秒，上限与模型版本有关，详见能力地图
+视频宽高尺寸需介于720px（含）和2160px（含）之间
+视频帧率基于24fps～60fps，生成视频时会输出为24fps
+至多仅支持上传1段视频，视频大小不超过200MB
+video_url参数值不得为空
+不同模型版本支持能力范围不同，详见上文能力地图
+sound
+string
+可选
+off
+生成视频时是否同时生成声音
+枚举值：on，off
+仅V2.6及后续版本模型支持当前参数
+mode
+string
+可选
+pro
+生成视频的模式
+枚举值：std，pro
+其中std：标准模式（标准），基础模式，生成720P视频，性价比高
+其中pro：专家模式（高品质），高表现模式，生成1080P视频，视频质量更佳
+不同模型版本支持能力范围不同，详见上文能力地图
+aspect_ratio
+string
+可选
+空
+生成视频的画面纵横比（宽:高）
+枚举值：16:9, 9:16, 1:1
+未使用首帧参考或视频编辑功能时，当前参数必填
+duration
+string
+可选
+5
+生成视频时长，单位s
+枚举值：3，4，5，6，7，8，9，10，11，12，13，14，15，其中：
+使用视频编辑功能（"refer_type":"base"）时，输出结果与传入视频时长相同，此时当前参数无效；此时，按输入视频时长四舍五入取整计量计费
+不同模型版本支持能力范围不同，详见上文能力地图
+watermark_info
+array
+可选
+空
+是否同时生成含水印的结果
+通过enabled参数定义，用key:value承载，如下：：
+"watermark_info": {
+"enabled": boolean // true 为生成，false 为不生成
+}
+暂不支持自定义水印
+callback_url
+string
+可选
+空
+本次任务结果回调通知地址，如果配置，服务端会在任务状态发生变更时主动通知
+具体通知的消息schema见“Callback协议”
+external_task_id
+string
+可选
+空
+自定义任务ID
+用户自定义任务ID，传入不会覆盖系统生成的任务ID，但支持通过该ID进行任务查询
+请注意，单用户下需要保证唯一性
+响应体
+{
+"code": 0, //错误码；具体定义见错误码
+  "message": "string", //错误信息
+  "request_id": "string", //请求ID，系统生成，用于跟踪请求、排查问题
+  "data":{
+"task_id": "string", //任务ID，系统生成
+    "task_info":{ //任务创建时的参数信息
+       "external_task_id": "string"//客户自定义任务ID
+    }, 
+    "task_status": "string", //任务状态，枚举值：submitted（已提交）、processing（处理中）、succeed（成功）、failed（失败）
+    "created_at": 1722769557708, //任务创建时间，Unix时间戳、单位ms
+    "updated_at": 1722769557708 //任务更新时间，Unix时间戳、单位ms
+  }
+}
+调用示例
+多镜头效果的图生视频
+curl --location 'https://xxx/v1/videos/omni-video/' \
+--header 'Authorization: Bearer xxx' \
+--header 'Content-Type: application/json' \
+--data '{
+    "model_name": "kling-v3-omni",
+    "multi_shot": true,
+    "shot_type": "customize",
+    "prompt": "",
+    "multi_prompt": [
+      {
+        "index": 1,
+        "prompt": "<<<image_1>>>A person sitting on a park bench, sunlight filtering through trees.  Simple composition, no dialogue.",
+        "duration": "2"
+      },
+      {
+        "index": 2,
+        "prompt": "A car speeding down a rainy street, headlights glowing.  Dynamic angle, focus on motion.",
+        "duration": "3"
+      }
+    ],
+    "image_list": [
+      {
+        "image_url": "xx"
+      } ,
+      {
+        "image_url": "xxx"
+      }
+    ],
+    "video_list": [],
+    "mode": "pro",
+    "sound": "on",
+    "aspect_ratio": "16:9",
+    "duration": "5",  
+    "callback_url": "xx",
+    "external_task_id": ""
+  }'
+多镜头效果的文生视频
+curl --location 'https://xxx/v1/videos/omni-video/' \
+--header 'Authorization: Bearer xxx' \
+--header 'Content-Type: application/json; charset=utf-8' \
+--data '{
+    "model_name": "kling-v3-omni",
+    "multi_shot": true,
+    "shot_type": "customize",
+    "prompt": "",
+    "multi_prompt": [
+      {
+        "index": 1,
+        "prompt": "Two friends talking under a streetlight at night. Warm glow, casual poses, no dialogue.",
+        "duration": "2"
+      },
+      {
+        "index": 2,
+        "prompt": "A runner sprinting through a forest, leaves flying. Low-angle shot, focus on movement.",
+        "duration": "3"
+      },
+      {
+        "index": 3,
+        "prompt": "A woman hugging a cat, smiling. Soft sunlight, cozy home setting, emphasize warmth.",
+        "duration": "3"
+      },
+      {
+        "index": 4,
+        "prompt": "A door creaking open, shadowy hallway. Dark tones, minimal details, eerie mood.",
+        "duration": "3"
+      },
+      {
+        "index": 5,
+        "prompt": "A man slipping on a banana peel, shocked expression. Exaggerated pose, bright colors.",
+        "duration": "3"
+      },
+      {
+        "index": 6,
+        "prompt": "A sunset over mountains, small figure walking away. Wide angle, peaceful atmosphere.",
+        "duration": "1"
+      }
+    ],
+    "image_list": [],
+    "sound":"on",
+    "element_list": [],
+    "video_list": [],
+    "mode": "pro",
+    "aspect_ratio": "16:9",
+    "duration": "15",
+    "callback_url": "xxx",
+    "external_task_id": ""
+  }'
+【Omni-Video】查询任务（单个）
+网络协议
+https
+请求地址
+/v1/videos/omni-video/{id}
+请求方法
+GET
+请求格式
+application/json
+响应格式
+application/json
+请求头
+字段
+值
+描述
+Content-Type
+application/json
+数据交换格式
+Authorization
+鉴权信息，参考接口鉴权
+鉴权信息，参考接口鉴权
+请求路径参数
+字段
+类型
+必填
+默认值
+描述
+task_id
+string
+可选
+空
+文生视频的任务ID
+请求路径参数，直接将值填写在请求路径中，与external_task_id两种查询方式二选一
+external_task_id
+string
+可选
+空
+文生视频的自定义任务ID
+创建任务时填写的external_task_id，与task_id两种查询方式二选一
+请求体
+无
+响应体
+{
+"code": 0, //错误码；具体定义见错误码
+  "message": "string", //错误信息
+  "request_id": "string", //请求ID，系统生成，用于跟踪请求、排查问题
+  "data":{
+"task_id": "string", //任务ID，系统生成 
+    "task_status": "string", //任务状态，枚举值：submitted（已提交）、processing（处理中）、succeed（成功）、failed（失败）
+    "task_status_msg": "string", //任务状态信息，当任务失败时展示失败原因（如触发平台的内容风控等）
+    "task_info": { //任务创建时的参数信息
+      "external_task_id": "string"//客户自定义任务ID
+    },
+    "task_result":{
+      "videos":[
+        {
+"id": "string", //生成的视频ID；全局唯一
+"url": "string", //生成视频的URL，防盗链格式（请注意，为保障信息安全，生成的图片/视频会在30天后被清理，请及时转存）
+          "watermark_url": "string", // 含水印视频下载URL，防盗链格式
+"duration": "string" //视频总时长，单位s
+        }
+      ]
+    },
+    "watermark_info": {
+      "enabled": boolean
+    },
+  "final_unit_deduction": "string", // 任务最终扣减积分数值
+    "created_at": 1722769557708, //任务创建时间，Unix时间戳、单位ms
+    "updated_at": 1722769557708 //任务更新时间，Unix时间戳、单位ms
+  }
+}
+【Omni-Video】查询任务（列表）
+网络协议
+https
+请求地址
+/v1/videos/omni-video
+请求方法
+GET
+请求格式
+application/json
+响应格式
+application/json
+请求头
+字段
+值
+描述
+Content-Type
+application/json
+数据交换格式
+Authorization
+鉴权信息，参考接口鉴权
+鉴权信息，参考接口鉴权
+查询参数
+字段
+类型
+必填
+默认值
+描述
+pageNum
+int
+可选
+1
+页码
+取值范围：[1,1000]
+pageSize
+int 
+可选
+30
+每页数据量
+取值范围：[1,500]
+请求体
+无
+响应体
+{
+"code": 0, //错误码；具体定义见错误码
+  "message": "string", //错误信息
+  "request_id": "string", //请求ID，系统生成，用于跟踪请求、排查问题
+  "data":[
+    {
+      "task_id": "string", //任务ID，系统生成
+      "task_status": "string", //任务状态，枚举值：submitted（已提交）、processing（处理中）、succeed（成功）、failed（失败）
+      "task_status_msg": "string", //任务状态信息，当任务失败时展示失败原因（如触发平台的内容风控等）
+      "task_info": { //任务创建时的参数信息
+        "external_task_id": "string"//任务ID，客户自定义生成，与task_id两种查询方式二选一
+      },
+      "task_result":{
+        "videos":[
+          {
+            "id": "string", //生成的视频ID；全局唯一
+            "url": "string", //生成视频的URL，防盗链格式（请注意，为保障信息安全，生成的图片/视频会在30天后被清理，请及时转存）
+          "watermark_url": "string", // 含水印视频下载URL，防盗链格式
+            "duration": "string" //视频总时长，单位s
+          }
+        ]
+},
+      "watermark_info": {
+      "enabled": boolean
+},
+    "final_unit_deduction": "string", // 任务最终扣减积分数值
+      "created_at": 1722769557708, //任务创建时间，Unix时间戳、单位ms
+      "updated_at": 1722769557708 //任务更新时间，Unix时间戳、单位ms
+    }
+  ]
+}
+【文生视频】创建任务
+网络协议
+https
+请求地址
+/v1/videos/text2video
+请求方法
+POST
+请求格式
+application/json
+响应格式
+application/json
+请求头
+字段
+值
+描述
+Content-Type
+application/json
+数据交换格式
+Authorization
+鉴权信息，参考接口鉴权
+鉴权信息，参考接口鉴权
+请求体
+字段
+类型
+必填
+默认值
+描述
+model_name
+string
+可选
+kling-v1
+模型名称
+枚举值：kling-v1, kling-v1-6, kling-v2-master, kling-v2-1-master, kling-v2-5-turbo, kling-v2-6, kling-v3
+multi_shot
+boolean
+可选
+false
+是否生成多镜头视频
+当前参数为true时，prompt参数无效
+当前参数为false时，shot_type参数及multi_prompt参数无效
+shot_type
+string
+可选
+空
+分镜方式
+枚举值：customize，intelligence
+当multi_shot参数为true时，当前参数必填
+prompt
+string
+可选
+空
+文本提示词，可包含正向描述和负向描述
+可将提示词模板化来满足不同的视频生成需求
+Omni模型可通过Prompt与主体、图片、视频等内容实现多种能力
+通过<<<>>>的格式来指定某个主体、图片、视频，如：<<<element_1>>>、<<<image_1>>>、<<<video_1>>>
+更多信息详见：可灵视频 3.0 模型使用指南
+不能超过2500个字符
+用<<<voice_1>>>来指定音色，序号同voice_list参数所引用音色的排列顺序
+一次视频生成任务至多引用2个音色；指定音色时，sound参数值必须为on
+语法结构越简单越好，如：男人<<<voice_1>>>说：“你好”
+当voice_list参数不为空且prompt参数中引用音色ID时，视频生成任务按“有指定音色”计量计费
+当multi_shot参数为false或当shot_type参数为intelligence时，当前参数必填
+不同模型版本支持能力范围不同，详见上文能力地图
+multi_prompt
+array
+可选
+空
+各分镜提示词，可包含正向描述和负向描述
+通过index、prompt、duration参数定义分镜序号及相应提示词和时长，其中：
+最多支持6个分镜，最小支持1个分镜
+每个分镜相关内容的最大长度不超过512
+每个分镜的时长不大于当前任务的总时长，不小于1
+所有分镜的时长之和等于当前任务的总时长
+用key:value承载，如下：
+"multi_prompt":[
+{
+"index":int,
+    "prompt": "string",
+    "duration": "5"
+  },
+  {
+"index":int,
+    "prompt": "string",
+    "duration": "5"
+  }
+]
+当multi-shot参数为true且shot-type参数为customize时，当前参数不得为空
+negative_prompt
+string
+可选
+空
+负向文本提示词
+建议直接在正向提示词中，通过否定句来补充负向提示词信息
+不能超过2500个字符
+voice_list
+array
+可选
+无
+生成视频时所引用的音色的列表
+一次视频生成任务至多引用2个音色
+当voice_list参数不为空且prompt参数中引用音色ID时，视频生成任务按“有指定音色”计量计费
+voice_id参数值通过音色定制接口返回，也可使用系统预置音色，详见音色定制相关API；非对口型API的voice_id
+用key:value承载，如下：
+"voice_list":[
+  {"voice_id":"voice_id_1"},
+  {"voice_id":"voice_id_2"}
+]
+sound
+string
+可选
+off
+生成视频时是否同时生成声音
+枚举值：on，off
+仅V2.6及后续版本模型支持当前参数
+cfg_scale
+float
+可选
+0.5
+生成视频的自由度；值越大，模型自由度越小，与用户输入的提示词相关性越强
+取值范围：[0, 1]
+仅kling-v1.x模型支持当前参数
+mode
+string
+可选
+std
+生成视频的模式
+枚举值：std，pro
+其中std：标准模式（标准），基础模式，生成720P视频，性价比高
+其中pro：专家模式（高品质），高表现模式，生成1080P视频，视频质量更佳
+不同模型版本支持能力范围不同，详见上文能力地图
+aspect_ratio
+string
+可选
+16:9
+生成视频的画面纵横比（宽:高）
+枚举值：16:9, 9:16, 1:1
+duration
+string
+可选
+5
+生成视频时长，单位s
+枚举值：3，4，5，6，7，8，9，10，11，12，13，14，15
+不同模型版本支持能力范围不同，详见上文能力地图
+watermark_info
+array
+可选
+空
+是否同时生成含水印的结果
+通过enabled参数定义，用key:value承载，如下：：
+"watermark_info": {
+"enabled": boolean // true 为生成，false 为不生成
+}
+暂不支持自定义水印
+callback_url
+string
+可选
+无
+本次任务结果回调通知地址，如果配置，服务端会在任务状态发生变更时主动通知
+具体通知的消息schema见“Callback协议”
+external_task_id
+string
+可选
+无
+自定义任务ID
+用户自定义任务ID，传入不会覆盖系统生成的任务ID，但支持通过该ID进行任务查询
+请注意，单用户下需要保证唯一性
+响应体
+{
+"code": 0, //错误码；具体定义见错误码
+  "message": "string", //错误信息
+  "request_id": "string", //请求ID，系统生成，用于跟踪请求、排查问题
+  "data":{
+"task_id": "string", //任务ID，系统生成
+    "task_info":{ //任务创建时的参数信息
+       "external_task_id": "string"//客户自定义任务ID
+    }, 
+    "task_status": "string", //任务状态，枚举值：submitted（已提交）、processing（处理中）、succeed（成功）、failed（失败）
+    "created_at": 1722769557708, //任务创建时间，Unix时间戳、单位ms
+    "updated_at": 1722769557708 //任务更新时间，Unix时间戳、单位ms
+  }
+}
+调用示例
+多镜头效果的文生视频
+curl --location 'https://xxx/v1/videos/text2video' \
+--header 'Authorization: Bearer xxx' \
+--header 'Content-Type: application/json' \
+--data '{
+    "model_name": "kling-v3",
+    "prompt": "",
+    "multi_prompt": [
+        {
+            "index": 1,
+            "prompt": "Two friends talking under a streetlight at night.  Warm glow, casual poses, no dialogue.",
+            "duration": "2"
+        },
+        {
+            "index": 2,
+            "prompt": "A runner sprinting through a forest, leaves flying.  Low-angle shot, focus on movement.",
+            "duration": "3"
+        },
+        {
+            "index": 3,
+            "prompt": "A woman hugging a cat, smiling.  Soft sunlight, cozy home setting, emphasize warmth.",
+            "duration": "3"
+        },
+        {
+            "index": 4,
+            "prompt": "A door creaking open, shadowy hallway.  Dark tones, minimal details, eerie mood.",
+            "duration": "3"
+        },
+        {
+            "index": 5,
+            "prompt": "A man slipping on a banana peel, shocked expression.  Exaggerated pose, bright colors.",
+            "duration": "3"
+        },
+        {
+            "index": 6,
+            "prompt": "A sunset over mountains, small figure walking away.  Wide angle, peaceful atmosphere.",
+            "duration": "1"
+        }
+    ],
+    "multi_shot": true,
+    "shot_type": "customize",
+    "duration": "15",
+    "mode": "pro",
+    "sound": "on",
+    "aspect_ratio": "9:16",
+    "callback_url": "",
+    "external_task_id": ""
+}'
+【文生视频】查询任务（单个）
+网络协议
+https
+请求地址
+/v1/videos/text2video/{id}
+请求方法
+GET
+请求格式
+application/json
+响应格式
+application/json
+请求头
+字段
+值
+描述
+Content-Type
+application/json
+数据交换格式
+Authorization
+鉴权信息，参考接口鉴权
+鉴权信息，参考接口鉴权
+请求路径参数
+字段
+类型
+必填
+默认值
+描述
+task_id
+string
+可选
+无
+文生视频的任务ID
+请求路径参数，直接将值填写在请求路径中，与external_task_id两种查询方式二选一
+external_task_id
+string
+可选
+无
+文生视频的自定义任务ID
+创建任务时填写的external_task_id，与task_id两种查询方式二选一
+请求体
+无
+响应体
+{
+"code": 0, //错误码；具体定义见错误码
+  "message": "string", //错误信息
+  "request_id": "string", //请求ID，系统生成，用于跟踪请求、排查问题
+  "data":{
+"task_id": "string", //任务ID，系统生成 
+    "task_status": "string", //任务状态，枚举值：submitted（已提交）、processing（处理中）、succeed（成功）、failed（失败）
+    "task_status_msg": "string", //任务状态信息，当任务失败时展示失败原因（如触发平台的内容风控等）
+    "task_info": { //任务创建时的参数信息
+      "external_task_id": "string"//客户自定义任务ID
+    },
+    "task_result":{
+      "videos":[
+        {
+"id": "string", //生成的视频ID；全局唯一
+"url": "string", //生成视频的URL，例如https://p1.a.kwimgs.com/bs2/upload-ylab-stunt/special-effect/output/HB1_PROD_ai_web_46554461/-2878350957757294165/output.mp4（请注意，为保障信息安全，生成的图片/视频会在30天后被清理，请及时转存）
+          "watermark_url": "string", // 含水印视频下载URL，防盗链格式
+"duration": "string" //视频总时长，单位s
+        }
+      ]
+    },
+    "watermark_info": {
+      "enabled": boolean
+},    
+    "final_unit_deduction": "string", // 任务最终扣减积分数值
+    "created_at": 1722769557708, //任务创建时间，Unix时间戳、单位ms
+    "updated_at": 1722769557708 //任务更新时间，Unix时间戳、单位ms
+  }
+}
+【文生视频】查询任务（列表）
+网络协议
+https
+请求地址
+/v1/videos/text2video
+请求方法
+GET
+请求格式
+application/json
+响应格式
+application/json
+请求头
+字段
+值
+描述
+Content-Type
+application/json
+数据交换格式
+Authorization
+鉴权信息，参考接口鉴权
+鉴权信息，参考接口鉴权
+查询参数
+/v1/videos/text2video?pageNum=1&pageSize=30
+字段
+类型
+必填
+默认值
+描述
+pageNum
+int
+可选
+1
+页码
+取值范围：[1,1000]
+pageSize
+int 
+可选
+30
+每页数据量
+取值范围：[1,500]
+请求体
+无
+响应体
+{
+"code": 0, //错误码；具体定义见错误码
+  "message": "string", //错误信息
+  "request_id": "string", //请求ID，系统生成，用于跟踪请求、排查问题
+  "data":[
+    {
+      "task_id": "string", //任务ID，系统生成
+      "task_status": "string", //任务状态，枚举值：submitted（已提交）、processing（处理中）、succeed（成功）、failed（失败）
+      "task_status_msg": "string", //任务状态信息，当任务失败时展示失败原因（如触发平台的内容风控等）
+      "task_info": { //任务创建时的参数信息
+        "external_task_id": "string"//任务ID，客户自定义生成，与task_id两种查询方式二选一
+      },
+      "task_result":{
+        "videos":[
+          {
+            "id": "string", //生成的视频ID；全局唯一
+            "url": "string", //生成视频的URL，例如https://p1.a.kwimgs.com/bs2/upload-ylab-stunt/special-effect/output/HB1_PROD_ai_web_46554461/-2878350957757294165/output.mp4（请注意，为保障信息安全，生成的图片/视频会在30天后被清理，请及时转存）
+          "watermark_url": "string", // 含水印视频下载URL，防盗链格式
+            "duration": "string" //视频总时长，单位s
+          }
+        ]
+},
+      "watermark_info": {
+      "enabled": boolean
+},
+    "final_unit_deduction": "string", // 任务最终扣减积分数值
+      "created_at": 1722769557708, //任务创建时间，Unix时间戳、单位ms
+      "updated_at": 1722769557708 //任务更新时间，Unix时间戳、单位ms
+    }
+  ]
+}
+【图生视频】创建任务
+网络协议
+https
+请求地址
+/v1/videos/image2video
+请求方法
+POST
+请求格式
+application/json
+响应格式
+application/json
+请求头
+字段
+值
+描述
+Content-Type
+application/json
+数据交换格式
+Authorization
+鉴权信息，参考接口鉴权
+鉴权信息，参考接口鉴权
+请求体
+curl --location --request POST 'https://api-beijing.klingai.com/v1/videos/image2video' \
+--header 'Authorization: Bearer xxx' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "model_name": "kling-v1",
+    "mode": "pro",
+    "duration": "5",
+    "image": "https://h2.inkwai.com/bs2/upload-ylab-stunt/se/ai_portal_queue_mmu_image_upscale_aiweb/3214b798-e1b4-4b00-b7af-72b5b0417420_raw_image_0.jpg",
+    "prompt": "宇航员站起身走了",
+    "cfg_scale": 0.5,
+    "static_mask": "https://h2.inkwai.com/bs2/upload-ylab-stunt/ai_portal/1732888177/cOLNrShrSO/static_mask.png",
+    "dynamic_masks": [
+      {
+        "mask": "https://h2.inkwai.com/bs2/upload-ylab-stunt/ai_portal/1732888130/WU8spl23dA/dynamic_mask_1.png",
+        "trajectories": [
+          {"x":279,"y":219},{"x":417,"y":65}
+        ]
+      }
+    ]
+}'
+字段
+类型
+必填
+默认值
+描述
+model_name
+string
+可选
+kling-v1
+模型名称
+枚举值：kling-v1, kling-v1-5, kling-v1-6, kling-v2-master,kling-v2-1,kling-v2-1-master, kling-v2-5-turbo, kling-v2-6, kling-v3
+image
+string
+可选
+空
+参考图像
+支持传入图片Base64编码或图片URL（确保可访问）
+请注意，若您使用base64的方式，请确保您传递的所有图像数据参数均采用Base64编码格式。在提交数据时，请不要在Base64编码字符串前添加任何前缀，例如data:image/png;base64,。正确的参数格式应该直接是Base64编码后的字符串。
+示例：
+正确的Base64编码参数：
+iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==
+错误的Base64编码参数（包含data:前缀）：
+data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==
+请仅提供Base64编码的字符串部分，以便系统能够正确处理和解析您的数据。
+图片格式支持.jpg / .jpeg / .png
+图片文件大小不能超过10MB，图片宽高尺寸不小于300px，图片宽高比介于1:2.5 ~ 2.5:1之间
+image参数与image_tail参数至少二选一，二者不能同时为空
+不同模型版本、视频模式支持范围不同，详见当前文档3-0能力地图
+image_tail
+string
+可选
+空
+参考图像 - 尾帧控制
+支持传入图片Base64编码或图片URL（确保可访问）
+请注意，若您使用base64的方式，请确保您传递的所有图像数据参数均采用Base64编码格式。在提交数据时，请不要在Base64编码字符串前添加任何前缀，例如data:image/png;base64,。正确的参数格式应该直接是Base64编码后的字符串。
+示例：
+正确的Base64编码参数：
+iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==
+错误的Base64编码参数（包含data:前缀）：
+data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==
+请仅提供Base64编码的字符串部分，以便系统能够正确处理和解析您的数据。
+图片格式支持.jpg / .jpeg / .png
+图片文件大小不能超过10MB，图片宽高尺寸不小于300px
+image参数与image_tail参数至少二选一，二者不能同时为空
+image_tail参数、dynamic_masks/static_mask参数、camera_control参数三选一，不能同时使用
+不同模型版本、视频模式支持范围不同，详见当前文档3-0能力地图
+multi_shot
+boolean
+可选
+false
+是否生成多镜头视频
+当前参数为true时，prompt参数无效
+当前参数为false时，shot_type参数及multi_prompt参数无效
+shot_type
+string
+可选
+空
+分镜方式
+枚举值：customize，intelligence
+当multi_shot参数为true时，当前参数必填
+prompt
+string
+可选
+空
+文本提示词，可包含正向描述和负向描述
+可将提示词模板化来满足不同的视频生成需求
+Omni模型可通过Prompt与主体、图片、视频等内容实现多种能力
+通过<<<>>>的格式来指定某个主体、图片、视频，如：<<<element_1>>>、<<<image_1>>>、<<<video_1>>>
+更多信息详见：可灵视频 3.0 模型使用指南
+不能超过2500个字符
+用<<<voice_1>>>来指定音色，序号同voice_list参数所引用音色的排列顺序
+一次视频生成任务至多引用2个音色；指定音色时，sound参数值必须为on
+语法结构越简单越好，如：男人<<<voice_1>>>说：“你好”
+当voice_list参数不为空且prompt参数中引用音色ID时，视频生成任务按“有指定音色”计量计费
+当multi_shot参数为false或当shot_type参数为intelligence时，当前参数必填
+不同模型版本支持能力范围不同，详见上文能力地图
+multi_prompt
+array
+可选
+空
+各分镜信息，如提示词、时长等
+通过index、prompt、duration参数定义分镜序号及相应提示词和时长，其中：
+最多支持6个分镜，最小支持1个分镜
+每个分镜相关内容的最大长度不超过512
+每个分镜的时长不大于当前任务的总时长，不小于1
+所有分镜的时长之和等于当前任务的总时长
+用key:value承载，如下：
+"multi_prompt":[
+{
+"index":int,
+    "prompt": "string",
+    "duration": "5"
+  },
+  {
+"index":int,
+    "prompt": "string",
+    "duration": "5"
+  }
+]
+当mult_shot参数为true且shot_type参数为customize时，当前参数不得为空
+negative_prompt
+string
+可选
+空
+负向文本提示词
+建议直接在正向提示词中，通过否定句来补充负向提示词信息
+不能超过2500个字符
+element_list
+array
+可选
+空
+参考主体列表
+基于主体库中主体的ID配置，用key:value承载，如下：
+"element_list":[
+{
+"element_id":long
+  },
+  {
+"element_id":long
+  }
+]
+最多支持3个参考主体
+主体分为视频定制主体（简称：视频角色主体）和图片定制主体（简称：多图主体），适用范围不同，请注意区分
+更多主体信息详见：可灵「主体库 3.0」使用指南
+element_list参数与voice_list参数互斥，不能共存
+不同模型版本支持能力范围不同，详见上文能力地图
+voice_list
+array
+可选
+无
+生成视频时所引用的音色的列表
+一次视频生成任务至多引用2个音色
+当voice_list参数不为空且prompt参数中引用音色ID时，视频生成任务按“有指定音色”计量计费
+voice_id参数值通过音色定制接口返回，也可使用系统预置音色，详见音色定制相关API；非对口型API的voice_id。
+用key:value承载，如下：
+"voice_list":[
+  {"voice_id":"voice_id_1"},
+  {"voice_id":"voice_id_2"}
+]
+element_list参数与voice_list参数互斥，不能共存
+sound
+string
+可选
+off
+生成视频时是否同时生成声音
+枚举值：on，off
+仅V2.6及后续版本模型支持当前参数
+cfg_scale
+float
+可选
+0.5
+生成视频的自由度；值越大，模型自由度越小，与用户输入的提示词相关性越强
+取值范围：[0, 1]
+仅kling-v1.x模型支持当前参数
+mode
+string
+可选
+std
+生成视频的模式
+枚举值：std，pro
+其中std：标准模式（标准），基础模式，生成720P视频，性价比高
+其中pro：专家模式（高品质），高表现模式，生成1080P视频，视频质量更佳
+不同模型版本支持能力范围不同，详见上文能力地图
+duration
+string
+可选
+5
+生成视频时长，单位s
+枚举值：3，4，5，6，7，8，9，10，11，12，13，14，15
+watermark_info
+array
+可选
+空
+是否同时生成含水印的结果
+通过enabled参数定义，用key:value承载，如下：：
+"watermark_info": {
+"enabled": boolean // true 为生成，false 为不生成
+}
+暂不支持自定义水印
+callback_url
+string
+可选
+无
+本次任务结果回调通知地址，如果配置，服务端会在任务状态发生变更时主动通知
+具体通知的消息schema见“Callback协议”
+external_task_id
+string
+可选
+无
+自定义任务ID
+用户自定义任务ID，传入不会覆盖系统生成的任务ID，但支持通过该ID进行任务查询
+请注意，单用户下需要保证唯一性
+响应体
+{
+"code": 0, //错误码；具体定义见错误码
+  "message": "string", //错误信息
+  "request_id": "string", //请求ID，系统生成，用于跟踪请求、排查问题
+  "data":{
+"task_id": "string", //任务ID，系统生成
+    "task_info":{ //任务创建时的参数信息
+       "external_task_id": "string" //客户自定义任务ID
+    }, 
+    "task_status": "string", //任务状态，枚举值：submitted（已提交）、processing（处理中）、succeed（成功）、failed（失败）
+    "created_at": 1722769557708, //任务创建时间，Unix时间戳、单位ms
+    "updated_at": 1722769557708 //任务更新时间，Unix时间戳、单位ms
+  }
+}
+调用示例
+多镜头效果的图生视频
+curl --location 'https://xxx/v1/videos/image2video' \
+--header 'Authorization: Bearer xxx' \
+--header 'Content-Type: application/json' \
+--data '{
+    "model_name": "kling-v3",
+    "image": "xxx",
+    "prompt": "",
+    "multi_shot": "true",
+    "shot_type": "customize",
+    "multi_prompt": [
+        {
+            "index": 1,
+            "prompt": "Two friends talking under a streetlight at night.  Warm glow, casual poses, no dialogue.",
+            "duration": "2"
+        },
+        {
+            "index": 2,
+            "prompt": "A runner sprinting through a forest, leaves flying.  Low-angle shot, focus on movement.",
+            "duration": "3"
+        },
+        {
+            "index": 3,
+            "prompt": "A woman hugging a cat, smiling.  Soft sunlight, cozy home setting, emphasize warmth.",
+            "duration": "3"
+        },
+        {
+            "index": 4,
+            "prompt": "A door creaking open, shadowy hallway.  Dark tones, minimal details, eerie mood.",
+            "duration": "3"
+        },
+        {
+            "index": 5,
+            "prompt": "A man slipping on a banana peel, shocked expression.  Exaggerated pose, bright colors.",
+            "duration": "3"
+        },
+        {
+            "index": 6,
+            "prompt": "A sunset over mountains, small figure walking away.  Wide angle, peaceful atmosphere.",
+            "duration": "1"
+        }
+    ],
+    "negative_prompt": "",
+    "duration": "15",
+    "mode": "pro",
+    "sound": "on",
+    "callback_url": "",
+    "external_task_id": ""
+}'
+引用主体及主体音色的图生视频
+curl --location 'https://xxx/v1/videos/image2video' \
+--header 'Authorization: Bearer xxx' \
+--header 'Content-Type: application/json' \
+--data '{
+    "model_name": "kling-v3",
+    "image": "xxx",
+    "image_tail": "xxx",
+    "prompt": "The girl with <<<element_1>>> (using <<<voice_1>>>) communicates with the girl with <<<image_1>>> (using <<<voice_2>>>)",
+    "element_list": [
+        {
+            "element_id": long
+        }
+    ],
+    "voice_list": [
+        {
+            "voice_id": long
+        },
+        {
+            "voice_id": long
+        }
+    ],
+    "negative_prompt": "xxx",
+    "duration": "9",
+    "mode": "std",
+    "sound": "on",
+    "callback_url": "xxx",
+    "external_task_id": "",
+}'
+【图生视频】查询任务（单个）
+网络协议
+https
+请求地址
+/v1/videos/image2video/{id}
+请求方法
+GET
+请求格式
+application/json
+响应格式
+application/json
+请求头
+字段
+值
+描述
+Content-Type
+application/json
+数据交换格式
+Authorization
+鉴权信息，参考接口鉴权
+鉴权信息，参考接口鉴权
+请求路径参数
+字段
+类型
+必填
+默认值
+描述
+task_id
+string
+可选
+空
+图生视频的任务ID
+请求路径参数，直接将值填写在请求路径中，与external_task_id两种查询方式二选一
+external_task_id
+string
+可选
+空
+图生视频的自定义任务ID
+创建任务时填写的external_task_id，与task_id两种查询方式二选一
+请求体
+无
+响应体
+{
+"code": 0, //错误码；具体定义见错误码
+  "message": "string", //错误信息
+  "request_id": "string", //请求ID，系统生成，用于跟踪请求、排查问题
+  "data":{
+"task_id": "string", //任务ID，系统生成
+    "task_status": "string", //任务状态，枚举值：submitted（已提交）、processing（处理中）、succeed（成功）、failed（失败）
+    "task_status_msg": "string", //任务状态信息，当任务失败时展示失败原因（如触发平台的内容风控等）
+    "task_info": { //任务创建时的参数信息
+      "external_task_id": "string"//客户自定义任务ID
+    },
+    "task_result":{
+      "videos":[
+        {
+"id": "string", //生成的视频ID；全局唯一
+"url": "string", //生成视频的URL，例如https://p1.a.kwimgs.com/bs2/upload-ylab-stunt/special-effect/output/HB1_PROD_ai_web_46554461/-2878350957757294165/output.mp4（请注意，为保障信息安全，生成的图片/视频会在30天后被清理，请及时转存）
+          "watermark_url": "string", // 含水印视频下载URL，防盗链格式
+          "duration": "string" //视频总时长，单位s
+        }
+      ]
+    },
+    "watermark_info": {
+"enabled": boolean
+    },
+  "final_unit_deduction": "string", // 任务最终扣减积分数值
+    "created_at": 1722769557708, //任务创建时间，Unix时间戳、单位ms
+    "updated_at": 1722769557708 //任务更新时间，Unix时间戳、单位ms
+  }
+}
+【图生视频】查询任务（列表）
+网络协议
+https
+请求地址
+/v1/videos/image2video
+请求方法
+GET
+请求格式
+application/json
+响应格式
+application/json
+请求头
+字段
+值
+描述
+Content-Type
+application/json
+数据交换格式
+Authorization
+鉴权信息，参考接口鉴权
+鉴权信息，参考接口鉴权
+查询参数
+/v1/videos/image2video?pageNum=1&pageSize=30
+字段
+类型
+必填
+默认值
+描述
+pageNum
+int
+可选
+1
+页码
+取值范围：[1,1000]
+pageSize
+int 
+可选
+30
+每页数据量
+取值范围：[1,500]
+请求体
+无
+响应体
+{
+"code": 0, //错误码；具体定义见错误码
+  "message": "string", //错误信息
+  "request_id": "string", //请求ID，系统生成，用于跟踪请求、排查问题
+  "data":[
+    {
+      "task_id": "string", //任务ID，系统生成
+      "task_status": "string", //任务状态，枚举值：submitted（已提交）、processing（处理中）、succeed（成功）、failed（失败）
+      "task_status_msg": "string", //任务状态信息，当任务失败时展示失败原因（如触发平台的内容风控等）
+      "task_info": { //任务创建时的参数信息
+        "external_task_id": "string"//客户自定义任务ID
+      },
+      "task_result":{
+        "videos":[
+          {
+            "id": "string", //生成的视频ID；全局唯一
+            "url": "string", //生成视频的URL，例如https://p1.a.kwimgs.com/bs2/upload-ylab-stunt/special-effect/output/HB1_PROD_ai_web_46554461/-2878350957757294165/output.mp4（请注意，为保障信息安全，生成的图片/视频会在30天后被清理，请及时转存）
+          "watermark_url": "string", // 含水印视频下载URL，防盗链格式
+            "duration": "string" //视频总时长，单位s
+          }
+        ]
+},
+      "watermark_info": {
+"enabled": boolean
+},
+    "final_unit_deduction": "string", // 任务最终扣减积分数值
+      "created_at": 1722769557708, //任务创建时间，Unix时间戳、单位ms
+      "updated_at": 1722769557708 //任务更新时间，Unix时间戳、单位ms
+    }
+  ]
+}
+【Omni-Image】创建任务
+网络协议
+https
+请求地址
+/v1/images/omni-image
+请求方法
+POST
+请求格式
+application/json
+响应格式
+application/json
+请求头
+字段
+值
+描述
+Content-Type
+application/json
+数据交换格式
+Authorization
+鉴权信息，参考接口鉴权
+鉴权信息，参考接口鉴权
+请求体
+字段
+类型
+必填
+默认值
+描述
+model_name
+string
+可选
+kling-image-o1
+模型名称
+枚举值：kling-image-o1，kling-v3-omni
+prompt
+string
+必须
+无
+文本提示词，可包含正向描述和负向描述
+可将提示词模板化来满足不同的图像生成需求
+不能超过2500个字符
+Omni模型可通过Prompt与图片等内容实现多种能力
+通过<<<>>>的格式来指定某个图片，如：<<<image_1>>>
+能力范围详见使用手册：可灵Omni模型使用指南
+image_list
+array
+可选
+空
+参考图列表
+用key:value承载，如下：
+"image_list":[
+{
+"image":"image_url",
+  },
+  {
+"image":"image_url",
+  }
+]
+支持传入图片Base64编码或图片URL（确保可访问）
+图片格式支持.jpg / .jpeg / .png
+图片文件大小不能超过10MB，图片宽高尺寸不小于300px，图片宽高比要在1:2.5 ~ 2.5:1之间
+参考主体数量与参考图片数量有关，参考主体数量和参考图片数量之和不得超过10
+image_url参数值不得为空
+element_list
+array
+可选
+空
+主体参考列表
+基于主体库中主体的ID配置，用key:value承载，如下：
+"element_list":[
+{
+"element_id":long
+  }
+]
+参考主体数量与参考图片数量有关，参考主体数量和参考图片数量之和不得超过10
+resolution
+string
+可选
+1k
+生成图片的清晰度
+枚举值：1k, 2k, 4k
+1k：1K标清
+2k：2K高清
+4k：4K高清
+不同模型版本支持范围不同，详见上文能力地图
+result_type
+string
+可选
+single
+生成结果单图/组图切换开关
+枚举值：single，series
+不同模型版本支持范围不同，详见上文能力地图
+n
+int
+可选
+1
+生成图片数量
+取值范围：[1,9]
+当result_type值为series时，当前参数无效
+series_amount
+int
+可选
+4
+生成组图的图片数量
+取值范围：[2, 9]
+当result_type值为single时，当前参数无效
+不同模型版本支持范围不同，详见上文能力地图
+aspect_ratio
+string
+可选
+auto
+生成图片的画面纵横比（宽:高）
+枚举值：16:9, 9:16, 1:1, 4:3, 3:4, 3:2, 2:3, 21:9, auto
+其中：auto为根据传入内容智能生成视频
+参考原图横纵比生成新图时，当前参数无效
+不同模型版本支持范围不同，详见上文能力地图
+watermark_info
+array
+可选
+空
+是否同时生成含水印的结果
+通过enabled参数定义，用key:value承载，如下：：
+"watermark_info": {
+"enabled": boolean // true 为生成，false 为不生成
+}
+暂不支持自定义水印
+callback_url
+string
+可选
+无
+本次任务结果回调通知地址，如果配置，服务端会在任务状态发生变更时主动通知
+具体通知的消息schema见“Callback协议”
+external_task_id
+string
+可选
+无
+自定义任务ID
+用户自定义任务ID，传入不会覆盖系统生成的任务ID，但支持通过该ID进行任务查询
+请注意，单用户下需要保证唯一性
+响应体
+{
+"code": 0, //错误码；具体定义见错误码
+  "message": "string", //错误信息
+  "request_id": "string", //请求ID，系统生成，用于跟踪请求、排查问题
+  "data":{
+"task_id": "string", //任务ID，系统生成
+    "task_info":{ //任务创建时的参数信息
+       "external_task_id": "string"//客户自定义任务ID
+    }, 
+    "task_status": "string", //任务状态，枚举值：submitted（已提交）、processing（处理中）、succeed（成功）、failed（失败）
+    "created_at": 1722769557708, //任务创建时间，Unix时间戳、单位ms
+    "updated_at": 1722769557708 //任务更新时间，Unix时间戳、单位ms
+  }
+}
+调用示例
+引入主体生成图像
+curl --location 'https://xxx/v1/images/generations' \
+--header 'Authorization: Bearer xxx' \
+--header 'Content-Type: application/json' \
+--data '{
+    "model_name": "kling-v3-omni",
+    "prompt": "Generate a recommended cover for each subject <<object_1>> based on the style of the reference image <<image_1>>",
+    "element_list": [
+      {
+        "element_id": "160"
+      },
+      {
+        "element_id": "161"
+      }
+    ],
+    "image_list": [
+      {
+        "image": "xxx"
+      },
+      {
+        "image": "xxx"
+      }
+    ],
+    "resolution": "2k",
+    "result_type": "series",
+    "series_amount": 2,
+    "aspect_ratio": "auto",
+    "external_task_id": "",
+    "callback_url": ""
+  }'
+【Omni-Image】查询任务（单个）
+网络协议
+https
+请求地址
+/v1/images/omni-image/{id}
+请求方法
+GET
+请求格式
+application/json
+响应格式
+application/json
+请求头
+字段
+值
+描述
+Content-Type
+application/json
+数据交换格式
+Authorization
+鉴权信息，参考接口鉴权
+鉴权信息，参考接口鉴权
+请求路径参数
+字段
+类型
+必填
+默认值
+描述
+task_id
+string
+必须
+无
+图片生成的任务ID
+请求路径参数，直接将值填写在请求路径中
+external_task_id
+string
+可选
+无
+自定义任务ID
+创建任务时填写的external_task_id，与task_id两种查询方式二选一
+请求体
+无
+响应体
+{
+"code": 0, //错误码；具体定义见错误码
+  "message": "string", //错误信息
+  "request_id": "string", //请求ID，系统生成，用于跟踪请求、排查问题
+  "data":{
+"task_id": "string", //任务ID，系统生成
+    "task_status": "string", //任务状态，枚举值：submitted（已提交）、processing（处理中）、succeed（成功）、failed（失败）
+    "task_status_msg": "string", //任务状态信息，当任务失败时展示失败原因（如触发平台的内容风控等）
+    "task_info": { //任务创建时的参数信息
+      "external_task_id": "string"//客户自定义任务ID
+    },
+    "task_result":{
+      "result_type": "single",
+"images":[
+        {
+"index": int, //图片编号
+          "url": "string" //生成图片的URL，防盗链格式（请注意，为保障信息安全，生成的图片/视频会在30天后被清理，请及时转存）
+          "watermark_url": "string", // 含水印视频下载URL，防盗链格式
+        }
+      ],
+      "series_images":[
+        {
+"index": int, //组图序号
+          "url": "string" //生成图片的URL，防盗链格式（请注意，为保障信息安全，生成的图片/视频会在30天后被清理，请及时转存）
+          "watermark_url": "string", // 含水印视频下载URL，防盗链格式
+        }
+      ]
+    },
+"final_unit_deduction": "string", // 任务最终扣减积分数值
+"watermark_info": {
+"enabled": boolean
+}, 
+    "created_at": 1722769557708, //任务创建时间，Unix时间戳、单位ms
+    "updated_at": 1722769557708 //任务更新时间，Unix时间戳、单位ms
+  }
+}
+【Omni-Image】查询任务（列表）
+网络协议
+https
+请求地址
+/v1/images/omni-image
+请求方法
+GET
+请求格式
+application/json
+响应格式
+application/json
+请求头
+字段
+值
+描述
+Content-Type
+application/json
+数据交换格式
+Authorization
+鉴权信息，参考接口鉴权
+鉴权信息，参考接口鉴权
+查询参数
+字段
+类型
+必填
+默认值
+描述
+pageNum
+int
+可选
+1
+页码
+取值范围：[1,1000]
+pageSize
+int 
+可选
+30
+每页数据量
+取值范围：[1,500]
+请求体
+无
+响应体
+{
+"code": 0, //错误码；具体定义见错误码
+  "message": "string", //错误信息
+  "request_id": "string", //请求ID，系统生成，用于跟踪请求、排查问题
+  "data":[
+    {
+      "task_id": "string", //任务ID，系统生成
+      "task_status": "string", //任务状态，枚举值：submitted（已提交）、processing（处理中）、succeed（成功）、failed（失败）
+      "task_status_msg": "string", //任务状态信息，当任务失败时展示失败原因（如触发平台的内容风控等）
+      "final_unit_deduction": "string", // 任务最终扣减积分数值
+"created_at": 1722769557708, //任务创建时间，Unix时间戳、单位ms
+      "updated_at": 1722769557708, //任务更新时间，Unix时间戳、单位ms
+      "task_info": { //任务创建时的参数信息
+"external_task_id": "string"//客户自定义任务ID
+ },
+"watermark_info": {
+"enabled": boolean
+}, 
+      "task_result":{
+              "result_type": "single",
+        "images":[
+          {
+            "index": int, //图片编号
+            "url": "string" //生成图片的URL，防盗链格式（请注意，为保障信息安全，生成的图片/视频会在30天后被清理，请及时转存）
+            "watermark_url": "string", // 含水印图片下载URL，防盗链格式
+          }
+        ],
+        "series_images":[
+          {
+            "index": int, //组图序号
+            "url": "string" //生成图片的URL，防盗链格式（请注意，为保障信息安全，生成的图片/视频会在30天后被清理，请及时转存）
+            "watermark_url": "string", // 含水印图片下载URL，防盗链格式
+          }
+        ] 
+}
+    }
+  ]
+}
+【图像生成】创建任务
+网络协议
+https
+请求地址
+/v1/images/generations
+请求方法
+POST
+请求格式
+application/json
+响应格式
+application/json
+请求头
+字段
+值
+描述
+Content-Type
+application/json
+数据交换格式
+Authorization
+鉴权信息，参考接口鉴权
+鉴权信息，参考接口鉴权
+请求体
+字段
+类型
+必填
+默认值
+描述
+model_name
+string
+可选
+kling-v1
+模型名称
+枚举值：kling-v1, kling-v1-5, kling-v2, kling-v2-new, kling-v2-1, kling-v3
+prompt
+string
+必须
+无
+文本提示词，可包含正向描述和负向描述
+不能超过2500个字符
+negative_prompt
+string
+可选
+空
+负向文本提示词
+不能超过2500个字符
+建议将负向提示词用否定描述的方式写入正向提示词中
+注：图生图（即image字段不为空时）场景下，不支持负向提示词
+image
+string
+可选
+空
+参考图片
+支持传入图片Base64编码或图片URL（确保可访问）
+请注意，若您使用base64的方式，请确保您传递的所有图像数据参数均采用Base64编码格式。在提交数据时，请不要在Base64编码字符串前添加任何前缀，例如data:image/png;base64,。正确的参数格式应该直接是Base64编码后的字符串。
+示例：
+正确的Base64编码参数：
+iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==
+错误的Base64编码参数（包含data:前缀）：
+data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==
+请仅提供Base64编码的字符串部分，以便系统能够正确处理和解析您的数据。
+图片格式支持.jpg / .jpeg / .png
+图片文件大小不能超过10MB，图片宽高尺寸不小于300px，图片宽高比介于1:2.5 ~ 2.5:1之间
+image_reference参数不为空时，当前参数必填
+element_list
+array
+可选
+空
+主体参考列表
+基于主体库中主体的ID配置，用key:value承载，如下：
+"element_list":[
+{
+"element_id":long
+  },
+  {
+"element_id":long
+  }
+]
+参考主体数量与参考图片数量有关，参考主体数量和参考图片数量之和不得超过10
+resolution
+string
+可选
+1k
+生成图片的清晰度
+枚举值：1k, 2k
+1k：1K标清
+2k：2K高清
+不同模型版本支持范围不同，详见上文能力地图
+n
+int
+可选
+1
+生成图片数量
+取值范围：[1,9]
+aspect_ratio
+string
+可选
+16:9
+生成图片的画面纵横比（宽:高）
+枚举值：16:9, 9:16, 1:1, 4:3, 3:4, 3:2, 2:3, 21:9
+不同模型版本支持范围不同，详见上文能力地图
+watermark_info
+array
+可选
+空
+是否同时生成含水印的结果
+通过enabled参数定义，用key:value承载，如下：
+"watermark_info": {
+"enabled": boolean // true 为生成，false 为不生成
+}
+暂不支持自定义水印
+callback_url
+string
+可选
+无
+本次任务结果回调通知地址，如果配置，服务端会在任务状态发生变更时主动通知
+具体通知的消息schema见“Callback协议”
+external_task_id
+string
+可选
+无
+自定义任务ID
+用户自定义任务ID，传入不会覆盖系统生成的任务ID，但支持通过该ID进行任务查询
+请注意，单用户下需要保证唯一性
+响应体
+{
+"code": 0, //错误码；具体定义错误码
+  "message": "string", //错误信息
+  "request_id": "string", //请求ID，系统生成，用于跟踪请求、排查问题
+  "data":{
+"task_id": "string", //任务ID，系统生成
+    "task_status": "string", //任务状态，枚举值：submitted（已提交）、processing（处理中）、succeed（成功）、failed（失败）
+    "task_info":{ //任务创建时的参数信息
+       "external_task_id": "string"//自定义任务ID
+    },
+    "created_at": 1722769557708, //任务创建时间，Unix时间戳、单位ms
+    "updated_at": 1722769557708 //任务更新时间，Unix时间戳、单位ms
+  }
+}
+调用示例
+引入主体生成图像
+curl --location 'https://xxx/v1/images/generations' \
+--header 'Authorization: Bearer xxx' \
+--header 'Content-Type: application/json' \
+--data '{
+    "model_name": "kling-v3",
+    "prompt": "Merge all the characters from the images into the <<<object_2>>> diagram",
+    "element_list": [
+        {
+            "element_id": "160"
+        },
+        {
+            "element_id": "161"
+        },
+        {
+            "element_id": "159"
+        }
+    ],
+    "image": "xxx",
+    "resolution": "2k",
+    "n": "9",
+    "aspect_ratio": "3:2",
+    "external_task_id": "",
+    "callback_url": ""
+}'
+【图像生成】查询任务（单个）
+网络协议
+https
+请求地址
+/v1/images/generations/{id}
+请求方法
+GET
+请求格式
+application/json
+响应格式
+application/json
+请求头
+字段
+值
+描述
+Content-Type
+application/json
+数据交换格式
+Authorization
+鉴权信息，参考接口鉴权
+鉴权信息，参考接口鉴权
+请求路径参数
+字段
+类型
+必填
+默认值
+描述
+task_id
+string
+必须
+无
+图片生成的任务ID
+请求路径参数，直接将值填写在请求路径中
+external_task_id
+string
+可选
+无
+自定义任务ID
+创建任务时填写的external_task_id，与task_id两种查询方式二选一
+请求体
+无
+响应体
+{
+"code": 0, //错误码；具体定义见错误码
+  "message": "string", //错误信息
+  "request_id": "string", //请求ID，系统生成，用于跟踪请求、排查问题
+  "data":{
+"task_id": "string", //任务ID，系统生成
+    "task_status": "string", //任务状态，枚举值：submitted（已提交）、processing（处理中）、succeed（成功）、failed（失败）
+    "task_status_msg": "string", //任务状态信息，当任务失败时展示失败原因（如触发平台的内容风控等）
+    "final_unit_deduction": "string", // 任务最终扣减积分数值
+    "watermark_info": {
+      "enabled": boolean
+    },
+    "created_at": 1722769557708, //任务创建时间，Unix时间戳、单位ms
+    "updated_at": 1722769557708, //任务更新时间，Unix时间戳、单位ms
+    "task_result":{
+"images":[
+        {
+"index": int, //图片编号，0-9
+          "url": "string" //生成图片的URL，例如：https://h1.inkwai.com/bs2/upload-ylab-stunt/1fa0ac67d8ce6cd55b50d68b967b3a59.png（请注意，为保障信息安全，生成的图片/视频会在30天后被清理，请及时转存）
+          "watermark_url": "string", // 含水印图片下载URL，防盗链格式
+        }
+      ]
+    },
+    "task_info":{ //任务创建时的参数信息
+      "external_task_id": "string"//自定义任务ID
+    }
+  }
+}
+【图像生成】查询任务（列表）
+网络协议
+https
+请求地址
+/v1/images/generations
+请求方法
+GET
+请求格式
+application/json
+响应格式
+application/json
+请求头
+字段
+值
+描述
+Content-Type
+application/json
+数据交换格式
+Authorization
+鉴权信息，参考接口鉴权
+鉴权信息，参考接口鉴权
+查询参数
+字段
+类型
+必填
+默认值
+描述
+pageNum
+int
+可选
+1
+页码
+取值范围：[1,1000]
+pageSize
+int 
+可选
+30
+每页数据量
+取值范围：[1,500]
+请求体
+无
+响应体
+{
+"code": 0, //错误码；具体定义见错误码
+  "message": "string", //错误信息
+  "request_id": "string", //请求ID，系统生成，用于跟踪请求、排查问题
+  "data":[
+    {
+      "task_id": "string", //任务ID，系统生成
+      "task_status": "string", //任务状态，枚举值：submitted（已提交）、processing（处理中）、succeed（成功）、failed（失败）
+      "task_status_msg": "string", //任务状态信息，当任务失败时展示失败原因（如触发平台的内容风控等）
+    "final_unit_deduction": "string", // 任务最终扣减积分数值
+"watermark_info": {
+"enabled": boolean
+}, 
+      "created_at": 1722769557708, //任务创建时间，Unix时间戳、单位ms
+      "updated_at": 1722769557708, //任务更新时间，Unix时间戳、单位ms
+      "task_result":{
+        "images":[
+          {
+            "index": int, //图片编号，0-9
+            "url": "string" //生成图片的URL，例如：https://h1.inkwai.com/bs2/upload-ylab-stunt/1fa0ac67d8ce6cd55b50d68b967b3a59.png（请注意，为保障信息安全，生成的图片/视频会在30天后被清理，请及时转存）
+"watermark_url": "string", // 含水印图片下载URL，防盗链格式
+          }
+]
+      },
+      "task_info":{ //任务创建时的参数信息
+         "external_task_id": "string"//自定义任务ID
+      }
+    }
+  ]
+}
+【通用】创建主体
+创建主体相关服务已升级至全新版本，如需浏览旧版请移步「可灵AI」新系统 API 接口文档
+网络协议
+https
+请求地址
+/v1/general/advanced-custom-elements
+请求方法
+POST
+请求格式
+application/json
+响应格式
+application/json
+请求头
+字段
+值
+描述
+Content-Type
+application/json
+数据交换格式
+Authorization
+鉴权信息，参考接口鉴权
+鉴权信息，参考接口鉴权
+请求体
+字段
+类型
+必填
+默认值
+描述
+element_name
+string
+必须
+无
+主体名称
+不能超过20个字符
+element_description
+string
+必须
+无
+主体描述
+不能超过100个字符
+reference_type
+string
+必须
+无
+主体参考方式
+枚举值：video_refer, image_refer
+video_refer: 视频角色主体，此时将参考element_video_list定义主体外表
+image_refer: 多图主体，此时将参考element_image_list定义主体外表
+通过视频定制的主体和通过图片定制的主体的可用范围不同，详见能力地图和参数说明。
+element_image_list
+array
+可选
+空
+主体参考图，可通过多张图片设定主体及其细节
+包括正面参考图和其他角度或特写参考图，其中：
+至少包括1张正面参考图，由frontal_image参数定义
+需包括1～3张其他参考图，需与正面参考图有差异，由image_url参数定义
+用key:value承载，如下：
+"element_image_list":{
+  "frontal_image":"image_url_0",
+  "refer_images":[
+    {
+      "image_url":"image_url_1"
+    },
+    {
+      "image_url":"image_url_2"
+    },
+    {
+      "image_url":"image_url_3"
+    }
+  ]
+}
+支持传入图片Base64编码或图片URL（确保可访问）
+图片格式支持.jpg / .jpeg / .png
+图片文件大小不能超过10MB，图片宽高尺寸不小于300px，图片宽高比要在1:2.5 ~ 2.5:1之间
+reference_type参数值为image_refer时，当前参数必填
+element_video_list
+array
+可选
+空
+主体参考视频，可通过视频设定主体及其细节
+可上传有声视频，有声视频包含人声则触发音色定制（定制+入音色库+与主体绑定）
+参考视频时当前参数必填，参考图片时当前参数无效
+用key:value承载，如下：
+"element_video_list":{
+  "refer_videos":[
+    {
+      "video_url":"video_url_1"
+    }
+  ]
+}
+视频格式仅支持MP4/MOV
+仅支持时长介于3s～8s之间、宽高比例需为16:9或9:16的1080P视频
+至多仅支持上传1段视频，视频大小不超过200MB
+video_url参数值不得为空
+视频定制的主体仅支持用于kling-video-o3及之后的模型
+element_voice_id
+string
+可选
+空
+主体音色，可绑定音色库中已有音色
+当前参数为空时，当前主体不绑定音色
+可通过音色相关API获取ID，详见：「可灵AI」新系统 API 接口文档
+仅视频定制的主体支持绑定音色
+tag_list
+array
+可选
+空
+为主体配置标签，一个主体可以配置多个标签
+用key:value承载，其中具体如下：
+"tag_list": [
+  {
+"tag_id": "o_101"
+}, {
+"tag_id": "o_102"
+}
+]
+tag的ID与名称关系：
+ID
+名称
+o_101
+热梗
+o_102
+人物
+o_103
+动物
+o_104
+道具
+o_105
+服饰
+o_106
+场景
+o_107
+特效
+o_108
+其他
+callback_url
+string
+可选
+无
+本次任务结果回调通知地址，如果配置，服务端会在任务状态发生变更时主动通知
+具体通知的消息schema见“Callback协议”
+external_task_id
+string
+可选
+无
+自定义任务ID
+用户自定义任务ID，传入不会覆盖系统生成的任务ID，但支持通过该ID进行任务查询
+请注意，单用户下需要保证唯一性
+响应体
+{
+"code": 0, //错误码；具体定义见错误码
+  "message": "string", //错误信息
+  "request_id": "string", //请求ID，系统生成，用于跟踪请求、排查问题
+  "data":{
+"task_id": "string", //任务ID，系统生成
+    "task_info":{ //任务创建时的参数信息
+       "external_task_id": "string"//客户自定义任务ID
+    }, 
+    "task_status": "string", //任务状态，枚举值：submitted（已提交）、processing（处理中）、succeed（成功）、failed（失败）
+    "created_at": 1722769557708, //任务创建时间，Unix时间戳、单位ms
+    "updated_at": 1722769557708 //任务更新时间，Unix时间戳、单位ms
+  }
+}
+调用示例
+创建图片定制主体
+curl --location 'https://xxx/v1/general/advanced-custom-elements/' \
+--header 'Authorization: Bearer xxx' \
+--header 'Content-Type: application/json\' \
+--data '{
+    "element_name": "xxx",
+    "element_description": "xxx",
+    "reference_type": "image_refer",
+    "element_image_list": {
+      "frontal_image": "xxx",
+      "refer_images": [
+        {"image_url": "xxx"},
+        {"image_url": "xxx"}
+      ]
+    },
+    "element_voice_id": long,
+    "callback_url": "xxx",
+    "external_task_id": "",
+     "tag_list": [
+        {
+            "tag_id": "xxx"
+        }
+    ]
+  }'
+创建视频定制主体
+curl --location 'https://xxx/v1/general/advanced-custom-elements/' \
+--header 'Authorization: Bearer xxx' \
+--header 'Content-Type: application/json\' \
+--data '{
+    "element_name": "xxx",
+    "element_description": "xxx",
+    "reference_type": "video_refer",
+    "element_video_list": {
+        "refer_videos": [
+            {
+                "video_url": "xxx"
+            }
+        ]
+    },
+    "element_voice_id": long,
+    "callback_url": "xxx",
+    "external_task_id": "",
+    "tag_list": [
+        {
+            "tag_id": "xxx"
+        }
+    ]
+}'
+【通用】查询自定义主体（单个）
+查询主体相关服务已升级至全新版本，如需浏览旧版请移步「可灵AI」新系统 API 接口文档
+网络协议
+https
+请求地址
+/v1/general/advanced-custom-elements/{id}
+请求方法
+GET
+请求格式
+application/json
+响应格式
+application/json
+请求头
+字段
+值
+描述
+Content-Type
+application/json
+数据交换格式
+Authorization
+鉴权信息，参考接口鉴权
+鉴权信息，参考接口鉴权
+请求路径参数
+字段
+类型
+必填
+默认值
+描述
+task_id
+string
+必须
+无
+图片生成的任务ID
+请求路径参数，直接将值填写在请求路径中
+external_task_id
+string
+可选
+空
+自定义任务ID
+用户自定义任务ID，传入不会覆盖系统生成的任务ID，但支持通过该ID进行任务查询
+请注意，单用户下需要保证唯一性
+请求体
+无
+响应体
+{
+"code": 0, //错误码；具体定义见错误码
+  "message": "string", //错误信息
+  "request_id": "string", //请求ID，系统生成，用于跟踪请求、排查问题
+  "data":{
+"task_id": "string", //任务ID，系统生成
+    "task_status": "string", //任务状态，枚举值：submitted（已提交）、processing（处理中）、succeed（成功）、failed（失败）
+    "task_status_msg": "string", //任务状态信息，当任务失败时展示失败原因（如触发平台的内容风控等）
+    "task_info": { //任务创建时的参数信息
+      "external_task_id": "string"//客户自定义任务ID
+    },
+    "task_result":{    
+      "elements":[
+        {
+          "element_id": long,
+          "element_name": "string",
+          "element_description": "string",
+          "reference_type": "video_refer",
+          "element_image_list":{
+            "frontal_image":"image_url_0",
+            "refer_images":[
+              {
+                "image_url":"image_url_1"
+              },
+              {
+                "image_url":"image_url_2"
+              },
+              {
+                "image_url":"image_url_3"
+              }
+            ]
+          },
+          "element_video_list":{
+            "refer_videos":[
+              {
+                "video_url":"video_url_1"
+              }
+            ]
+          },
+          "element_voice_info":{
+            "voice_id": "string", //定制的音色的ID；全局唯一
+            "voice_name": "string", //定制的音色的名称
+            "trial_url": "string", // 定制的音色的试听音频下载URL
+            "owned_by": "kling" // 主体来源，kling为官方音色库，数字为创作者ID
+          },
+          "tag_list":[
+            {
+              "id": "o_101",
+              "name": "animal",
+              "description": "The content of description."
+            },
+            {
+              "id": "o_102",
+              "name": "animal",
+              "description": "The content of description."
+            }
+          ],
+          "owned_by": "kling" // 主体来源，kling为官方主体库，其他为创作者ID   
+        }
+      ]
+},
+"final_unit_deduction": "string", // 任务最终扣减积分数值
+"created_at": 1722769557708, //任务创建时间，Unix时间戳、单位ms
+"updated_at": 1722769557708 //任务更新时间，Unix时间戳、单位ms
+  }
+}
+调用示例
+查询某个自定义主体
+curl --location 'https://xxx/v1/general/advanced-custom-elements/xxx' \
+--header 'Authorization: Bearer xxx' \
+--header 'Content-Type: application/json\' \
+--data ''
+【通用】查询自定义主体（列表）
+查询主体相关服务已升级至全新版本，如需浏览旧版请移步「可灵AI」新系统 API 接口文档
+网络协议
+https
+请求地址
+/v1/general/advanced-custom-elements
+请求方法
+GET
+请求格式
+application/json
+响应格式
+application/json
+请求头
+字段
+值
+描述
+Content-Type
+application/json
+数据交换格式
+Authorization
+鉴权信息，参考接口鉴权
+鉴权信息，参考接口鉴权
+请求路径参数
+字段
+类型
+必填
+默认值
+描述
+task_id
+string
+必须
+无
+图片生成的任务ID
+请求路径参数，直接将值填写在请求路径中
+external_task_id
+string
+可选
+空
+自定义任务ID
+用户自定义任务ID，传入不会覆盖系统生成的任务ID，但支持通过该ID进行任务查询
+请注意，单用户下需要保证唯一性
+请求体
+无
+响应体
+{
+"code": 0, //错误码；具体定义见错误码
+  "message": "string", //错误信息
+  "request_id": "string", //请求ID，系统生成，用于跟踪请求、排查问题
+  "data":[
+      {
+      "task_id": "string", //任务ID，系统生成
+      "task_status": "string", //任务状态，枚举值：submitted（已提交）、processing（处理中）、succeed（成功）、failed（失败）
+      "task_status_msg": "string", //任务状态信息，当任务失败时展示失败原因（如触发平台的内容风控等）
+      "task_info": { //任务创建时的参数信息
+        "external_task_id": "string"//客户自定义任务ID
+      },
+      "task_result":{    
+        "elements":[
+          {
+            "element_id": long,
+            "element_name": "string",
+            "element_description": "string",
+            "reference_type": "video_refer",
+            "element_image_list":{
+              "frontal_image":"image_url_0",
+              "refer_images":[
+                {
+                  "image_url":"image_url_1"
+                },
+                {
+                  "image_url":"image_url_2"
+                },
+                {
+                  "image_url":"image_url_3"
+                }
+              ]
+            },
+            "element_video_list":{
+              "refer_videos":[
+                {
+                  "video_url":"video_url_1"
+                }
+              ]
+            },
+            "element_voice_info":{
+              "voice_id": "string", //定制的音色的ID；全局唯一
+              "voice_name": "string", //定制的音色的名称
+              "trial_url": "string", // 定制的音色的试听音频下载URL
+              "owned_by": "kling" // 主体来源，kling为官方音色库，数字为创作者ID
+            },
+            "tag_list":[
+              {
+                "id": "o_101",
+                "name": "animal",
+                "description": "The content of description."
+              },
+              {
+                "id": "o_102",
+                "name": "animal",
+                "description": "The content of description."
+              }
+            ],
+            "owned_by": "kling" // 主体来源，kling为官方主体库，其他为创作者ID   
+          }
+        ]
+      },
+      "final_unit_deduction": "string", // 任务最终扣减积分数值
+      "created_at": 1722769557708, //任务创建时间，Unix时间戳、单位ms
+      "updated_at": 1722769557708 //任务更新时间，Unix时间戳、单位ms
+    }
+  ]
+}
+调用示例
+批量查询自定义主体
+curl --location 'https://api-beijing.klingai.com/v1/general/advanced-custom-elements?pageNum=1&pageSize=30' \
+--header 'Authorization: Bearer xxx' \
+--header 'Content-Type: application/json\' \
+--data ''
+【通用】查询官方主体（列表）
+查询主体相关服务已升级至全新版本，如需浏览旧版请移步「可灵AI」新系统 API 接口文档
+网络协议
+https
+请求地址
+/v1/general/advanced-presets-elements
+请求方法
+GET
+请求格式
+application/json
+响应格式
+application/json
+请求头
+字段
+值
+描述
+Content-Type
+application/json
+数据交换格式
+Authorization
+鉴权信息，参考接口鉴权
+鉴权信息，参考接口鉴权
+请求路径参数
+字段
+类型
+必填
+默认值
+描述
+task_id
+string
+必须
+无
+图片生成的任务ID
+请求路径参数，直接将值填写在请求路径中
+external_task_id
+string
+可选
+空
+自定义任务ID
+用户自定义任务ID，传入不会覆盖系统生成的任务ID，但支持通过该ID进行任务查询
+请注意，单用户下需要保证唯一性
+请求体
+无
+响应体
+{
+"code": 0, //错误码；具体定义见错误码
+  "message": "string", //错误信息
+  "request_id": "string", //请求ID，系统生成，用于跟踪请求、排查问题
+  "data":[
+      {
+      "task_id": "string", //任务ID，系统生成
+      "task_status": "string", //任务状态，枚举值：submitted（已提交）、processing（处理中）、succeed（成功）、failed（失败）
+      "task_status_msg": "string", //任务状态信息，当任务失败时展示失败原因（如触发平台的内容风控等）
+      "task_info": { //任务创建时的参数信息
+        "external_task_id": "string"//客户自定义任务ID
+      },
+      "task_result":{    
+        "elements":[
+          {
+            "element_id": long,
+            "element_name": "string",
+            "element_description": "string",
+            "reference_type": "video_refer",
+            "element_image_list":{
+              "frontal_image":"image_url_0",
+              "refer_images":[
+                {
+                  "image_url":"image_url_1"
+                },
+                {
+                  "image_url":"image_url_2"
+                },
+                {
+                  "image_url":"image_url_3"
+                }
+              ]
+            },
+            "element_video_list":{
+              "refer_videos":[
+                {
+                  "video_url":"video_url_1"
+                }
+              ]
+            },
+            "element_voice_info":{
+              "voice_id": "string", //定制的音色的ID；全局唯一
+              "voice_name": "string", //定制的音色的名称
+              "trial_url": "string", // 定制的音色的试听音频下载URL
+              "owned_by": "kling" // 主体来源，kling为官方音色库，数字为创作者ID
+            },
+            "tag_list":[
+              {
+                "id": "o_101",
+                "name": "animal",
+                "description": "The content of description."
+              },
+              {
+                "id": "o_102",
+                "name": "animal",
+                "description": "The content of description."
+              }
+            ],
+            "owned_by": "kling" // 主体来源，kling为官方主体库，其他为创作者ID   
+          }
+        ]
+      },
+      "final_unit_deduction": "string", // 任务最终扣减积分数值
+      "created_at": 1722769557708, //任务创建时间，Unix时间戳、单位ms
+      "updated_at": 1722769557708 //任务更新时间，Unix时间戳、单位ms
+    }
+  ]
+}
+【通用】删除自定义主体
+网络协议
+https
+请求地址
+/v1/general/delete-elements
+请求方法
+POST
+请求格式
+application/json
+响应格式
+application/json
+请求头
+字段
+值
+描述
+Content-Type
+application/json
+数据交换格式
+Authorization
+鉴权信息，参考接口鉴权
+鉴权信息，参考接口鉴权
+请求体
+字段
+类型
+必填
+默认值
+描述
+element_id
+string
+必须
+无
+要删除的主体ID，仅支持删除自定义主体
+响应体
+{
+"code": 0, //错误码；具体定义见错误码
+  "message": "string", //错误信息
+  "request_id": "string", //请求ID，系统生成，用于跟踪请求、排查问题
+  "data":{
+"task_id": "string", //任务ID，系统生成
+    "task_status": "string", //任务状态，枚举值：submitted（已提交）、processing（处理中）、succeed（成功）、failed（失败）
+  }
+}
+计费策略
+积分扣减数量说明
+单条视频规格
+资源包扣减
+单价（原价）
+【可灵Video-3O模型】标准（std）x 1s时长 x 无参考视频 x 无声
+从资源包总数里扣减0.6
+0.6元
+【可灵Video-3O模型】标准（std）x 1s时长 x 无参考视频 x 有声
+从资源包总数里扣减0.8
+0.8元
+【可灵Video-3O模型】标准（std）x 1s时长 x 有参考视频 x 无声
+从资源包总数里扣减0.9
+0.9元
+【可灵Video-3O模型】标准（std）x 1s时长 x 有参考视频 x 有声
+从资源包总数里扣减1.1
+1.1元
+【可灵Video-3O模型】高品质（pro）x 1s时长 x 无参考视频 x 无声
+从资源包总数里扣减0.8
+0.8元
+【可灵Video-3O模型】高品质（pro）x 1s时长 x 无参考视频 x 有声
+从资源包总数里扣减1.0
+1.0元
+【可灵Video-3O模型】高品质（pro）x 1s时长 x 有参考视频 x 无声
+从资源包总数里扣减1.2
+1.2元
+【可灵Video-3O模型】高品质（pro）x 1s时长 x 有参考视频 x 有声
+从资源包总数里扣减1.4
+1.4元
+【可灵V3.0模型】标准（std）x 1s时长 x 无声
+从资源包总数里扣减0.6
+0.6元
+【可灵V3.0模型】标准（std）x 1s时长 x 有声 x 未指定音色
+从资源包总数里扣减0.9
+0.9元
+【可灵V3.0模型】标准（std）x 1s时长 x 有声 x 有指定音色
+从资源包总数里扣减1.1
+1.1元
+【可灵V3.0模型】高品质（pro）x 1s时长 x 无声
+从资源包总数里扣减0.8
+0.8元
+【可灵V3.0模型】高品质（pro）x 1s时长 x 有声 x 未指定音色
+从资源包总数里扣减1.2
+1.2元
+【可灵V3.0模型】高品质（pro）x 1s时长 x 有声 x 有指定音色
+从资源包总数里扣减1.4
+1.4元
+【可灵V3.0动作控制】标准（std）x 1s时长
+从资源包总数里扣减0.9
+0.9元
+【可灵V3.0动作控制】高品质（pro）x 1s时长
+从资源包总数里扣减1.2
+1.2元
+【可图Image-3O模型】 1K/2K
+从资源包总数里扣减8
+0.2元
+【可图Image-3O模型】 4K
+从资源包总数里扣减16
+0.4元
+【可图V3.0模型】1K/2K
+从资源包总数里扣减8
+0.2元
+快手内部文档请勿外传

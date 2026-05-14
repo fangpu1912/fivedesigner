@@ -1,0 +1,38 @@
+[
+  {
+    "id": "script-agent",
+    "key": "scriptAgent",
+    "name": "剧本Agent",
+    "desc": "用于读取原文生成故事骨架、改编策略，建议使用具备强大文本理解和生成能力的模型",
+    "modelName": "MiniMax-M2.7",
+    "vendorId": "l1m8ib378a8lz9lwcl9gi",
+    "disabled": false
+  },
+  {
+    "id": "production-agent",
+    "key": "productionAgent",
+    "name": "生产Agent",
+    "desc": "对工作流进行调度和管理，建议使用具备较强的逻辑推理和任务管理能力的模型",
+    "modelName": "MiniMax-M2.7",
+    "vendorId": "l1m8ib378a8lz9lwcl9gi",
+    "disabled": false
+  },
+  {
+    "id": "universal-ai",
+    "key": "universalAi",
+    "name": "通用AI",
+    "desc": "用于小说事件提取、资产提示词生成、台词提取等边缘功能，建议使用具备较强文本处理能力的模型",
+    "modelName": "MiniMax-M2.7",
+    "vendorId": "l1m8ib378a8lz9lwcl9gi",
+    "disabled": false
+  },
+  {
+    "id": "tts-dubbing",
+    "key": "ttsDubbing",
+    "name": "TTS配音",
+    "desc": "根据剧本内容生成角色配音，支持多种声音风格和情绪",
+    "modelName": "ViduQ1",
+    "vendorId": "jqyd06b8jljpglocixax1l",
+    "disabled": true
+  }
+]

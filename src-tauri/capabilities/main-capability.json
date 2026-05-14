@@ -1,0 +1,39 @@
+{
+  "identifier": "main-capability",
+  "description": "Main window permissions",
+  "windows": ["main", "jimeng-automation"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-create",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-close",
+    "core:window:allow-set-focus",
+    "core:webview:default",
+    "core:webview:allow-create-webview-window",
+    "core:webview:allow-webview-show",
+    "core:webview:allow-webview-hide",
+    "core:webview:allow-webview-close",
+    "dialog:default",
+    "fs:default",
+    "fs:allow-appdata-read-recursive",
+    "fs:allow-appdata-write-recursive",
+    {
+      "identifier": "fs:scope",
+      "allow": ["**"]
+    },
+    "http:default",
+    {
+      "identifier": "http:allow-fetch",
+      "allow": [{ "url": "https://*" }, { "url": "http://*" }]
+    },
+    "shell:default",
+    "sql:default",
+    "sql:allow-execute",
+    "sql:allow-select",
+    "sql:allow-load",
+    "sql:allow-close",
+    "store:default"
+  ]
+}

@@ -1,0 +1,9 @@
+fastapi>=0.100.0
+uvicorn>=0.23.0
+pillow>=10.0.0
+numpy>=1.24.0
+torch>=2.0.0
+torchvision>=0.15.0
+realesrgan>=0.3.0
+basicsr>=1.4.2
+pydantic>=2.0.0

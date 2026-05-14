@@ -1,0 +1,163 @@
+src/components/ai/AgentPanel.tsx(61,9): error TS2367: This comparison appears to be unintentional because the types 'CreationType' and '"text"' have no overlap.
+src/components/ai/ComfyUIParamsPanel.tsx(370,13): error TS2322: Type '{ value: string; label: string; }' is not assignable to type 'string'.
+src/components/ai/ComfyUIParamsPanel.tsx(371,13): error TS2322: Type '{ value: string; label: string; }' is not assignable to type 'string'.
+src/components/ai/ComfyUIParamsPanel.tsx(372,13): error TS2322: Type '{ value: string; label: string; }' is not assignable to type 'string'.
+src/components/ai/ComfyUIParamsPanel.tsx(373,13): error TS2322: Type '{ value: string; label: string; }' is not assignable to type 'string'.
+src/components/ai/PromptEditor.tsx(49,11): error TS2322: Type '{ ref: Ref<MentionInputRef> | undefined; value: string; onChange: (value: string) => void; onMentionsChange: ((mentions: MentionData[]) => void) | undefined; placeholder: string; projectId: string | undefined; episodeId: string | undefined; minRows: number; }' is not assignable to type 'IntrinsicAttributes & MentionInputProps & RefAttributes<MentionInputRef>'.
+  Property 'projectId' does not exist on type 'IntrinsicAttributes & MentionInputProps & RefAttributes<MentionInputRef>'.
+src/components/asset/AssetCreateDialog.tsx(137,30): error TS2349: This expression is not callable.
+  Type 'Boolean' has no call signatures.
+src/components/dubbing/DubbingConfigPanel.tsx(222,11): error TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+src/components/storyboard/CanvasDrawingTool.tsx(472,27): error TS2304: Cannot find name 'ArrowRight'.
+src/components/tasks/TaskManager.tsx(21,8): error TS2307: Cannot find module '@/components/ui/table' or its corresponding type declarations.
+src/db/index.ts(600,61): error TS2304: Cannot find name 'CharacterOutfit'.
+src/db/index.ts(610,44): error TS2304: Cannot find name 'CharacterOutfit'.
+src/db/index.ts(620,35): error TS2304: Cannot find name 'CharacterOutfit'.
+src/db/index.ts(620,98): error TS2304: Cannot find name 'CharacterOutfit'.
+src/db/index.ts(630,46): error TS2304: Cannot find name 'CharacterOutfit'.
+src/db/index.ts(633,48): error TS2304: Cannot find name 'CharacterOutfit'.
+src/db/index.ts(672,55): error TS2304: Cannot find name 'CharacterOutfit'.
+src/db/index.ts(1401,25): error TS2304: Cannot find name 'CharacterOutfit'.
+src/db/index.ts(1403,38): error TS2304: Cannot find name 'CharacterOutfit'.
+src/hooks/index.ts(5,15): error TS2307: Cannot find module './useGeneration' or its corresponding type declarations.
+src/hooks/useScript.ts(126,41): error TS2345: Argument of type '{ extracted_shots?: unknown[] | undefined; extracted_dubbing?: unknown[] | undefined; extracted_assets?: unknown[] | undefined; title: string; content: string; }' is not assignable to parameter of type 'Partial<Script>'.
+  Types of property 'extracted_assets' are incompatible.
+    Type 'unknown[] | undefined' is not assignable to type 'ExtractedAsset[] | undefined'.
+      Type 'unknown[]' is not assignable to type 'ExtractedAsset[]'.
+        Type 'unknown' is not assignable to type 'ExtractedAsset'.
+src/hooks/useScript.ts(140,11): error TS2322: Type 'unknown[] | undefined' is not assignable to type 'ExtractedAsset[] | undefined'.
+  Type 'unknown[]' is not assignable to type 'ExtractedAsset[]'.
+    Type 'unknown' is not assignable to type 'ExtractedAsset'.
+src/hooks/useScript.ts(141,11): error TS2322: Type 'unknown[] | undefined' is not assignable to type 'ExtractedDubbing[] | undefined'.
+  Type 'unknown[]' is not assignable to type 'ExtractedDubbing[]'.
+    Type 'unknown' is not assignable to type 'ExtractedDubbing'.
+src/hooks/useScript.ts(142,11): error TS2322: Type 'unknown[] | undefined' is not assignable to type 'ExtractedShot[] | undefined'.
+  Type 'unknown[]' is not assignable to type 'ExtractedShot[]'.
+    Type 'unknown' is not assignable to type 'ExtractedShot'.
+src/hooks/useStudio.ts(168,15): error TS2322: Type '"audio" | "script" | "video" | "image" | "compose" | "completed" | "error" | "storyboard" | "idle" | "assets"' is not assignable to type '"idle"'.
+  Type '"audio"' is not assignable to type '"idle"'.
+src/hooks/useStudio.ts(208,11): error TS2322: Type '"audio" | "script" | "video" | "image" | "compose" | "completed" | "error" | "storyboard" | "idle" | "assets"' is not assignable to type '"idle"'.
+  Type '"audio"' is not assignable to type '"idle"'.
+src/pages/Dubbing.tsx(10,35): error TS2724: '"@/services/workflowConfigService"' has no exported member named 'WorkflowConfig'. Did you mean 'getWorkflowConfigs'?
+src/pages/PromptSettings.tsx(86,7): error TS2739: Type '{ assistant_chat: Element; pipeline_scene_segmentation: Element; pipeline_asset_extraction: Element; pipeline_storyboard_breakdown: Element; pipeline_dubbing_generation: Element; inspiration_creation: Element; benchmark_analysis: Element; }' is missing the following properties from type 'Record<PromptType, ReactNode>': script_structure_analysis, script_character_arc, script_adaptation_strategy, script_outline_generation, inspiration_continue
+src/pages/Settings.tsx(1013,9): error TS18004: No value exists in scope for the shorthand property 'shortcuts'. Either declare one or provide an initializer.
+src/pages/Settings.tsx(1089,11): error TS2304: Cannot find name 'setShortcuts'.
+src/pages/StoryboardDraw.tsx(754,9): error TS2322: Type 'string' is not assignable to type 'GenerationResult'.
+src/pages/StoryboardDraw.tsx(773,23): error TS2322: Type 'GenerationResult' is not assignable to type 'string'.
+src/pages/StoryboardDraw.tsx(776,27): error TS2345: Argument of type 'GenerationResult' is not assignable to parameter of type 'SetStateAction<string | null>'.
+src/pages/StoryboardDraw.tsx(777,29): error TS2345: Argument of type 'GenerationResult' is not assignable to parameter of type 'string'.
+src/pages/StoryboardDraw.tsx(1246,9): error TS2353: Object literal may only specify known properties, and 'error' does not exist in type 'Partial<Task>'.
+src/pages/StoryboardDraw.tsx(1893,13): error TS2367: This comparison appears to be unintentional because the types '"scene" | "character" | "prop"' and '"storyboard"' have no overlap.
+src/plugins/storyboard-copilot/components/ComfyPropertiesPanel.tsx(105,75): error TS2322: Type 'unknown' is not assignable to type 'ReactNode'.
+src/plugins/storyboard-copilot/components/flow-nodes/GridPreviewNode.tsx(178,76): error TS2345: Argument of type '{ id: string; imageUrl: string | null; label: string; }' is not assignable to parameter of type '{ id: string; imageUrl: string; label: string; }'.
+  Types of property 'imageUrl' are incompatible.
+    Type 'string | null' is not assignable to type 'string'.
+      Type 'null' is not assignable to type 'string'.
+src/plugins/storyboard-copilot/components/flow-nodes/ImageCompareNode.tsx(116,5): error TS2322: Type '{} | null' is not assignable to type 'string | null'.
+  Type '{}' is not assignable to type 'string'.
+src/plugins/storyboard-copilot/components/flow-nodes/SceneDirectorNode.tsx(69,30): error TS2304: Cannot find name 'CharacterPose'.
+src/plugins/storyboard-copilot/components/flow-nodes/StoryboardGenNode.tsx(129,11): error TS2353: Object literal may only specify known properties, and 'imageUrl' does not exist in type 'StoryboardGenFrameItem'.
+src/plugins/storyboard-copilot/components/flow-nodes/StoryboardNode.tsx(311,26): error TS2345: Argument of type '{ id: string; imageUrl: string; note: string; }' is not assignable to parameter of type 'StoryboardFrameItem'.
+  Property 'order' is missing in type '{ id: string; imageUrl: string; note: string; }' but required in type 'StoryboardFrameItem'.
+src/plugins/storyboard-copilot/components/flow-nodes/UpscaleNode.tsx(80,9): error TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+src/plugins/storyboard-copilot/components/flow-nodes/UpscaleNode.tsx(81,9): error TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+src/plugins/storyboard-copilot/components/flow-nodes/VideoGenNode.tsx(198,35): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'string | null | undefined'.
+src/plugins/storyboard-copilot/components/flow-nodes/VideoGenNode.tsx(222,104): error TS2345: Argument of type '{}' is not assignable to parameter of type 'SetStateAction<string | null>'.
+src/plugins/storyboard-copilot/components/flow-nodes/VideoGenNode.tsx(224,16): error TS2322: Type '{}' is not assignable to type 'string'.
+src/plugins/storyboard-copilot/components/flow-nodes/VideoGenNode.tsx(343,20): error TS2322: Type '{}' is not assignable to type 'string'.
+src/plugins/storyboard-copilot/components/flow-nodes/VideoUploadNode.tsx(131,10): error TS2365: Operator '+' cannot be applied to types 'number' and '{}'.
+src/plugins/storyboard-copilot/components/flow-nodes/VideoUploadNode.tsx(238,54): error TS2345: Argument of type '{}' is not assignable to parameter of type 'number'.
+src/plugins/storyboard-copilot/components/flow-nodes/VideoUploadNode.tsx(244,9): error TS2322: Type '{}' is not assignable to type 'Width<string | number> | undefined'.
+src/plugins/storyboard-copilot/components/ImageEditorDialog.tsx(112,26): error TS2339: Property 'stroke' does not exist on type 'AnnotationItem'.
+  Property 'stroke' does not exist on type 'TextAnnotation'.
+src/plugins/storyboard-copilot/components/ImageEditorDialog.tsx(113,24): error TS2339: Property 'color' does not exist on type 'AnnotationItem'.
+  Property 'color' does not exist on type 'RectAnnotation'.
+src/plugins/storyboard-copilot/components/ImageEditorDialog.tsx(114,24): error TS2339: Property 'lineWidth' does not exist on type 'AnnotationItem'.
+  Property 'lineWidth' does not exist on type 'TextAnnotation'.
+src/plugins/storyboard-copilot/components/index.ts(9,37): error TS2307: Cannot find module './ComfyStoryboardFlow' or its corresponding type declarations.
+src/plugins/storyboard-copilot/components/index.ts(12,33): error TS2307: Cannot find module './flow-nodes/ComfyUploadNode' or its corresponding type declarations.
+src/plugins/storyboard-copilot/components/index.ts(13,32): error TS2307: Cannot find module './flow-nodes/ComfyAIGenNode' or its corresponding type declarations.
+src/plugins/storyboard-copilot/components/index.ts(14,33): error TS2307: Cannot find module './flow-nodes/ComfyAIEditNode' or its corresponding type declarations.
+src/plugins/storyboard-copilot/components/index.ts(15,40): error TS2307: Cannot find module './flow-nodes/ComfyStoryboardGenNode' or its corresponding type declarations.
+src/plugins/storyboard-copilot/components/index.ts(16,34): error TS2307: Cannot find module './flow-nodes/ComfyPreviewNode' or its corresponding type declarations.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(122,20): error TS2345: Argument of type '{ type?: string | undefined; id?: string | undefined; }[]' is not assignable to parameter of type 'NodeChange<CanvasNode>[]'.
+  Type '{ type?: string | undefined; id?: string | undefined; }' is not assignable to type 'NodeChange<CanvasNode>'.
+    Property 'item' is missing in type '{ type?: string | undefined; id?: string | undefined; }' but required in type 'NodeReplaceChange<CanvasNode>'.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(480,26): error TS2339: Property 'imageUrl' does not exist on type '{}'.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(487,41): error TS2339: Property 'imageUrl' does not exist on type '{}'.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(501,26): error TS2339: Property 'imageUrl' does not exist on type '{}'.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(508,41): error TS2339: Property 'imageUrl' does not exist on type '{}'.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(522,26): error TS2339: Property 'imageUrl' does not exist on type '{}'.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(529,41): error TS2339: Property 'imageUrl' does not exist on type '{}'.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(564,26): error TS2339: Property 'imageUrl' does not exist on type '{}'.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(564,49): error TS2339: Property 'frames' does not exist on type '{}'.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(571,35): error TS2339: Property 'imageUrl' does not exist on type '{}'.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(571,74): error TS2339: Property 'imageUrl' does not exist on type '{}'.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(572,35): error TS2339: Property 'frames' does not exist on type '{}'.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(572,70): error TS2339: Property 'frames' does not exist on type '{}'.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(587,26): error TS2339: Property 'imageUrl' does not exist on type '{}'.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(594,44): error TS2339: Property 'imageUrl' does not exist on type '{}'.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(686,22): error TS2322: Type '{}' is not assignable to type 'string'.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(1134,56): error TS2554: Expected 3 arguments, but got 4.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(1135,24): error TS7006: Parameter 'nodeId' implicitly has an 'any' type.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(1135,32): error TS7006: Parameter 'output' implicitly has an 'any' type.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(1420,38): error TS2304: Cannot find name 'getImageUrl'.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(1816,9): error TS2322: Type '(_: unknown, { nodeId, handleId }: { nodeId: string; handleId?: string | null; }) => void' is not assignable to type 'OnConnectStart'.
+  Types of parameters '__1' and 'params' are incompatible.
+    Type 'OnConnectStartParams' is not assignable to type '{ nodeId: string; handleId?: string | null | undefined; }'.
+      Types of property 'nodeId' are incompatible.
+        Type 'string | null' is not assignable to type 'string'.
+          Type 'null' is not assignable to type 'string'.
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(1824,9): error TS2322: Type '(e: React.MouseEvent) => void' is not assignable to type '(event: MouseEvent | React.MouseEvent<Element, MouseEvent>) => void'.
+  Types of parameters 'e' and 'event' are incompatible.
+    Type 'MouseEvent | React.MouseEvent<Element, MouseEvent>' is not assignable to type 'MouseEvent<Element, MouseEvent>'.
+      Type 'MouseEvent' is missing the following properties from type 'MouseEvent<Element, MouseEvent>': nativeEvent, isDefaultPrevented, isPropagationStopped, persist
+src/plugins/storyboard-copilot/components/StoryboardFlow.tsx(1838,9): error TS2322: Type 'number' is not assignable to type 'SelectionMode | undefined'.
+src/plugins/storyboard-copilot/components/three/PanoramaViewer.tsx(306,19): error TS2339: Property 'clearMarkers' does not exist on type 'AbstractPlugin<any>'.
+src/plugins/storyboard-copilot/components/three/PanoramaViewer.tsx(345,21): error TS2339: Property 'addMarker' does not exist on type 'AbstractPlugin<any>'.
+src/plugins/storyboard-copilot/components/three/Scene3D.tsx(40,13): error TS2339: Property 'getParameter' does not exist on type 'RenderingContext'.
+  Property 'getParameter' does not exist on type 'CanvasRenderingContext2D'.
+src/plugins/storyboard-copilot/components/three/Scene3D.tsx(40,29): error TS2339: Property 'MAX_TEXTURE_SIZE' does not exist on type 'RenderingContext'.
+  Property 'MAX_TEXTURE_SIZE' does not exist on type 'CanvasRenderingContext2D'.
+src/plugins/storyboard-copilot/components/three/Scene3D.tsx(302,29): error TS2339: Property 'getParameter' does not exist on type 'RenderingContext'.
+  Property 'getParameter' does not exist on type 'CanvasRenderingContext2D'.
+src/plugins/storyboard-copilot/components/three/Scene3D.tsx(302,45): error TS2339: Property 'MAX_TEXTURE_SIZE' does not exist on type 'RenderingContext'.
+  Property 'MAX_TEXTURE_SIZE' does not exist on type 'CanvasRenderingContext2D'.
+src/plugins/storyboard-copilot/components/three/Scene3DEditor.tsx(3,31): error TS2307: Cannot find module 'three/examples/jsm/controls/OrbitControls' or its corresponding type declarations.
+src/plugins/storyboard-copilot/types/index.ts(376,5): error TS2304: Cannot find name 'TextNodeData'.
+src/plugins/storyboard-copilot/utils/nodeDefinitions.ts(460,22): error TS2339: Property 'imageNode' does not exist on type '{ readonly upload: "uploadNode"; readonly imageEdit: "imageNode"; readonly aiImageEdit: "aiImageEditNode"; readonly exportImage: "exportImageNode"; readonly blankImage: "blankImageNode"; ... 13 more ...; readonly imageCompare: "imageCompareNode"; }'.
+src/plugins/storyboard-copilot/utils/nodeExecutors.ts(89,26): error TS2554: Expected 2-3 arguments, but got 1.
+src/plugins/storyboard-copilot/utils/nodeExecutors.ts(200,15): error TS2353: Object literal may only specify known properties, and 'aspectRatio' does not exist in type 'GenerationOptions'.
+src/services/agent/agentController.ts(234,9): error TS2698: Spread types may only be created from object types.
+src/services/agent/agentController.ts(281,9): error TS2353: Object literal may only specify known properties, and 'firstFrame' does not exist in type 'VideoConfig'.
+src/services/agent/agentController.ts(310,7): error TS2345: Argument of type '{ text: string; }' is not assignable to parameter of type 'TTSConfig'.
+  Property 'voice' is missing in type '{ text: string; }' but required in type 'TTSConfig'.
+src/services/analysisService.ts(298,34): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+src/services/capcutExporter.ts(518,24): error TS2339: Property 'subtitle' does not exist on type 'SampleClip'.
+src/services/comfyuiService.ts(182,29): error TS2538: Type 'string[]' cannot be used as an index type.
+src/services/studioService.ts(65,46): error TS2339: Property 'getDefaultConfig' does not exist on type 'VendorConfigService'.
+src/services/studioService.ts(109,27): error TS2339: Property 'text' does not exist on type 'string'.
+src/services/studioService.ts(109,44): error TS2339: Property 'content' does not exist on type 'string'.
+src/services/studioService.ts(195,28): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/services/studioService.ts(254,71): error TS2339: Property 'getDefaultModel' does not exist on type 'VendorConfigService'.
+src/services/studioService.ts(273,11): error TS2353: Object literal may only specify known properties, and 'width' does not exist in type 'ImageConfig'.
+src/services/studioService.ts(288,71): error TS2339: Property 'getDefaultModel' does not exist on type 'VendorConfigService'.
+src/services/studioService.ts(309,11): error TS2353: Object literal may only specify known properties, and 'image' does not exist in type 'VideoConfig'.
+src/services/studioService.ts(325,69): error TS2339: Property 'getDefaultModel' does not exist on type 'VendorConfigService'.
+src/services/studioService.ts(336,19): error TS2741: Property 'voice' is missing in type '{ text: string; voiceId: string; }' but required in type 'TTSConfig'.
+src/services/studioService.ts(347,15): error TS2353: Object literal may only specify known properties, and 'character_name' does not exist in type 'Omit<Dubbing, "id" | "created_at" | "updated_at">'.
+src/services/taskHandlers/aiGeneration.ts(35,11): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+src/services/taskHandlers/aiGeneration.ts(88,11): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+src/services/taskHandlers/aiGeneration.ts(131,11): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+src/services/taskQueue.ts(154,7): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+src/services/taskQueue.ts(210,7): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+src/services/taskQueue.ts(256,7): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+src/services/tauri.ts(5,44): error TS2352: Conversion of type 'Window & typeof globalThis' to type 'Record<string, unknown>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Index signature for type 'string' is missing in type 'Window & typeof globalThis'.
+src/services/vendor/aiService.ts(256,20): error TS2351: This expression is not constructable.
+  Type '{}' has no construct signatures.

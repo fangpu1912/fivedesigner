@@ -1,0 +1,75 @@
+{
+  "_说明": "FiveDesigner 资产导入示例文件",
+  "_格式": "可以是单个资产对象，也可以是资产数组",
+  "_支持类型": "character(角色), scene(场景), prop(道具), storyboard(分镜)",
+
+  "characters": [
+    {
+      "category": "character",
+      "name": "主角-李明",
+      "description": "25岁左右的年轻男性，身材中等，短发，眼神坚定",
+      "prompt": "25-year-old Asian male, short black hair, determined eyes, wearing casual modern clothing, medium build, neutral expression, white background, high quality, detailed face",
+      "tags": ["主角", "男性", "现代"]
+    },
+    {
+      "category": "character",
+      "name": "反派-王老板",
+      "description": "50岁左右的中年男性，身材微胖，西装革履，面带冷笑",
+      "prompt": "50-year-old Asian male, slightly overweight, wearing expensive business suit, sneering expression, slicked-back hair, white background, high quality, detailed face",
+      "tags": ["反派", "男性", "商务"]
+    }
+  ],
+
+  "scenes": [
+    {
+      "category": "scene",
+      "name": "现代办公室",
+      "description": "宽敞明亮的现代办公室，落地窗外是城市夜景",
+      "prompt": "Modern office interior, spacious and bright, floor-to-ceiling windows showing city night view, minimalist design, desk and chairs, soft lighting, high quality, detailed",
+      "tags": ["室内", "现代", "办公室"]
+    },
+    {
+      "category": "scene",
+      "name": "雨夜街道",
+      "description": "阴雨连绵的城市街道，霓虹灯倒映在湿漉漉的地面上",
+      "prompt": "Rainy city street at night, neon lights reflecting on wet pavement, moody atmosphere, urban setting, cinematic lighting, high quality, detailed",
+      "tags": ["室外", "夜景", "雨天"]
+    }
+  ],
+
+  "props": [
+    {
+      "category": "prop",
+      "name": "神秘信封",
+      "description": "泛黄的旧信封，封口处有红色蜡封，看起来年代久远",
+      "prompt": "Old yellowed envelope, red wax seal on the flap, vintage appearance, mysterious, white background, high quality, detailed texture",
+      "tags": ["道具", "神秘", "复古"]
+    },
+    {
+      "category": "prop",
+      "name": "古董怀表",
+      "description": "精致的金色怀表，表盖上有复杂的花纹雕刻",
+      "prompt": "Antique gold pocket watch, intricate floral engraving on the cover, vintage luxury, white background, high quality, detailed metal texture",
+      "tags": ["道具", "奢侈品", "复古"]
+    }
+  ],
+
+  "storyboards": [
+    {
+      "category": "storyboard",
+      "name": "开场-办公室全景",
+      "description": "广角镜头展示办公室全景，主角李明坐在办公桌前",
+      "prompt": "Wide shot, modern office interior, protagonist sitting at desk working, city night view through window, establishing shot, cinematic composition, high quality",
+      "videoPrompt": "Slow pan from window to protagonist, subtle camera movement, ambient city lights flickering",
+      "sort_order": 1
+    },
+    {
+      "category": "storyboard",
+      "name": "特写-发现信封",
+      "description": "特写镜头，李明的表情从疑惑到震惊",
+      "prompt": "Close-up shot, protagonist's face, expression changing from confused to shocked, dramatic lighting, emotional moment, high quality, detailed facial expression",
+      "videoPrompt": "Slow push-in on face, subtle zoom, lighting gradually changing",
+      "sort_order": 2
+    }
+  ]
+}

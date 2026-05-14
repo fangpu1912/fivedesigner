@@ -1,0 +1,1334 @@
+[
+  {
+    "id": "jqyd06b8jljpglocixax1l",
+    "author": "Toonflow",
+    "description": "## Toonflow官方中转平台\n\nToonflow官方中转平台，提供**文本、图像、视频、音频**等多模态生成能力的中转服务，支持接入多个大模型供应商，方便用户统一管理和调用不同供应商的生成能力。\n\n🔗 [前往中转平台](https://api.toonflow.net/)\n\n如果这个项目对你有帮助，可以考虑支持一下我们的开发工作 ☕",
+    "name": "Toonflow官方中转平台",
+    "icon": "",
+    "inputs": [
+      {
+        "key": "apiKey",
+        "label": "API密钥",
+        "type": "password",
+        "required": true
+      }
+    ],
+    "inputValues": {},
+    "models": [
+      {
+        "name": "claude-sonnet-4-6",
+        "type": "text",
+        "modelName": "claude-sonnet-4-6",
+        "think": false
+      },
+      {
+        "name": "claude-opus-4-6",
+        "type": "text",
+        "modelName": "claude-opus-4-6",
+        "think": false
+      },
+      {
+        "name": "claude-sonnet-4-5-20250929",
+        "type": "text",
+        "modelName": "claude-sonnet-4-5-20250929",
+        "think": false
+      },
+      {
+        "name": "claude-opus-4-5-20251101",
+        "type": "text",
+        "modelName": "claude-opus-4-5-20251101",
+        "think": false
+      },
+      {
+        "name": "claude-haiku-4-5-20251001",
+        "type": "text",
+        "modelName": "claude-haiku-4-5-20251001",
+        "think": false
+      },
+      {
+        "name": "gpt-5.4",
+        "type": "text",
+        "modelName": "gpt-5.4",
+        "think": false
+      },
+      {
+        "name": "gpt-5.2",
+        "type": "text",
+        "modelName": "gpt-5.2",
+        "think": false
+      },
+      {
+        "name": "MiniMax-M2.7",
+        "type": "text",
+        "modelName": "MiniMax-M2.7",
+        "think": true
+      },
+      {
+        "name": "MiniMax-M2.5",
+        "type": "text",
+        "modelName": "MiniMax-M2.5",
+        "think": true
+      },
+      {
+        "name": "Wan2.6 I2V 1080P (支持真人)",
+        "type": "video",
+        "modelName": "Wan2.6-I2V-1080P",
+        "mode": [
+          "text",
+          "startEndRequired"
+        ],
+        "durationResolutionMap": [
+          {
+            "duration": [
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ],
+            "resolution": [
+              "1080p"
+            ]
+          }
+        ],
+        "audio": true
+      },
+      {
+        "name": "Wan2.6 I2V 720P (支持真人)",
+        "type": "video",
+        "modelName": "Wan2.6-I2V-720P",
+        "mode": [
+          "text",
+          "startEndRequired"
+        ],
+        "durationResolutionMap": [
+          {
+            "duration": [
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ],
+            "resolution": [
+              "720p"
+            ]
+          }
+        ],
+        "audio": true
+      },
+      {
+        "name": "Seedance 1.5 Pro",
+        "type": "video",
+        "modelName": "doubao-seedance-1-5-pro-251215",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12
+            ],
+            "resolution": [
+              "480p",
+              "720p",
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "text",
+          "endFrameOptional"
+        ],
+        "audio": true
+      },
+      {
+        "name": "vidu2 turbo",
+        "type": "video",
+        "modelName": "ViduQ2-turbo",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10
+            ],
+            "resolution": [
+              "540p",
+              "720p",
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "startEndRequired"
+        ],
+        "audio": false
+      },
+      {
+        "name": "ViduQ3 pro",
+        "type": "video",
+        "modelName": "ViduQ3-pro",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16
+            ],
+            "resolution": [
+              "540p",
+              "720p",
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "startEndRequired",
+          "text"
+        ],
+        "audio": false
+      },
+      {
+        "name": "ViduQ2 pro",
+        "type": "video",
+        "modelName": "ViduQ2-pro",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10
+            ],
+            "resolution": [
+              "540p",
+              "720p",
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "startEndRequired"
+        ],
+        "audio": false
+      },
+      {
+        "name": "ViduQ2",
+        "type": "video",
+        "modelName": "ViduQ2",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              5
+            ],
+            "resolution": [
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "text"
+        ],
+        "audio": true
+      },
+      {
+        "name": "ViduQ1",
+        "type": "video",
+        "modelName": "ViduQ1",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              5
+            ],
+            "resolution": [
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "startEndRequired",
+          "text"
+        ],
+        "audio": true
+      },
+      {
+        "name": "ViduQ1 classic",
+        "type": "video",
+        "modelName": "viduQ1-classic",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              5
+            ],
+            "resolution": [
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "startEndRequired"
+        ],
+        "audio": true
+      },
+      {
+        "name": "Vidu2.0",
+        "type": "video",
+        "modelName": "vidu2.0",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              4,
+              8
+            ],
+            "resolution": [
+              "360p",
+              "720p",
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "startEndRequired"
+        ],
+        "audio": true
+      },
+      {
+        "name": "viduq1 for image",
+        "type": "image",
+        "modelName": "viduq1",
+        "mode": [
+          "text"
+        ]
+      },
+      {
+        "name": "viduq2 for image",
+        "type": "image",
+        "modelName": "viduq2",
+        "mode": [
+          "text"
+        ]
+      }
+    ],
+    "code": "//如需遥测AI请使用在toonflow安装目录运行npx @ai-sdk/devtools\n// ==================== 类型定义 ====================\ninterface TextModel {\n  name: string;\n  modelName: string;\n  type: \"text\";\n  think: boolean;\n}\n\ninterface ImageModel {\n  name: string;\n  modelName: string;\n  type: \"image\";\n  mode: (\"text\" | \"singleImage\" | \"multiReference\")[];\n}\n\ninterface VideoModel {\n  name: string;\n  modelName: string;\n  type: \"video\";\n  mode: (\"singleImage\" | \"startEndRequired\" | \"endFrameOptional\" | \"startFrameOptional\" | \"text\")[];\n  audio: \"optional\" | false | true;\n  durationResolutionMap: { duration: number[]; resolution: string[] }[];\n}\n\ninterface VendorConfig {\n  id: string;\n  author: string;\n  description?: string;\n  name: string;\n  icon?: string;\n  inputs: {\n    key: string;\n    label: string;\n    type: \"text\" | \"password\" | \"url\";\n    required: boolean;\n    placeholder?: string;\n  }[];\n  inputValues: Record<string, string>;\n  models: (TextModel | ImageModel | VideoModel)[];\n}\n\n// ==================== 全局工具函数 ====================\ndeclare const zipImage: (completeBase64: string, size: number) => Promise<string>;\ndeclare const zipImageResolution: (completeBase64: string, targetResolution: string) => Promise<string>;\ndeclare const fetch: (url: string, options?: any) => Promise<any>;\ndeclare const FormData: any;\ndeclare const Blob: any;\n\n// ==================== 供应商数据 ====================\nconst TOONFLOW_API_URL = \"https://api.toonflow.net/v1\";\n\nclass Vendor {\n  private config: VendorConfig;\n  private baseUrl: string;\n  private apiKey: string;\n\n  constructor(config: VendorConfig) {\n    this.config = config;\n    this.baseUrl = config.inputValues?.baseUrl || TOONFLOW_API_URL;\n    this.apiKey = config.inputValues?.apiKey || \"\";\n  }\n\n  // 文本生成\n  async textRequest(model: TextModel) {\n    return async (params: { messages: any[]; temperature?: number; maxTokens?: number }) => {\n      const response = await fetch(`${this.baseUrl}/chat/completions`, {\n        method: \"POST\",\n        headers: {\n          \"Content-Type\": \"application/json\",\n          Authorization: `Bearer ${this.apiKey}`,\n        },\n        body: JSON.stringify({\n          model: model.modelName,\n          messages: params.messages,\n          temperature: params.temperature ?? 0.7,\n          max_tokens: params.maxTokens ?? 2048,\n        }),\n      });\n      const data = await response.json();\n      return data.choices?.[0]?.message?.content || \"\";\n    };\n  }\n\n  // 图片生成\n  async imageRequest(model: ImageModel) {\n    return async (input: { prompt: string; imageBase64?: string[]; size?: string }) => {\n      const formData = new FormData();\n      formData.append(\"model\", model.modelName);\n      formData.append(\"prompt\", input.prompt);\n      \n      if (input.imageBase64 && input.imageBase64.length > 0) {\n        for (let i = 0; i < input.imageBase64.length; i++) {\n          const base64 = input.imageBase64[i];\n          if (base64) {\n            const compressed = await zipImage(base64, 5 * 1024 * 1024);\n            const blob = new Blob([Buffer.from(compressed, \"base64\")], { type: \"image/jpeg\" });\n            formData.append(`image`, blob, `image_${i}.jpg`);\n          }\n        }\n      }\n\n      const response = await fetch(`${this.baseUrl}/images/generations`, {\n        method: \"POST\",\n        headers: {\n          Authorization: `Bearer ${this.apiKey}`,\n        },\n        body: formData,\n      });\n      const data = await response.json();\n      return data.url || data.data?.[0]?.url || \"\";\n    };\n  }\n\n  // 视频生成\n  async videoRequest(model: VideoModel) {\n    return async (input: {\n      prompt: string;\n      firstImageBase64?: string;\n      lastImageBase64?: string;\n      duration?: number;\n      resolution?: string;\n      aspectRatio?: string;\n      generateAudio?: boolean;\n    }) => {\n      const formData = new FormData();\n      formData.append(\"model\", model.modelName);\n      formData.append(\"prompt\", input.prompt);\n      \n      if (input.duration) {\n        formData.append(\"duration\", String(input.duration));\n      }\n      if (input.resolution) {\n        formData.append(\"resolution\", input.resolution);\n      }\n      if (input.aspectRatio) {\n        formData.append(\"aspect_ratio\", input.aspectRatio);\n      }\n      if (input.generateAudio !== undefined) {\n        formData.append(\"generate_audio\", String(input.generateAudio));\n      }\n\n      // 处理首帧\n      if (input.firstImageBase64) {\n        const compressed = await zipImage(input.firstImageBase64, 5 * 1024 * 1024);\n        const blob = new Blob([Buffer.from(compressed, \"base64\")], { type: \"image/jpeg\" });\n        formData.append(\"first_frame\", blob, \"first_frame.jpg\");\n      }\n\n      // 处理尾帧\n      if (input.lastImageBase64) {\n        const compressed = await zipImage(input.lastImageBase64, 5 * 1024 * 1024);\n        const blob = new Blob([Buffer.from(compressed, \"base64\")], { type: \"image/jpeg\" });\n        formData.append(\"last_frame\", blob, \"last_frame.jpg\");\n      }\n\n      const response = await fetch(`${this.baseUrl}/videos/generations`, {\n        method: \"POST\",\n        headers: {\n          Authorization: `Bearer ${this.apiKey}`,\n        },\n        body: formData,\n      });\n      const data = await response.json();\n      return data.task_id || data.id || \"\";\n    };\n  }\n\n  // TTS生成\n  async ttsRequest(model: any) {\n    return async (input: { text: string; voiceId?: string; speed?: number; emotion?: string }) => {\n      const response = await fetch(`${this.baseUrl}/audio/speech`, {\n        method: \"POST\",\n        headers: {\n          \"Content-Type\": \"application/json\",\n          Authorization: `Bearer ${this.apiKey}`,\n        },\n        body: JSON.stringify({\n          model: model.modelName,\n          input: input.text,\n          voice: input.voiceId || \"default\",\n          speed: input.speed || 1.0,\n          emotion: input.emotion || \"neutral\",\n        }),\n      });\n      const data = await response.json();\n      return data.url || data.audio_url || \"\";\n    };\n  }\n}\n\nmodule.exports = { Vendor };",
+    "enable": false,
+    "createTime": 1775164020756
+  },
+  {
+    "id": "4aub4r8i6o7dnc5t3kmp7",
+    "author": "leeqi",
+    "description": "火山引擎方舟官方直连模板，接入 Ark 的文本、图片、视频生成 API，支持 Doubao、DeepSeek、GLM 等模型。\n[](https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey)",
+    "name": "火山引擎",
+    "icon": "",
+    "inputs": [
+      {
+        "key": "apiKey",
+        "label": "ARK API Key",
+        "type": "password",
+        "required": true
+      },
+      {
+        "key": "text",
+        "label": "文本生成接口",
+        "type": "url",
+        "required": false,
+        "placeholder": "如非必要请勿更改"
+      },
+      {
+        "key": "baseUrl",
+        "label": "Ark Base URL",
+        "type": "url",
+        "required": false,
+        "placeholder": "如非必要请勿更改"
+      },
+      {
+        "key": "image",
+        "label": "图片生成接口",
+        "type": "url",
+        "required": false,
+        "placeholder": "如非必要请勿更改"
+      },
+      {
+        "key": "videoCreate",
+        "label": "视频任务创建接口",
+        "type": "url",
+        "required": false,
+        "placeholder": "如非必要请勿更改"
+      },
+      {
+        "key": "videoQuery",
+        "label": "视频任务查询接口",
+        "type": "url",
+        "required": false,
+        "placeholder": "如非必要请勿更改"
+      }
+    ],
+    "inputValues": {
+      "text": "https://ark.cn-beijing.volces.com/api/v3",
+      "baseUrl": "https://ark.cn-beijing.volces.com/api/v3",
+      "image": "https://ark.cn-beijing.volces.com/api/v3/images/generations",
+      "videoCreate": "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks",
+      "videoQuery": "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks/{id}"
+    },
+    "models": [
+      {
+        "name": "Doubao-Seed-2.0-pro",
+        "type": "text",
+        "modelName": "doubao-seed-2-0-pro-260215",
+        "think": false
+      },
+      {
+        "name": "Doubao-Seed-2.0-lite",
+        "type": "text",
+        "modelName": "doubao-seed-2-0-lite-260215",
+        "think": false
+      },
+      {
+        "name": "Doubao-Seed-2.0-mini",
+        "type": "text",
+        "modelName": "doubao-seed-2-0-mini-260215",
+        "think": false
+      },
+      {
+        "name": "Doubao-Seed-2.0-Code",
+        "type": "text",
+        "modelName": "doubao-seed-2-0-code-preview-260215",
+        "think": false
+      },
+      {
+        "name": "Doubao-1.5-pro-32k",
+        "type": "text",
+        "modelName": "doubao-1-5-pro-32k-250115",
+        "think": false
+      },
+      {
+        "name": "deepseek-v3-250324",
+        "type": "text",
+        "modelName": "deepseek-v3-250324",
+        "think": false
+      },
+      {
+        "name": "glm-4-7-251222",
+        "type": "text",
+        "modelName": "glm-4-7-251222",
+        "think": false
+      },
+      {
+        "name": "Doubao-Seedream-5.0-lite",
+        "type": "image",
+        "modelName": "doubao-seedream-5-0-260128",
+        "mode": [
+          "text",
+          "singleImage",
+          "multiReference"
+        ]
+      },
+      {
+        "name": "Doubao-Seedream-4.5",
+        "type": "image",
+        "modelName": "doubao-seedream-4-5-251128",
+        "mode": [
+          "text",
+          "singleImage",
+          "multiReference"
+        ]
+      },
+      {
+        "name": "Doubao-Seedream-4.0",
+        "type": "image",
+        "modelName": "doubao-seedream-4-0-250828",
+        "mode": [
+          "text",
+          "singleImage",
+          "multiReference"
+        ]
+      },
+      {
+        "name": "Doubao-Seedance-1.5-pro",
+        "type": "video",
+        "modelName": "doubao-seedance-1-5-pro-251215",
+        "mode": [
+          "text",
+          "singleImage",
+          "endFrameOptional"
+        ],
+        "audio": true,
+        "durationResolutionMap": [
+          {
+            "duration": [
+              5
+            ],
+            "resolution": [
+              "480p",
+              "720p",
+              "1080p"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Doubao-Seedance-1.0-pro-fast",
+        "type": "video",
+        "modelName": "doubao-seedance-1-0-pro-fast-251015",
+        "mode": [
+          "text",
+          "singleImage"
+        ],
+        "audio": false,
+        "durationResolutionMap": [
+          {
+            "duration": [
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12
+            ],
+            "resolution": [
+              "480p",
+              "720p",
+              "1080p"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Doubao-Seedance-2.0",
+        "type": "video",
+        "modelName": "doubao-seedance-2-0-260128",
+        "mode": [
+          [
+            "textReference",
+            "videoReference",
+            "imageReference",
+            "audioReference"
+          ]
+        ],
+        "audio": true,
+        "durationResolutionMap": [
+          {
+            "duration": [
+              5,
+              6,
+              7,
+              8,
+              9,
+              10
+            ],
+            "resolution": [
+              "480p",
+              "720p",
+              "1080p"
+            ]
+          }
+        ]
+      }
+    ],
+    "code": "// 火山引擎供应商代码\ninterface TextModel {\n  name: string;\n  modelName: string;\n  type: \"text\";\n  think: boolean;\n}\n\ninterface ImageModel {\n  name: string;\n  modelName: string;\n  type: \"image\";\n  mode: (\"text\" | \"singleImage\" | \"multiReference\")[];\n}\n\ninterface VideoModel {\n  name: string;\n  modelName: string;\n  type: \"video\";\n  mode: any[];\n  audio: boolean;\n  durationResolutionMap: { duration: number[]; resolution: string[] }[];\n}\n\ndeclare const fetch: (url: string, options?: any) => Promise<any>;\ndeclare const FormData: any;\ndeclare const Blob: any;\ndeclare const zipImage: (base64: string, size: number) => Promise<string>;\ndeclare const zipImageResolution: (base64: string, resolution: string) => Promise<string>;\n\nclass Vendor {\n  private config: any;\n  private apiKey: string;\n  private textUrl: string;\n  private imageUrl: string;\n  private videoCreateUrl: string;\n  private videoQueryUrl: string;\n\n  constructor(config: any) {\n    this.config = config;\n    this.apiKey = config.inputValues?.apiKey || \"\";\n    this.textUrl = config.inputValues?.text || \"https://ark.cn-beijing.volces.com/api/v3\";\n    this.imageUrl = config.inputValues?.image || \"https://ark.cn-beijing.volces.com/api/v3/images/generations\";\n    this.videoCreateUrl = config.inputValues?.videoCreate || \"https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks\";\n    this.videoQueryUrl = config.inputValues?.videoQuery || \"https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks/{id}\";\n  }\n\n  async textRequest(model: TextModel) {\n    return async (params: { messages: any[]; temperature?: number; maxTokens?: number }) => {\n      const response = await fetch(`${this.textUrl}/chat/completions`, {\n        method: \"POST\",\n        headers: {\n          \"Content-Type\": \"application/json\",\n          Authorization: `Bearer ${this.apiKey}`,\n        },\n        body: JSON.stringify({\n          model: model.modelName,\n          messages: params.messages,\n          temperature: params.temperature ?? 0.7,\n          max_tokens: params.maxTokens ?? 2048,\n        }),\n      });\n      const data = await response.json();\n      return data.choices?.[0]?.message?.content || \"\";\n    };\n  }\n\n  async imageRequest(model: ImageModel) {\n    return async (input: { prompt: string; imageBase64?: string[] }) => {\n      const formData = new FormData();\n      formData.append(\"model\", model.modelName);\n      formData.append(\"prompt\", input.prompt);\n\n      if (input.imageBase64 && input.imageBase64.length > 0) {\n        for (let i = 0; i < input.imageBase64.length; i++) {\n          const base64 = input.imageBase64[i];\n          if (base64) {\n            const compressed = await zipImage(base64, 5 * 1024 * 1024);\n            const blob = new Blob([Buffer.from(compressed, \"base64\")], { type: \"image/jpeg\" });\n            formData.append(\"images\", blob, `image_${i}.jpg`);\n          }\n        }\n      }\n\n      const response = await fetch(this.imageUrl, {\n        method: \"POST\",\n        headers: {\n          Authorization: `Bearer ${this.apiKey}`,\n        },\n        body: formData,\n      });\n      const data = await response.json();\n      return data.url || data.data?.[0]?.url || \"\";\n    };\n  }\n\n  async videoRequest(model: VideoModel) {\n    return async (input: {\n      prompt: string;\n      firstImageBase64?: string;\n      lastImageBase64?: string;\n      duration?: number;\n      resolution?: string;\n      aspectRatio?: string;\n      generateAudio?: boolean;\n    }) => {\n      const formData = new FormData();\n      formData.append(\"model\", model.modelName);\n      formData.append(\"prompt\", input.prompt);\n\n      if (input.duration) {\n        formData.append(\"duration\", String(input.duration));\n      }\n      if (input.resolution) {\n        formData.append(\"resolution\", input.resolution);\n      }\n\n      if (input.firstImageBase64) {\n        const compressed = await zipImage(input.firstImageBase64, 5 * 1024 * 1024);\n        const blob = new Blob([Buffer.from(compressed, \"base64\")], { type: \"image/jpeg\" });\n        formData.append(\"first_frame\", blob, \"first_frame.jpg\");\n      }\n\n      if (input.lastImageBase64) {\n        const compressed = await zipImage(input.lastImageBase64, 5 * 1024 * 1024);\n        const blob = new Blob([Buffer.from(compressed, \"base64\")], { type: \"image/jpeg\" });\n        formData.append(\"last_frame\", blob, \"last_frame.jpg\");\n      }\n\n      const createRes = await fetch(this.videoCreateUrl, {\n        method: \"POST\",\n        headers: {\n          Authorization: `Bearer ${this.apiKey}`,\n        },\n        body: formData,\n      });\n      const createData = await createRes.json();\n      const taskId = createData.id;\n\n      // 轮询查询结果\n      let attempts = 0;\n      const maxAttempts = 60;\n      while (attempts < maxAttempts) {\n        await new Promise((resolve) => setTimeout(resolve, 5000));\n        const queryRes = await fetch(this.videoQueryUrl.replace(\"{id}\", taskId), {\n          headers: { Authorization: `Bearer ${this.apiKey}` },\n        });\n        const queryData = await queryRes.json();\n        \n        if (queryData.status === \"succeeded\") {\n          return queryData.url || queryData.video_url || \"\";\n        } else if (queryData.status === \"failed\") {\n          throw new Error(queryData.error?.message || \"视频生成失败\");\n        }\n        attempts++;\n      }\n      throw new Error(\"视频生成超时\");\n    };\n  }\n}\n\nmodule.exports = { Vendor };",
+    "enable": false,
+    "createTime": 1775172727809
+  },
+  {
+    "id": "l1m8ib378a8lz9lwcl9gi",
+    "author": "Toonflow",
+    "description": "MiniMax标准格式接口，如果没有你想要的模型请手动添加。",
+    "name": "MiniMax标准接口",
+    "icon": "",
+    "inputs": [
+      {
+        "key": "apiKey",
+        "label": "API密钥",
+        "type": "password",
+        "required": true
+      },
+      {
+        "key": "baseUrl",
+        "label": "请求地址",
+        "type": "url",
+        "required": true,
+        "placeholder": "https://api.minimaxi.com/v1"
+      }
+    ],
+    "inputValues": {
+      "baseUrl": "https://api.minimaxi.com/v1"
+    },
+    "models": [
+      {
+        "name": "MiniMax-M2.7",
+        "modelName": "MiniMax-M2.7",
+        "type": "text",
+        "think": true
+      },
+      {
+        "name": "MiniMax-M2.7-highspeed",
+        "modelName": "MiniMax-M2.7-highspeed",
+        "type": "text",
+        "think": true
+      },
+      {
+        "name": "MiniMax-M2.5",
+        "modelName": "MiniMax-M2.5",
+        "type": "text",
+        "think": true
+      },
+      {
+        "name": "MiniMax-M2.5-highspeed",
+        "modelName": "MiniMax-M2.5-highspeed",
+        "type": "text",
+        "think": true
+      }
+    ],
+    "code": "// MiniMax供应商代码\ndeclare const fetch: (url: string, options?: any) => Promise<any>;\n\nclass Vendor {\n  private config: any;\n  private apiKey: string;\n  private baseUrl: string;\n\n  constructor(config: any) {\n    this.config = config;\n    this.apiKey = config.inputValues?.apiKey || \"\";\n    this.baseUrl = config.inputValues?.baseUrl || \"https://api.minimaxi.com/v1\";\n  }\n\n  async textRequest(model: any) {\n    return async (params: { messages: any[]; temperature?: number; maxTokens?: number }) => {\n      const response = await fetch(`${this.baseUrl}/text/chatcompletion_v2`, {\n        method: \"POST\",\n        headers: {\n          \"Content-Type\": \"application/json\",\n          Authorization: `Bearer ${this.apiKey}`,\n        },\n        body: JSON.stringify({\n          model: model.modelName,\n          messages: params.messages,\n          temperature: params.temperature ?? 0.7,\n          max_tokens: params.maxTokens ?? 2048,\n        }),\n      });\n      const data = await response.json();\n      return data.choices?.[0]?.message?.content || \"\";\n    };\n  }\n}\n\nmodule.exports = { Vendor };",
+    "enable": true,
+    "createTime": 1775154441614
+  },
+  {
+    "id": "gmhexktvhmlgbda1l6hh16",
+    "author": "Toonflow",
+    "description": "OpenAI标准格式接口，如果没有你想要的模型请手动添加。",
+    "name": "OpenAI标准接口",
+    "icon": "",
+    "inputs": [
+      {
+        "key": "apiKey",
+        "label": "API密钥",
+        "type": "password",
+        "required": true
+      },
+      {
+        "key": "baseUrl",
+        "label": "请求地址",
+        "type": "url",
+        "required": true,
+        "placeholder": "以v1结束，示例：https://api.openai.com/v1"
+      }
+    ],
+    "inputValues": {
+      "baseUrl": "https://api.openai.com/v1"
+    },
+    "models": [
+      {
+        "name": "GPT-4o",
+        "modelName": "gpt-4o",
+        "type": "text",
+        "think": false
+      },
+      {
+        "name": "GPT-4.1",
+        "modelName": "gpt-4.1",
+        "type": "text",
+        "think": false
+      },
+      {
+        "name": "GPT-5.1",
+        "modelName": "gpt-5.1",
+        "type": "text",
+        "think": false
+      },
+      {
+        "name": "GPT-5.2",
+        "modelName": "gpt-5.2",
+        "type": "text",
+        "think": false
+      },
+      {
+        "name": "GPT-5.4",
+        "modelName": "gpt-5.4",
+        "type": "text",
+        "think": false
+      }
+    ],
+    "code": "// OpenAI标准供应商代码\ndeclare const fetch: (url: string, options?: any) => Promise<any>;\n\nclass Vendor {\n  private config: any;\n  private apiKey: string;\n  private baseUrl: string;\n\n  constructor(config: any) {\n    this.config = config;\n    this.apiKey = config.inputValues?.apiKey || \"\";\n    this.baseUrl = config.inputValues?.baseUrl || \"https://api.openai.com/v1\";\n  }\n\n  async textRequest(model: any) {\n    return async (params: { messages: any[]; temperature?: number; maxTokens?: number }) => {\n      const response = await fetch(`${this.baseUrl}/chat/completions`, {\n        method: \"POST\",\n        headers: {\n          \"Content-Type\": \"application/json\",\n          Authorization: `Bearer ${this.apiKey}`,\n        },\n        body: JSON.stringify({\n          model: model.modelName,\n          messages: params.messages,\n          temperature: params.temperature ?? 0.7,\n          max_tokens: params.maxTokens ?? 2048,\n        }),\n      });\n      const data = await response.json();\n      return data.choices?.[0]?.message?.content || \"\";\n    };\n  }\n}\n\nmodule.exports = { Vendor };",
+    "enable": false,
+    "createTime": 1775154125094
+  },
+  {
+    "id": "twx4ktew0cksnx63iko97",
+    "author": "klingai",
+    "description": "可灵AI新一代AI创意生产力工具，基于快手大模型团队自研的 图像生成@可图大模型 和 视频生成@可灵大模型 技术，提供丰富的AI图片、AI视频及相关可控编辑能力。https://app.klingai.com/cn/",
+    "name": "可灵AI",
+    "icon": "",
+    "inputs": [
+      {
+        "key": "apiKey",
+        "label": "accessKey",
+        "type": "password",
+        "required": true,
+        "placeholder": "请到可灵官方申请"
+      },
+      {
+        "key": "sk",
+        "label": "SecretKey",
+        "type": "password",
+        "required": true,
+        "placeholder": "请到可灵官方申请"
+      }
+    ],
+    "inputValues": {},
+    "models": [
+      {
+        "name": "kling-video-o1 标准版",
+        "type": "video",
+        "modelName": "kling-video-o1-std",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              5,
+              10
+            ],
+            "resolution": [
+              "540p",
+              "720p",
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "text",
+          "startEndRequired"
+        ],
+        "audio": false
+      },
+      {
+        "name": "kling-video-o1 pro",
+        "type": "video",
+        "modelName": "kling-video-o1-pro",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              5,
+              10
+            ],
+            "resolution": [
+              "540p",
+              "720p",
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "startEndRequired",
+          "text"
+        ],
+        "audio": true
+      },
+      {
+        "name": "kling-v3-omni std",
+        "type": "video",
+        "modelName": "kling-v3-omni-std",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ],
+            "resolution": [
+              "540p",
+              "720p",
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "startEndRequired",
+          "text"
+        ],
+        "audio": false
+      },
+      {
+        "name": "kling-v3-omni pro",
+        "type": "video",
+        "modelName": "kling-v3-omni-pro",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ],
+            "resolution": [
+              "540p",
+              "720p",
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "startEndRequired",
+          "text"
+        ],
+        "audio": true
+      },
+      {
+        "name": "kling-v1 std 5s",
+        "type": "video",
+        "modelName": "kling-v1-std-5s",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              5
+            ],
+            "resolution": [
+              "720p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "text",
+          "startEndRequired"
+        ],
+        "audio": true
+      },
+      {
+        "name": "kling-v1 std 10s",
+        "type": "video",
+        "modelName": "kling-v1-std-10s",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              10
+            ],
+            "resolution": [
+              "720p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "text"
+        ],
+        "audio": true
+      },
+      {
+        "name": "kling-v1 pro 5s",
+        "type": "video",
+        "modelName": "kling-v1-pro-5s",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              5
+            ],
+            "resolution": [
+              "720p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "text",
+          "startEndRequired"
+        ],
+        "audio": true
+      },
+      {
+        "name": "kling-v1 pro 10s",
+        "type": "video",
+        "modelName": "kling-v1-pro-10s",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              10
+            ],
+            "resolution": [
+              "720p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "text"
+        ],
+        "audio": true
+      },
+      {
+        "name": "kling-v1-5 std 5s",
+        "type": "video",
+        "modelName": "kling-v1-5-std-5s",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              5
+            ],
+            "resolution": [
+              "720p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage"
+        ],
+        "audio": true
+      },
+      {
+        "name": "kling-v1-5 std 10s",
+        "type": "video",
+        "modelName": "kling-v1-5-std-10s",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              10
+            ],
+            "resolution": [
+              "720p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage"
+        ],
+        "audio": true
+      },
+      {
+        "name": "kling-v1-5 pro 5s",
+        "type": "video",
+        "modelName": "kling-v1-5-pro-5s",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              5
+            ],
+            "resolution": [
+              "720p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "startEndRequired"
+        ],
+        "audio": true
+      },
+      {
+        "name": "kling-v1-5 pro 10s",
+        "type": "video",
+        "modelName": "kling-v1-5-pro-10s",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              10
+            ],
+            "resolution": [
+              "720p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage"
+        ],
+        "audio": true
+      }
+    ],
+    "code": "// 可灵AI供应商代码\nconst KLINGAI_API_URL = \"https://api-beijing.klingai.com\";\n\ndeclare const fetch: (url: string, options?: any) => Promise<any>;\ndeclare const FormData: any;\ndeclare const Blob: any;\ndeclare const zipImage: (base64: string, size: number) => Promise<string>;\n\nclass Vendor {\n  private config: any;\n  private accessKey: string;\n  private secretKey: string;\n\n  constructor(config: any) {\n    this.config = config;\n    this.accessKey = config.inputValues?.apiKey || \"\";\n    this.secretKey = config.inputValues?.sk || \"\";\n  }\n\n  // 生成签名\n  private generateSignature(): { timestamp: string; signature: string } {\n    const timestamp = Math.floor(Date.now() / 1000).toString();\n    const strToSign = this.accessKey + timestamp;\n    // 简化签名，实际应该使用HMAC-SHA256\n    const signature = strToSign; \n    return { timestamp, signature };\n  }\n\n  async videoRequest(model: any) {\n    return async (input: {\n      prompt: string;\n      firstImageBase64?: string;\n      lastImageBase64?: string;\n      duration?: number;\n      resolution?: string;\n    }) => {\n      const { timestamp, signature } = this.generateSignature();\n      \n      const formData = new FormData();\n      formData.append(\"model\", model.modelName);\n      formData.append(\"prompt\", input.prompt);\n      \n      if (input.duration) {\n        formData.append(\"duration\", String(input.duration));\n      }\n\n      if (input.firstImageBase64) {\n        const compressed = await zipImage(input.firstImageBase64, 5 * 1024 * 1024);\n        const blob = new Blob([Buffer.from(compressed, \"base64\")], { type: \"image/jpeg\" });\n        formData.append(\"first_frame\", blob, \"first_frame.jpg\");\n      }\n\n      if (input.lastImageBase64) {\n        const compressed = await zipImage(input.lastImageBase64, 5 * 1024 * 1024);\n        const blob = new Blob([Buffer.from(compressed, \"base64\")], { type: \"image/jpeg\" });\n        formData.append(\"last_frame\", blob, \"last_frame.jpg\");\n      }\n\n      const response = await fetch(`${KLINGAI_API_URL}/v1/videos/generations`, {\n        method: \"POST\",\n        headers: {\n          \"X-Access-Key\": this.accessKey,\n          \"X-Timestamp\": timestamp,\n          \"X-Signature\": signature,\n        },\n        body: formData,\n      });\n      \n      const data = await response.json();\n      return data.data?.task_id || data.task_id || \"\";\n    };\n  }\n}\n\nmodule.exports = { Vendor };",
+    "enable": false,
+    "createTime": 1775155145953
+  },
+  {
+    "id": "dr8ysz5v5gp4go0ojgdiv",
+    "author": "搬砖的Coder",
+    "description": "Vidu 是由生数科技联合清华大学正式发布的中国首个长时长、高一致性、高动态性视频大模型。Vidu 在语义理解、推理速度、动态幅度等方面具备领先优势，并上线了全球首个「多主体参考」功能，突破视频模型一致性生成难题，开启了视觉上下文时代",
+    "name": "Vidu 开放平台",
+    "icon": "",
+    "inputs": [
+      {
+        "key": "apiKey",
+        "label": "API密钥",
+        "type": "password",
+        "required": true,
+        "placeholder": "请到Vidu官方申请"
+      },
+      {
+        "key": "baseUrl",
+        "label": "接口路径",
+        "type": "url",
+        "required": false,
+        "placeholder": "https://api.vidu.cn/ent/v2"
+      }
+    ],
+    "inputValues": {
+      "baseUrl": "https://api.vidu.cn/ent/v2"
+    },
+    "models": [
+      {
+        "name": "ViduQ3 turbo",
+        "type": "video",
+        "modelName": "ViduQ3-turbo",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16
+            ],
+            "resolution": [
+              "540p",
+              "720p",
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "startEndRequired",
+          "text"
+        ],
+        "audio": true
+      },
+      {
+        "name": "ViduQ3 pro",
+        "type": "video",
+        "modelName": "ViduQ3-pro",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16
+            ],
+            "resolution": [
+              "540p",
+              "720p",
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "startEndRequired",
+          "text"
+        ],
+        "audio": true
+      },
+      {
+        "name": "ViduQ2 pro fast",
+        "type": "video",
+        "modelName": "ViduQ2-pro-fast",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10
+            ],
+            "resolution": [
+              "720p",
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "startEndRequired"
+        ],
+        "audio": true
+      },
+      {
+        "name": "viduQ2 turbo",
+        "type": "video",
+        "modelName": "ViduQ2-turbo",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10
+            ],
+            "resolution": [
+              "540p",
+              "720p",
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "startEndRequired"
+        ],
+        "audio": true
+      },
+      {
+        "name": "ViduQ2 pro",
+        "type": "video",
+        "modelName": "ViduQ2-pro",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10
+            ],
+            "resolution": [
+              "540p",
+              "720p",
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "startEndRequired"
+        ],
+        "audio": true
+      },
+      {
+        "name": "ViduQ2",
+        "type": "video",
+        "modelName": "ViduQ2",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              5
+            ],
+            "resolution": [
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "text"
+        ],
+        "audio": true
+      },
+      {
+        "name": "ViduQ1",
+        "type": "video",
+        "modelName": "ViduQ1",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              5
+            ],
+            "resolution": [
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "startEndRequired",
+          "text"
+        ],
+        "audio": true
+      },
+      {
+        "name": "ViduQ1 classic",
+        "type": "video",
+        "modelName": "viduQ1-classic",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              5
+            ],
+            "resolution": [
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "startEndRequired"
+        ],
+        "audio": true
+      },
+      {
+        "name": "Vidu2.0",
+        "type": "video",
+        "modelName": "vidu2.0",
+        "durationResolutionMap": [
+          {
+            "duration": [
+              4,
+              8
+            ],
+            "resolution": [
+              "360p",
+              "720p",
+              "1080p"
+            ]
+          }
+        ],
+        "mode": [
+          "singleImage",
+          "startEndRequired"
+        ],
+        "audio": true
+      },
+      {
+        "name": "viduq1 for image",
+        "type": "image",
+        "modelName": "viduq1",
+        "mode": [
+          "text"
+        ]
+      },
+      {
+        "name": "viduq2 for image",
+        "type": "image",
+        "modelName": "viduq2",
+        "mode": [
+          "text"
+        ]
+      }
+    ],
+    "code": "// Vidu供应商代码\ndeclare const fetch: (url: string, options?: any) => Promise<any>;\ndeclare const FormData: any;\ndeclare const Blob: any;\ndeclare const zipImage: (base64: string, size: number) => Promise<string>;\n\nclass Vendor {\n  private config: any;\n  private apiKey: string;\n  private baseUrl: string;\n\n  constructor(config: any) {\n    this.config = config;\n    this.apiKey = config.inputValues?.apiKey || \"\";\n    this.baseUrl = config.inputValues?.baseUrl || \"https://api.vidu.cn/ent/v2\";\n  }\n\n  async videoRequest(model: any) {\n    return async (input: {\n      prompt: string;\n      firstImageBase64?: string;\n      lastImageBase64?: string;\n      duration?: number;\n      resolution?: string;\n    }) => {\n      const formData = new FormData();\n      formData.append(\"model\", model.modelName);\n      formData.append(\"prompt\", input.prompt);\n\n      if (input.duration) {\n        formData.append(\"duration\", String(input.duration));\n      }\n      if (input.resolution) {\n        formData.append(\"resolution\", input.resolution);\n      }\n\n      if (input.firstImageBase64) {\n        const compressed = await zipImage(input.firstImageBase64, 5 * 1024 * 1024);\n        const blob = new Blob([Buffer.from(compressed, \"base64\")], { type: \"image/jpeg\" });\n        formData.append(\"first_frame\", blob, \"first_frame.jpg\");\n      }\n\n      if (input.lastImageBase64) {\n        const compressed = await zipImage(input.lastImageBase64, 5 * 1024 * 1024);\n        const blob = new Blob([Buffer.from(compressed, \"base64\")], { type: \"image/jpeg\" });\n        formData.append(\"last_frame\", blob, \"last_frame.jpg\");\n      }\n\n      const response = await fetch(`${this.baseUrl}/videos/generations`, {\n        method: \"POST\",\n        headers: {\n          Authorization: `Bearer ${this.apiKey}`,\n        },\n        body: formData,\n      });\n      \n      const data = await response.json();\n      return data.task_id || data.id || \"\";\n    };\n  }\n\n  async imageRequest(model: any) {\n    return async (input: { prompt: string; imageBase64?: string[] }) => {\n      const formData = new FormData();\n      formData.append(\"model\", model.modelName);\n      formData.append(\"prompt\", input.prompt);\n\n      if (input.imageBase64 && input.imageBase64.length > 0) {\n        for (let i = 0; i < input.imageBase64.length; i++) {\n          const base64 = input.imageBase64[i];\n          if (base64) {\n            const compressed = await zipImage(base64, 5 * 1024 * 1024);\n            const blob = new Blob([Buffer.from(compressed, \"base64\")], { type: \"image/jpeg\" });\n            formData.append(\"images\", blob, `image_${i}.jpg`);\n          }\n        }\n      }\n\n      const response = await fetch(`${this.baseUrl}/images/generations`, {\n        method: \"POST\",\n        headers: {\n          Authorization: `Bearer ${this.apiKey}`,\n        },\n        body: formData,\n      });\n      \n      const data = await response.json();\n      return data.url || data.data?.[0]?.url || \"\";\n    };\n  }\n}\n\nmodule.exports = { Vendor };",
+    "enable": false,
+    "createTime": 1775155162784
+  },
+  {
+    "id": "12ewbok2t3bpfe1vd7fcjt8",
+    "author": "Custom",
+    "name": "DP",
+    "inputs": [
+      {
+        "key": "apiKey",
+        "label": "API密钥",
+        "type": "password",
+        "required": true
+      }
+    ],
+    "inputValues": {},
+    "models": [
+      {
+        "name": "deepseek-chat",
+        "modelName": "deepseek-chat",
+        "type": "text",
+        "think": false
+      }
+    ],
+    "code": "",
+    "enable": true,
+    "createTime": 1775826512276
+  }
+]

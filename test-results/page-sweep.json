@@ -1,0 +1,77 @@
+{
+  "baseUrl": "http://127.0.0.1:4173",
+  "routeCount": 10,
+  "errorCount": 0,
+  "results": [
+    {
+      "route": "/",
+      "ok": true,
+      "actions": 7,
+      "errors": [],
+      "fatal": null
+    },
+    {
+      "route": "/script",
+      "ok": true,
+      "actions": 7,
+      "errors": [],
+      "fatal": null
+    },
+    {
+      "route": "/storyboard",
+      "ok": true,
+      "actions": 5,
+      "errors": [],
+      "fatal": null
+    },
+    {
+      "route": "/storyboard-copilot",
+      "ok": true,
+      "actions": 7,
+      "errors": [],
+      "fatal": null
+    },
+    {
+      "route": "/assets",
+      "ok": true,
+      "actions": 7,
+      "errors": [],
+      "fatal": null
+    },
+    {
+      "route": "/video",
+      "ok": true,
+      "actions": 5,
+      "errors": [],
+      "fatal": null
+    },
+    {
+      "route": "/dubbing",
+      "ok": true,
+      "actions": 5,
+      "errors": [],
+      "fatal": null
+    },
+    {
+      "route": "/sample",
+      "ok": true,
+      "actions": 5,
+      "errors": [],
+      "fatal": null
+    },
+    {
+      "route": "/prompt-settings",
+      "ok": true,
+      "actions": 9,
+      "errors": [],
+      "fatal": null
+    },
+    {
+      "route": "/settings",
+      "ok": true,
+      "actions": 10,
+      "errors": [],
+      "fatal": null
+    }
+  ]
+}

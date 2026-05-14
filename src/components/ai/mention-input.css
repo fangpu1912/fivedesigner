@@ -1,0 +1,78 @@
+.mention-input-editor .ProseMirror {
+  min-height: 60px;
+  line-height: 22px;
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.mention-input-editor .ProseMirror p {
+  margin: 0;
+}
+
+.mention-input-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+  height: 0;
+}
+
+.mention-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  margin: 0 1px;
+  border-radius: 4px;
+  background-color: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+  vertical-align: baseline;
+  transition: background-color 0.15s;
+}
+
+.mention-chip:hover {
+  background-color: hsl(var(--primary) / 0.2);
+}
+
+.mention-chip .mention-chip-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.mention-chip .mention-chip-img {
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.slash-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  margin: 0 1px;
+  border-radius: 4px;
+  background-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+  vertical-align: baseline;
+  transition: background-color 0.15s;
+}
+
+.slash-chip:hover {
+  background-color: hsl(var(--accent) / 0.8);
+}
