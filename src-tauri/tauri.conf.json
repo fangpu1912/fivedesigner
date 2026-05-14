@@ -28,9 +28,9 @@
         "default-src": "'self'",
         "script-src": "'self' 'unsafe-eval'",
         "style-src": "'self' 'unsafe-inline'",
-        "connect-src": "'self' http: https:",
-        "img-src": "'self' asset: http: https: data:",
-        "media-src": "'self' asset: http: https:"
+        "connect-src": "'self' http: https: ws: wss: data:",
+        "img-src": "'self' asset: http: https: data: blob:",
+        "media-src": "'self' asset: http: https: blob:"
       },
       "assetProtocol": {
         "enable": true,
@@ -52,6 +52,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": ["scripts/generate_jianying_draft.py"],
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",

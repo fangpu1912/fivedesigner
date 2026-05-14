@@ -34,6 +34,7 @@
     "sql:allow-select",
     "sql:allow-load",
     "sql:allow-close",
-    "store:default"
+    "store:default",
+    "opener:default"
   ]
 }

@@ -61,8 +61,9 @@ export const ImageToPromptNode = memo(({ id, data, selected }: ImageToPromptNode
     }
   }, [upstreamImage, data, id, updateNodeData])
 
-  // 将图片转为 base64
+  // 将图片转为 base64（data URL 直接返回，其他 URL 用 fetch）
   const imageToBase64 = useCallback(async (url: string): Promise<string> => {
+    if (url.startsWith('data:')) return url
     const response = await fetch(url)
     const blob = await response.blob()
     return new Promise((resolve, reject) => {

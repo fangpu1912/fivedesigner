@@ -469,11 +469,8 @@ export function PanoramaViewer({
       }
 
       const dataUrl = finalCanvas.toDataURL('image/png')
-      const response = await fetch(dataUrl)
-      const blob = await response.blob()
-      const arrayBuffer = await blob.arrayBuffer()
       const fileName = `scene_screenshot_${Date.now()}.png`
-      const savedPath = await saveMediaFile(arrayBuffer, { projectId, episodeId, type: 'image', fileName, extension: 'png' })
+      const savedPath = await saveMediaFile(dataUrl, { projectId, episodeId, type: 'image', fileName, extension: 'png' })
       const position = viewer.getPosition()
 
       onScreenshot({
@@ -559,11 +556,8 @@ export function PanoramaViewer({
       }
 
       const dataUrl = finalCanvas.toDataURL('image/png')
-      const response = await fetch(dataUrl)
-      const blob = await response.blob()
-      const arrayBuffer = await blob.arrayBuffer()
       const fileName = `scene_screenshot_${Date.now()}_${i + 1}.png`
-      const savedPath = await saveMediaFile(arrayBuffer, { projectId, episodeId, type: 'image', fileName, extension: 'png' })
+      const savedPath = await saveMediaFile(dataUrl, { projectId, episodeId, type: 'image', fileName, extension: 'png' })
 
       screenshots.push({
         id: `screenshot_${Date.now()}_${i}`,

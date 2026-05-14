@@ -9,6 +9,22 @@ import { taskLog } from '@/utils/logBuffer'
 import type { ProgressInfo } from '@/types/generation'
 import type { GenerationTaskType } from '@/types'
 
+function getImageSize(width?: number, height?: number): '1K' | '2K' | '4K' {
+  if (!width || !height) return '1K'
+  const maxDim = Math.max(width, height)
+  if (maxDim <= 1024) return '1K'
+  if (maxDim <= 2048) return '2K'
+  return '4K'
+}
+
+function getVideoResolution(width?: number, height?: number): string {
+  if (!width && !height) return '1080p'
+  const maxDim = Math.max(width || 0, height || 0)
+  if (maxDim <= 720) return '720p'
+  if (maxDim <= 1080) return '1080p'
+  return '4K'
+}
+
 export interface ImageGenerationRequest {
   prompt: string
   negativePrompt?: string
@@ -229,10 +245,12 @@ export function useImageGeneration() {
           imageBase64,
           imageUrls,
           maskBase64: maskBase64 || undefined,
-          size: '1K' as const,
+          size: request.width && request.height
+            ? getImageSize(request.width, request.height)
+            : '1K' as const,
           aspectRatio: request.width && request.height 
             ? `${request.width}:${request.height}` as `${number}:${number}`
-            : '16:9' as const,
+            : (request.aspectRatio || '16:9') as `${number}:${number}`,
         }
 
         const numericProjectId = request.projectId ? parseInt(request.projectId) : 0
@@ -457,7 +475,7 @@ export function useVideoGeneration() {
           lastImageBase64: lastFrameBase64,
           referenceImages: referenceImagesBase64,
           duration: corrected.duration || 5,
-          resolution: '1080p' as const,
+          resolution: getVideoResolution(corrected.width, corrected.height),
           aspectRatio: (corrected.aspectRatio || '16:9') as `${number}:${number}`,
           generateAudio: request.generateAudio ?? true,
         }

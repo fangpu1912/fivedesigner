@@ -1930,3 +1930,69 @@ const fullPrompt = await buildFullPrompt(projectId, 'a beautiful sunset');
 3. **禁止风格词**：prompt和videoPrompt中**不得包含任何风格、画风、艺术表现相关的描述**（如"日系动漫风格"、"写实风格"、"油画风格"等），这些将由项目统一设置
 4. **禁止画质关键词**：所有prompt**不得包含画质关键词**（8k, ultra HD, highly detailed等），这些将由项目统一设置
 5. **内容精炼**：在保持字段数量不变的前提下，提取最关键的信息，避免面面俱到
+
+## Tauri CSP 配置规范
+
+### 生产环境 CSP 必须包含的协议
+
+`tauri.conf.json` 中的 `security.csp` 必须包含以下协议，否则打包后会出现功能异常：
+
+```json
+{
+  "security": {
+    "csp": {
+      "default-src": "'self'",
+      "script-src": "'self' 'unsafe-eval'",
+      "style-src": "'self' 'unsafe-inline'",
+      "connect-src": "'self' http: https: ws: wss: data:",
+      "img-src": "'self' asset: http: https: data:",
+      "media-src": "'self' asset: http: https: blob:"
+    }
+  }
+}
+```
+
+### 各协议用途说明
+
+| 协议 | 用途 | 常见问题 |
+|------|------|---------|
+| `ws:` `wss:` | WebSocket 连接（ComfyUI 等） | 未添加会导致 WebSocket 连接被阻止 |
+| `blob:` | Blob URL（本地媒体预览） | 未添加会导致视频/音频无法播放 |
+| `data:` | Data URL（图片 base64） | 未添加会导致 base64 图片无法显示 |
+| `asset:` | Tauri 本地资源协议 | 未添加会导致本地图片无法加载 |
+
+### CSP 最佳实践：避免 fetch(data:) 模式
+
+**不要在代码中使用 `fetch()` 加载 `data:` URL**，而应使用以下方式：
+
+- **保存 Canvas 截图到文件**：直接传 `dataUrl` 给 `saveMediaFile()`（内部已用 `atob` 解码，无需 `fetch`）
+- **data URL 转 Uint8Array**：使用 `urlToUint8Array` from `@/utils/mediaStorage`
+- **data URL 转 blob/base64**：使用 `atob()` + `Uint8Array` 直接转换，或用 `FileReader` 替代 `fetch`
+
+```typescript
+// ❌ 错误 - CSP 生产环境可能被阻止
+const response = await fetch(dataUrl)
+const blob = await response.blob()
+
+// ✅ 正确 - saveMediaFile 内部已正确处理 data: URL
+const savedPath = await saveMediaFile(dataUrl, { ... })
+
+// ✅ 正确 - urlToUint8Array 使用 atob 解码，无 CSP 问题
+import { urlToUint8Array } from '@/utils/mediaStorage'
+const bytes = await urlToUint8Array(dataUrl)
+```
+
+### 开发 vs 生产差异
+
+- **开发模式** (`tauri dev`): CSP 较宽松，问题不易暴露
+- **生产模式** (`tauri build`): CSP 严格，必须在配置中显式声明所有协议
+
+### 验证方法
+
+打包后测试以下功能：
+1. 本地图片/视频预览
+2. WebSocket 连接（如 ComfyUI）
+3. 音频播放
+4. 从网络加载资源
+
+出现 CSP 错误时，根据错误信息添加相应协议到 `csp` 配置。

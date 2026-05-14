@@ -145,6 +145,8 @@ export function StoryboardFlow({ className }: StoryboardFlowProps) {
   const edgesRef = useRef(edges)
   edgesRef.current = edges
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set())
+  const selectedNodeIdsRef = useRef(selectedNodeIds)
+  selectedNodeIdsRef.current = selectedNodeIds
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const selectedNodeId = selectedNodeIds.size === 1 ? Array.from(selectedNodeIds)[0] ?? null : null
   const [isPropertiesPanelOpen, setIsPropertiesPanelOpen] = useState(false)
@@ -615,7 +617,7 @@ export function StoryboardFlow({ className }: StoryboardFlowProps) {
         const position = sourcePosition
           ? { x: sourcePosition.x + 1000, y: sourcePosition.y }
           : reactFlowInstance?.screenToFlowPosition({
-              x: window.innerWidth / 2 + 500,
+              x: window.innerWidth / 2,
               y: window.innerHeight / 2,
             })
 
@@ -1658,11 +1660,30 @@ export function StoryboardFlow({ className }: StoryboardFlowProps) {
             reader.onload = (event) => {
               const dataUrl = event.target?.result as string
               if (dataUrl && reactFlowInstance) {
-                // 在鼠标位置或画布中心添加图片节点
-                const position = reactFlowInstance.screenToFlowPosition({
-                  x: window.innerWidth / 2,
-                  y: window.innerHeight / 2,
-                })
+                // 如果有选中的节点，粘贴到节点右侧；否则粘贴到画布中心
+                let position: { x: number; y: number }
+                const ids = selectedNodeIdsRef.current
+                if (ids.size === 1) {
+                  const selectedNodeId = Array.from(ids)[0] ?? null
+                  const selectedNode = nodesRef.current.find((n) => n.id === selectedNodeId)
+                  if (selectedNode) {
+                    const nodeWidth = selectedNode.width ?? 250
+                    position = {
+                      x: selectedNode.position.x + nodeWidth + 20,
+                      y: selectedNode.position.y,
+                    }
+                  } else {
+                    position = reactFlowInstance.screenToFlowPosition({
+                      x: window.innerWidth / 2,
+                      y: window.innerHeight / 2,
+                    })
+                  }
+                } else {
+                  position = reactFlowInstance.screenToFlowPosition({
+                    x: window.innerWidth / 2,
+                    y: window.innerHeight / 2,
+                  })
+                }
                 handleAddNode(CANVAS_NODE_TYPES.upload, position, { imageUrl: dataUrl } as CanvasNodeData)
                 toast({ title: '图片已粘贴到画布' })
               }

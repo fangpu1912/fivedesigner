@@ -4,6 +4,8 @@ use std::io::{Read, Seek};
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use tauri::{AppHandle, Manager, Listener, Emitter};
 use futures_util::{SinkExt, StreamExt};
 use image::GenericImageView;
@@ -450,6 +452,19 @@ async fn file_exists(path: String) -> Result<bool, String> {
     Ok(PathBuf::from(&path).exists())
 }
 
+/// 创建隐藏窗口的命令（Windows 上使用 CREATE_NO_WINDOW 标志，防止命令行弹窗）
+#[cfg(target_os = "windows")]
+pub(crate) fn create_command<S: AsRef<std::ffi::OsStr>>(program: S) -> Command {
+    let mut cmd = Command::new(program);
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    cmd
+}
+
+#[cfg(not(target_os = "windows"))]
+pub(crate) fn create_command<S: AsRef<std::ffi::OsStr>>(program: S) -> Command {
+    Command::new(program)
+}
+
 // FFmpeg 相关命令
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -463,7 +478,7 @@ pub struct FFmpegStatus {
 #[tauri::command]
 async fn check_ffmpeg_status(app: AppHandle) -> Result<FFmpegStatus, String> {
     // 1. 先检查系统 PATH 中的 FFmpeg
-    match std::process::Command::new("ffmpeg")
+    match create_command("ffmpeg")
         .args(&["-version"])
         .output()
     {
@@ -504,7 +519,7 @@ async fn check_ffmpeg_status(app: AppHandle) -> Result<FFmpegStatus, String> {
     
     if ffmpeg_exe.exists() {
         // 验证这个 FFmpeg 是否可用
-        match std::process::Command::new(&ffmpeg_exe)
+        match create_command(&ffmpeg_exe)
             .args(&["-version"])
             .output()
         {
@@ -654,7 +669,7 @@ async fn render_video_with_ffmpeg(
     ffmpeg_path: String,
     command_args: Vec<String>,
 ) -> Result<String, String> {
-    let output = std::process::Command::new(&ffmpeg_path)
+    let output = create_command(&ffmpeg_path)
         .args(&command_args)
         .output()
         .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
@@ -728,14 +743,14 @@ async fn render_video_with_ffmpeg_script(
     
     // 执行 PowerShell 脚本
     #[cfg(target_os = "windows")]
-    let output = std::process::Command::new("powershell")
+    let output = create_command("powershell")
         .args(&["-ExecutionPolicy", "Bypass", "-File", script_path.to_str().unwrap()])
         .current_dir(&output_dir)
         .output()
         .map_err(|e| format!("Failed to execute script: {}", e))?;
     
     #[cfg(not(target_os = "windows"))]
-    let output = std::process::Command::new("pwsh")
+    let output = create_command("pwsh")
         .args(&["-ExecutionPolicy", "Bypass", "-File", script_path.to_str().unwrap()])
         .current_dir(&output_dir)
         .output()
@@ -1358,7 +1373,7 @@ fn find_browser_path() -> Option<String> {
         }
     }
 
-    if let Ok(output) = Command::new("where").args(&["chrome"]).output() {
+    if let Ok(output) = create_command("where").args(&["chrome"]).output() {
         if output.status.success() {
             if let Ok(path) = String::from_utf8(output.stdout) {
                 let path = path.trim().to_string();
@@ -1369,7 +1384,7 @@ fn find_browser_path() -> Option<String> {
         }
     }
 
-    if let Ok(output) = Command::new("where").args(&["msedge"]).output() {
+    if let Ok(output) = create_command("where").args(&["msedge"]).output() {
         if output.status.success() {
             if let Ok(path) = String::from_utf8(output.stdout) {
                 let path = path.trim().to_string();
@@ -1468,7 +1483,6 @@ pub struct GenerateJianyingDraftResponse {
 async fn generate_jianying_draft(
     request: GenerateJianyingDraftRequest,
 ) -> Result<GenerateJianyingDraftResponse, String> {
-    use std::process::Command;
 
     // 获取脚本路径（相对于应用目录）
     let script_path = std::env::current_exe()
@@ -1539,7 +1553,7 @@ async fn generate_jianying_draft(
     };
 
     // 执行 Python 脚本
-    let output = Command::new(python_cmd)
+    let output = create_command(python_cmd)
         .arg(&script_path)
         .arg(&request.input_json_path)
         .arg(&request.output_dir)
@@ -1901,7 +1915,7 @@ async fn upscale_with_realesrgan(
     println!("  model: {}", model_name);
     println!("  scale: {}", scale_str);
     
-    let output = std::process::Command::new(&realesrgan_exe)
+    let output = create_command(&realesrgan_exe)
         .args(&[
             "-i", &request.input_path,
             "-o", &output_path_str,

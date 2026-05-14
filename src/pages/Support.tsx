@@ -62,15 +62,36 @@ export default function Support() {
 
                 <Button variant="outline" className="w-full" asChild>
                   <a
-                    href="https://github.com/your-repo/fivedesigner"
+                    href="https://github.com/fangpu1912/fivedesigner"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center justify-center gap-2"
                   >
-                    在 GitHub 上支持我们
+                    ⭐ 在 GitHub 上 Star 我们
                     <ArrowRight className="w-4 h-4" />
                   </a>
                 </Button>
+
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" className="flex-1" asChild>
+                    <a
+                      href="https://github.com/fangpu1912/fivedesigner/issues"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      🐛 提交 Issue
+                    </a>
+                  </Button>
+                  <Button variant="ghost" size="sm" className="flex-1" asChild>
+                    <a
+                      href="https://github.com/fangpu1912/fivedesigner/discussions"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      💡 功能建议
+                    </a>
+                  </Button>
+                </div>
               </div>
 
               {/* 右侧：赞赏码 */}

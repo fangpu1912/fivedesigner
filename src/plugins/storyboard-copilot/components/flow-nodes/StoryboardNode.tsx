@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/hooks/useToast'
 import { getImageUrl } from '@/utils/asset'
+import { urlToUint8Array } from '@/utils/mediaStorage'
 
 import type { StoryboardSplitNodeData, StoryboardFrameItem } from '../../types'
 import { createDefaultFrames, generateNodeId, generateEdgeId } from '../../utils'
@@ -829,11 +830,7 @@ export const StoryboardNode = memo(({ id, data, selected }: StoryboardNodeProps)
         if (!frame.imageUrl) continue
 
         try {
-          // 将 data URL 转换为 Uint8Array
-          const response = await fetch(frame.imageUrl)
-          const blob = await response.blob()
-          const arrayBuffer = await blob.arrayBuffer()
-          const uint8Array = new Uint8Array(arrayBuffer)
+          const uint8Array = await urlToUint8Array(frame.imageUrl)
 
           // 保存文件 - 使用批次ID避免覆盖
           const fileName = `frame_${batchId}_${String(i + 1).padStart(2, '0')}.png`

@@ -1,6 +1,6 @@
 import { memo, useCallback, useState, useRef, useEffect } from 'react'
 import { Handle, Position, type NodeProps, useReactFlow, useEdges } from '@xyflow/react'
-import { Video, Play, Pause, RotateCcw, Camera } from 'lucide-react'
+import { Video, Play, Pause, RotateCcw, Camera, Maximize } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { getVideoUrl, getImageUrl } from '@/utils/asset'
@@ -35,6 +35,7 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
   const [currentTime, setCurrentTime] = useState(0)
   const [isExtracting, setIsExtracting] = useState(false)
   const [showFrames, setShowFrames] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const currentProjectId = useUIStore((state) => state.currentProjectId)
   const currentEpisodeId = useUIStore((state) => state.currentEpisodeId)
@@ -92,6 +93,15 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
     }
   }, [data.videoUrl, edges, id])
 
+  // 监听全屏变化，自适应横竖屏
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [])
+
   const handleUpload = useCallback(async () => {
     try {
       const selected = await open({
@@ -146,7 +156,7 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
     const newNodeId = `frame-${Date.now()}`
     const frameIndex = data.extractedFrames?.length || 0
     const newNodePosition = {
-      x: (currentNode.position.x ?? 0) + nodeWidth + 50,
+      x: (currentNode.position.x ?? 0) + nodeWidth + 20,
       y: (currentNode.position.y ?? 0) + frameIndex * 120,
     }
 
@@ -252,6 +262,14 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
+  // 全屏播放
+  const handleFullscreen = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (videoRef.current) {
+      videoRef.current.requestFullscreen?.()
+    }
+  }, [])
+
   const videoSource = data.videoUrl ? getVideoUrl(data.videoUrl) : null
 
   const resolutionText = data.width && data.height ? `${data.width}×${data.height}` : null
@@ -271,6 +289,14 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
         <span className="truncate flex-1">{data.sourceFileName || '视频'}</span>
         {data.videoUrl && (
           <div className="flex items-center gap-1">
+            <button
+              onClick={handleFullscreen}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="p-0.5 hover:bg-muted rounded transition-colors"
+              title="全屏播放"
+            >
+              <Maximize className="h-3 w-3" />
+            </button>
             <button
               onClick={handleReupload}
               onPointerDown={(e) => e.stopPropagation()}
@@ -295,11 +321,12 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
       {/* 内容区域 */}
       {data.videoUrl ? (
         <>
-          <div className="relative w-full" style={{ height: VIDEO_DISPLAY_HEIGHT }}>
+          <div className="relative w-full bg-muted/20" style={{ height: VIDEO_DISPLAY_HEIGHT }}>
             <video
               ref={videoRef}
               src={videoSource || ''}
-              className="w-full h-full object-cover"
+              className={cn("w-full h-full", isFullscreen ? 'object-contain' : 'object-cover')}
+              preload="auto"
               onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
               onEnded={() => setIsPlaying(false)}
             />

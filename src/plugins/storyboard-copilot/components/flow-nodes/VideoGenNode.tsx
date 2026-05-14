@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useState, useRef, useMemo } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import { Play, Loader2, Video, X } from 'lucide-react'
+import { Play, Loader2, Video, X, Volume2, VolumeX } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { NodePromptInput, type MentionInputRef } from './NodePromptInput'
@@ -37,6 +37,7 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
   const [model, setModel] = useState(data.model || '')
   const [duration, setDuration] = useState(data.duration || 5)
   const [generateAudio, setGenerateAudio] = useState(data.generateAudio ?? true)
+  const [isMuted, setIsMuted] = useState(true)
   const [isRunning, setIsRunning] = useState(data.isRunning || false)
   const [currentIndex, setCurrentIndex] = useState(data.currentIndex || 0)
   const [prompt, setPrompt] = useState('')
@@ -261,11 +262,18 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
              <video
                src={playableUrl || ''}
               className="w-full h-full object-contain"
-              muted
+              muted={isMuted}
               loop
               onMouseEnter={e => (e.target as HTMLVideoElement).play()}
               onMouseLeave={e => { (e.target as HTMLVideoElement).pause(); (e.target as HTMLVideoElement).currentTime = 0 }}
             />
+            <button
+              onClick={e => { e.stopPropagation(); setIsMuted(v => !v) }}
+              className="absolute top-2 right-2 p-1.5 rounded-md bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70 z-10"
+              title={isMuted ? '取消静音' : '静音'}
+            >
+              {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+            </button>
             <div className="absolute inset-0 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
               <div className="h-12 w-12 rounded-full bg-white/90 flex items-center justify-center cursor-pointer" onClick={() => setPreviewVideo(latestVideo || null)}>
                 <Play className="h-6 w-6 text-black ml-0.5" />

@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
 use tauri::command;
+
+use crate::create_command;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SceneDetectionRequest {
@@ -65,7 +66,7 @@ pub async fn detect_video_scenes(
         .map_err(|e| format!("创建截图目录失败: {}", e))?;
 
     // 1. 获取视频信息
-    let ffprobe_output = Command::new("ffprobe")
+    let ffprobe_output = create_command("ffprobe")
         .args(&[
             "-v", "error",
             "-select_streams", "v:0",
@@ -110,7 +111,7 @@ pub async fn detect_video_scenes(
     // scene=value 表示场景切换阈值，越小越敏感
     let threshold = request.threshold.clamp(0.01, 0.99);
     
-    let ffmpeg_output = Command::new("ffmpeg")
+    let ffmpeg_output = create_command("ffmpeg")
         .args(&[
             "-i", request.video_path.as_str(),
             "-vf", format!("select='gt(scene, {})',showinfo", threshold).as_str(),
@@ -164,7 +165,7 @@ pub async fn detect_video_scenes(
         let screenshot_path = screenshots_dir.join(&screenshot_filename);
 
         // 使用 FFmpeg 截取初始帧（场景开始的第一帧）作为截图
-        let screenshot_result = Command::new("ffmpeg")
+        let screenshot_result = create_command("ffmpeg")
             .args(&[
                 "-ss", &format!("{:.3}", start_time),
                 "-i", request.video_path.as_str(),
@@ -214,7 +215,7 @@ pub async fn export_scene_video(
     end_time: f64,
     output_path: String,
 ) -> Result<String, String> {
-    let output = Command::new("ffmpeg")
+    let output = create_command("ffmpeg")
         .args(&[
             "-ss", &format!("{:.3}", start_time),
             "-t", &format!("{:.3}", end_time - start_time),
@@ -281,7 +282,7 @@ pub async fn export_scenes(
             ));
 
             // 截取场景开始的第一帧作为截图
-            let result = Command::new("ffmpeg")
+            let result = create_command("ffmpeg")
                 .args(&[
                     "-ss", &format!("{:.3}", scene.start_time),
                     "-i", &request.video_path,
@@ -306,7 +307,7 @@ pub async fn export_scenes(
                 scene.id, start_formatted, end_formatted
             ));
 
-            let result = Command::new("ffmpeg")
+            let result = create_command("ffmpeg")
                 .args(&[
                     "-ss", &format!("{:.3}", scene.start_time),
                     "-t", &format!("{:.3}", scene.end_time - scene.start_time),
@@ -339,7 +340,7 @@ pub async fn capture_frame(
     timestamp: f64,
     output_path: String,
 ) -> Result<String, String> {
-    let output = Command::new("ffmpeg")
+    let output = create_command("ffmpeg")
         .args(&[
             "-ss", &format!("{:.3}", timestamp),
             "-i", &video_path,
