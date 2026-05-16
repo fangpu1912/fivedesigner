@@ -71,6 +71,8 @@ import type { WorkflowConfig } from '@/types'
 import type { GenerationResult } from '@/types/generation'
 import { getImageUrl } from '@/utils/asset'
 import { readFile } from '@tauri-apps/plugin-fs'
+import { vendorConfigService } from '@/services/vendor'
+import type { VendorConfig, VideoModel } from '@/services/vendor'
 
 type GenerationType = 'image' | 'video'
 type TabType = 'storyboard' | 'character' | 'scene' | 'prop'
@@ -82,6 +84,7 @@ interface GenerationParams {
   prompt: string
   aspectRatio?: string
   duration?: number
+  resolution?: string
   audio?: boolean
   width?: number
   height?: number
@@ -103,6 +106,7 @@ const DEFAULT_VIDEO_PARAMS: GenerationParams = {
   prompt: '',
   aspectRatio: '9:16',
   duration: 8,
+  resolution: '720p',
   audio: true,
   width: 720,
   height: 1280,
@@ -252,7 +256,51 @@ export function StoryboardDraw() {
     false
   )
 
+  // 供应商配置（用于获取模型可用参数）
+  const [vendors, setVendors] = useState<VendorConfig[]>([])
 
+  useEffect(() => {
+    vendorConfigService.initialize().then(() => {
+      vendorConfigService.getAllVendors().then(allVendors => {
+        setVendors(allVendors.filter(v => v.enable))
+      })
+    })
+  }, [])
+
+  // 根据当前选择的模型获取模型配置
+  const currentModelConfig = useMemo(() => {
+    if (!selectedModelId) return null
+    const [vendorId, modelName] = selectedModelId.split(':')
+    if (!vendorId || !modelName) return null
+    const vendor = vendors.find(v => v.id === vendorId)
+    if (!vendor) return null
+    const model = vendor.models.find(m => m.modelName === modelName && m.type === 'video')
+    return model as VideoModel | undefined
+  }, [selectedModelId, vendors])
+
+  // 获取可用的时长列表
+  const availableDurations = useMemo(() => {
+    if (!currentModelConfig?.durationResolutionMap) return [5, 8, 10, 12, 15]
+    const durations = new Set<number>()
+    for (const map of currentModelConfig.durationResolutionMap) {
+      for (const d of map.duration) {
+        durations.add(d)
+      }
+    }
+    return Array.from(durations).sort((a, b) => a - b)
+  }, [currentModelConfig])
+
+  // 获取可用的分辨率列表
+  const availableResolutions = useMemo(() => {
+    if (!currentModelConfig?.durationResolutionMap) return ['720p']
+    const resolutions = new Set<string>()
+    for (const map of currentModelConfig.durationResolutionMap) {
+      for (const r of map.resolution) {
+        resolutions.add(r)
+      }
+    }
+    return Array.from(resolutions)
+  }, [currentModelConfig])
 
   // Asset data - now using React Query (useCharactersByEpisode, useScenesByEpisode, usePropsByEpisode)
   const [isLoadingAssets, _setIsLoadingAssets] = useState(false)
@@ -648,8 +696,29 @@ export function StoryboardDraw() {
     (vendorId: string, _modelName: string, fullValue: string) => {
       setSelectedConfigId(vendorId)
       setSelectedModelId(fullValue)
+      // 切换模型时，自动调整时长和分辨率为可用值
+      const [vId, mName] = fullValue.split(':')
+      if (vId && mName) {
+        const vendor = vendors.find(v => v.id === vId)
+        const modelConfig = vendor?.models.find(m => m.modelName === mName && m.type === 'video') as VideoModel | undefined
+        if (modelConfig?.durationResolutionMap) {
+          const durations = new Set<number>()
+          const resolutions = new Set<string>()
+          for (const map of modelConfig.durationResolutionMap) {
+            for (const d of map.duration) durations.add(d)
+            for (const r of map.resolution) resolutions.add(r)
+          }
+          const availDurations = Array.from(durations).sort((a, b) => a - b)
+          const availResolutions = Array.from(resolutions)
+          setModelParams(prev => ({
+            ...prev,
+            duration: availDurations.includes(prev.duration || 0) ? prev.duration : availDurations[0],
+            resolution: availResolutions.includes(prev.resolution || '') ? prev.resolution : availResolutions[0],
+          }))
+        }
+      }
     },
-    []
+    [vendors]
   )
 
   // Generate single item (AI mode)
@@ -693,13 +762,12 @@ export function StoryboardDraw() {
         const firstFrame = storyboardImage || (hasReferenceImages ? localReferenceImages[0] : undefined)
         // 尾帧
         const lastFrame = localLastFrame || undefined
-        // 其他参考图（除首帧外的）+ @提及的图片
-        const otherReferenceImages = [
-          ...(hasReferenceImages 
-            ? localReferenceImages.filter((img: string) => img !== firstFrame)
-            : []),
-          ...mentionedImages
-        ]
+        // 其他参考图（除首帧外的）+ @提及的图片（去重）
+        const otherLocalRefs = hasReferenceImages 
+          ? localReferenceImages.filter((img: string) => img !== firstFrame)
+          : []
+        const uniqueMentionedImages = mentionedImages.filter(url => !otherLocalRefs.includes(url) && url !== firstFrame)
+        const otherReferenceImages = [...otherLocalRefs, ...uniqueMentionedImages]
 
         result = await videoGeneration.mutateAsync({
           projectId: currentProjectId,
@@ -710,6 +778,7 @@ export function StoryboardDraw() {
           width: modelParams.width as number,
           height: modelParams.height as number,
           duration: modelParams.duration as number,
+          resolution: modelParams.resolution as string,
           generateAudio: modelParams.audio as boolean,
           firstFrame,
           lastFrame,
@@ -740,13 +809,12 @@ export function StoryboardDraw() {
         
         // 确定主图：分镜图 > 参考图第一张
         const firstImage = storyboardImage || (hasReferenceImages ? localReferenceImages[0] : undefined)
-        // 其他参考图（除主图外的）+ @提及的图片
-        const otherReferenceImages = [
-          ...(hasReferenceImages 
-            ? localReferenceImages.filter((img: string) => img !== firstImage)
-            : []),
-          ...mentionedImages
-        ]
+        // 其他参考图（除主图外的）+ @提及的图片（去重）
+        const otherLocalRefs = hasReferenceImages 
+          ? localReferenceImages.filter((img: string) => img !== firstImage)
+          : []
+        const uniqueMentionedImages = mentionedImages.filter(url => !otherLocalRefs.includes(url) && url !== firstImage)
+        const otherReferenceImages = [...otherLocalRefs, ...uniqueMentionedImages]
 
         const imageUrl = await imageGeneration.mutateAsync({
           projectId: currentProjectId,
@@ -832,12 +900,16 @@ export function StoryboardDraw() {
       return
     }
 
-    const allReferenceImages = [...referenceImages, ...mentionedImages]
+    // 去重：@提及的图片如果已在参考图中，则不重复添加
+    const uniqueMentionedImages = mentionedImages.filter(url => !referenceImages.includes(url))
+    const allReferenceImages = [...referenceImages, ...uniqueMentionedImages]
 
     if (generationMode === 'comfyui') {
       await handleEditImageComfyUI(localEditPrompt || '', firstFrame, allReferenceImages)
     } else {
-      await handleEditImageAI(localEditPrompt || '', firstFrame, mentionedImages)
+      // AI 模式：@提及的图片如果和 firstFrame 相同，也不重复添加
+      const uniqueMentionedForAI = mentionedImages.filter(url => url !== firstFrame)
+      await handleEditImageAI(localEditPrompt || '', firstFrame, uniqueMentionedForAI)
     }
   }, [
     activeItem,
@@ -1491,11 +1563,12 @@ export function StoryboardDraw() {
         }
       }
 
-      // 上传参考图片（所有 referenceImages 都作为参考上传）
-      if (referenceImages.length > 0) {
-        console.log('[ComfyUI 生成] 开始上传参考图片:', referenceImages)
-        for (let i = 0; i < referenceImages.length; i++) {
-          const refImage = referenceImages[i]
+      // 上传参考图片（所有 referenceImages 都作为参考上传，去重：排除已作为主图上传的）
+      const uniqueReferenceImages = referenceImages.filter(ref => ref !== imageToUpload)
+      if (uniqueReferenceImages.length > 0) {
+        console.log('[ComfyUI 生成] 开始上传参考图片:', uniqueReferenceImages)
+        for (let i = 0; i < uniqueReferenceImages.length; i++) {
+          const refImage = uniqueReferenceImages[i]
           if (refImage) {
             try {
               const uploadedRefName = await uploadImageToComfyUI(refImage, true)
@@ -2811,11 +2884,32 @@ export function StoryboardDraw() {
                       {/* 视频特有参数 */}
                       {generationType === 'video' && (
                         <>
+                          {/* 分辨率选择 */}
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium">分辨率</label>
+                            <div className="flex flex-wrap gap-2">
+                              {availableResolutions.map(r => (
+                                <button
+                                  key={r}
+                                  onClick={() => setModelParams({ ...modelParams, resolution: r })}
+                                  className={cn(
+                                    'px-3 py-2 text-xs rounded-md border transition-colors',
+                                    modelParams.resolution === r
+                                      ? 'bg-primary text-primary-foreground border-primary'
+                                      : 'bg-background border-input hover:bg-accent'
+                                  )}
+                                >
+                                  {r}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
                           {/* 时长选择 */}
                           <div className="space-y-2">
                             <label className="text-sm font-medium">时长 (秒)</label>
-                            <div className="grid grid-cols-5 gap-2">
-                              {[5, 8, 10, 12, 15].map(d => (
+                            <div className="flex flex-wrap gap-2">
+                              {availableDurations.map(d => (
                                 <button
                                   key={d}
                                   onClick={() => setModelParams({ ...modelParams, duration: d })}

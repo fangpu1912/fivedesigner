@@ -1,11 +1,11 @@
 {
-  "version": "1.0.0",
-  "notes": "🎉 初始开源版本\n\n## 功能特性\n- AI 驱动的剧本创作与灵感生成\n- 角色/场景/道具资产管理\n- 可视化分镜编排\n- 多供应商 AI 集成（图像/视频/语音生成）\n- 工作流节点编辑器\n- 配音合成与样片审阅\n\n## 安装说明\n- 下载安装包后双击运行即可\n- 首次启动需配置 AI 供应商 API Key",
-  "pub_date": "2026-05-16T22:57:44+08:00",
+  "version": "1.0.1",
+  "notes": "🎉 v1.0.1 更新\n\n## 修复内容\n- 分镜拆分节点多图替换显示修复\n- 视频生成节点添加分辨率选项和动态时长\n- 模型选择器按供应商分组显示\n- GeekAI 供应商添加新模型支持（Veo 3.1、Wan2.6、Vidu、Kling、Hailuo、豆包）\n- 图片/视频生成参考图去重处理\n- Grok 4.2 Image 图片URL提取修复\n\n## 安装说明\n- 下载安装包后双击运行即可\n- 首次启动需配置 AI 供应商 API Key",
+  "pub_date": "2026-05-17T01:00:00+08:00",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTU1ZaY3RmMkE0OHlGSzlYcndPMmJkNlZka3c4Z1JITytrYklHYnVlLzU5bVVJOHVxcmJpa1Q3OC9oaVRVdFRta1U2aHJxZ3loM3dwS3J2UHJHRzZPOFQ2ZGx1MDFYdlFzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc4OTMyMjY0CWZpbGU6Rml2ZURlc2lnbmVyXzEuMC4wX3g2NC1zZXR1cC5leGUKeSt2dDE4aGdmRUpaQzdMMzgvTWI1U2JWRGNvYnpVMEo2UXJ0Vk96bmJwaHM4Wkt6SzYxZ0dHUEdtL2V3Rjc4NFc5VzNqa3o2L1owcnc1akFUR3ZLREE9PQo=",
-      "url": "https://github.com/fangpu1912/fivedesigner/releases/download/v1.0.0/FiveDesigner_1.0.0_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSU0kva2Rzbk8vRGxHZytyajA0QWdQWFczZzBPWFpDYkJCRzZzdEF0VjVEWGt2N1dPcjlkYk5IY2wzeTF4QzRxckZ0M3hVaCsyRFBvWGx1VzYyVld2eFBGREJmNnJibmd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc4OTU2MDE0CWZpbGU6Rml2ZURlc2lnbmVyXzEuMC4xX3g2NC1zZXR1cC5leGUKZ3R1VkJEQjZTSFBDSDlDcTBmWFUwUC9BSENQRGhHWDhTanJBdFBoTzlnYW5WTThIRk5jMXZGaVNPa25JOFBMNzdpb2duMWx1TnBqZGR1UlpZWC8rQkE9PQo=",
+      "url": "https://github.com/fangpu1912/fivedesigner/releases/download/v1.0.1/FiveDesigner_1.0.1_x64-setup.exe"
     }
   }
 }

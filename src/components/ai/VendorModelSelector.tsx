@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
   DropdownMenuLabel,
+  DropdownMenuGroup,
 } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -78,6 +79,18 @@ export function VendorModelSelector({
 
     return options
   }, [vendors, type])
+
+  // 按供应商分组
+  const groupedOptions = useMemo(() => {
+    const groups: Record<string, ModelOption[]> = {}
+    for (const opt of modelOptions) {
+      if (!groups[opt.vendorName]) {
+        groups[opt.vendorName] = []
+      }
+      groups[opt.vendorName].push(opt)
+    }
+    return groups
+  }, [modelOptions])
 
   const selectedOption = useMemo(() => {
     return modelOptions.find(opt => opt.fullValue === value)
@@ -161,24 +174,29 @@ export function VendorModelSelector({
           <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-72" align="start">
+      <DropdownMenuContent className="w-72 max-h-[60vh] overflow-y-auto" align="start">
         <DropdownMenuLabel>{getTypeLabel()}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {modelOptions.map((option) => (
-          <DropdownMenuItem
-            key={option.fullValue}
-            onClick={() => handleSelect(option)}
-            className={cn(
-              'flex items-center justify-between cursor-pointer',
-              value === option.fullValue && 'bg-accent'
-            )}
-          >
-            <div className="flex flex-col gap-0.5">
-              <span className="font-medium">{option.modelLabel}</span>
-              <span className="text-xs text-muted-foreground">{option.vendorName}</span>
-            </div>
-            {value === option.fullValue && <Sparkles className="h-4 w-4 text-primary" />}
-          </DropdownMenuItem>
+        {Object.entries(groupedOptions).map(([vendorName, options], groupIndex) => (
+          <DropdownMenuGroup key={vendorName}>
+            {groupIndex > 0 && <DropdownMenuSeparator />}
+            <DropdownMenuLabel className="text-xs text-muted-foreground px-2 py-1">
+              {vendorName}
+            </DropdownMenuLabel>
+            {options.map((option) => (
+              <DropdownMenuItem
+                key={option.fullValue}
+                onClick={() => handleSelect(option)}
+                className={cn(
+                  'flex items-center justify-between cursor-pointer py-1.5',
+                  value === option.fullValue && 'bg-accent'
+                )}
+              >
+                <span className="font-medium text-sm">{option.modelLabel}</span>
+                {value === option.fullValue && <Sparkles className="h-4 w-4 text-primary" />}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>

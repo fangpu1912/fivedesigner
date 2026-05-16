@@ -5,7 +5,7 @@ import { Play, Loader2, Video, X, Volume2, VolumeX } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NodePromptInput, type MentionInputRef } from './NodePromptInput'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Slider } from '@/components/ui/slider'
+
 import { VendorModelSelector } from '@/components/ai/VendorModelSelector'
 import { useToast } from '@/hooks/useToast'
 import { useVideoGeneration, aspectRatioToDimensions } from '@/hooks/useVendorGeneration'
@@ -16,6 +16,8 @@ import { getImageUrl, getVideoUrl } from '@/utils/asset'
 import { useUpstreamData } from '../../hooks/useUpstreamData'
 import { canvasEvents } from '../../utils/canvasEvents'
 import { useEnlargedHandles } from '../../hooks/useEnlargedHandles'
+import { vendorConfigService } from '@/services/vendor'
+import type { VendorConfig } from '@/services/vendor'
 
 import type { VideoGenNodeData } from '../../types'
 import { IMAGE_ASPECT_RATIOS } from '../../types'
@@ -36,6 +38,7 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
   const [items, setItems] = useState(data.items || [])
   const [model, setModel] = useState(data.model || '')
   const [duration, setDuration] = useState(data.duration || 5)
+  const [resolution, setResolution] = useState(data.resolution || '720p')
   const [generateAudio, setGenerateAudio] = useState(data.generateAudio ?? true)
   const [isMuted, setIsMuted] = useState(true)
   const [isRunning, setIsRunning] = useState(data.isRunning || false)
@@ -43,6 +46,7 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
   const [prompt, setPrompt] = useState('')
   const promptInputRef = useRef<MentionInputRef>(null)
   const upstreamPromptRef = useRef<string | null>(null)
+  const [vendors, setVendors] = useState<VendorConfig[]>([])
 
   const tasks = useTaskQueueStore((s) => s.tasks)
   const videoTaskProgress = useMemo(() => {
@@ -55,10 +59,65 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
   const projectAspectRatio = currentProject?.aspect_ratio
   const isValidProjectRatio = projectAspectRatio && IMAGE_ASPECT_RATIOS.includes(projectAspectRatio as typeof IMAGE_ASPECT_RATIOS[number])
   const [aspectRatio, setAspectRatio] = useState(data.aspectRatio || (isValidProjectRatio ? projectAspectRatio : '16:9'))
-  const [motionStrength, setMotionStrength] = useState(data.motionStrength || 5)
   const [fps, _setFps] = useState(data.fps || 24)
   const [previewVideo, setPreviewVideo] = useState<string | null>(null)
   const enlargedHandles = useEnlargedHandles(id)
+
+  // 加载供应商配置
+  useEffect(() => {
+    vendorConfigService.initialize().then(() => {
+      vendorConfigService.getAllVendors().then(allVendors => {
+        setVendors(allVendors.filter(v => v.enable))
+      })
+    })
+  }, [])
+
+  // 根据当前选择的模型获取模型配置
+  const currentModelConfig = useMemo(() => {
+    if (!model) return null
+    const [vendorId, modelName] = model.split(':')
+    if (!vendorId || !modelName) return null
+    const vendor = vendors.find(v => v.id === vendorId)
+    if (!vendor) return null
+    return vendor.models.find(m => m.modelName === modelName && m.type === 'video')
+  }, [model, vendors])
+
+  // 获取可用的时长列表
+  const availableDurations = useMemo(() => {
+    if (!currentModelConfig?.durationResolutionMap) return [5, 10, 15, 30]
+    const durations = new Set<number>()
+    for (const map of currentModelConfig.durationResolutionMap) {
+      for (const d of map.duration) {
+        durations.add(d)
+      }
+    }
+    return Array.from(durations).sort((a, b) => a - b)
+  }, [currentModelConfig])
+
+  // 获取可用的分辨率列表
+  const availableResolutions = useMemo(() => {
+    if (!currentModelConfig?.durationResolutionMap) return ['720p']
+    const resolutions = new Set<string>()
+    for (const map of currentModelConfig.durationResolutionMap) {
+      for (const r of map.resolution) {
+        resolutions.add(r)
+      }
+    }
+    return Array.from(resolutions)
+  }, [currentModelConfig])
+
+  // 当切换模型时，自动调整时长和分辨率为可用值
+  useEffect(() => {
+    if (availableDurations.length > 0 && !availableDurations.includes(duration)) {
+      setDuration(availableDurations[0])
+    }
+  }, [availableDurations, duration])
+
+  useEffect(() => {
+    if (availableResolutions.length > 0 && !availableResolutions.includes(resolution)) {
+      setResolution(availableResolutions[0])
+    }
+  }, [availableResolutions, resolution])
 
   useEffect(() => {
     if (upstreamText) {
@@ -111,9 +170,9 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
 
   data.model = model
   data.duration = duration
+  data.resolution = resolution
   data.generateAudio = generateAudio
   data.aspectRatio = aspectRatio
-  data.motionStrength = motionStrength
   data.fps = fps
 
   const handleStart = useCallback(async () => {
@@ -138,13 +197,15 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
       const upstreamImage = getUpstreamImageData()
       const resolved = promptInputRef.current?.getResolvedPrompt()
       const mentionImages = resolved?.referenceImages || []
+      // 去重：@提及的图片如果和上游图片相同，则不添加到参考图
+      const uniqueMentionImages = mentionImages.filter(url => url !== upstreamImage)
       targetItems = [{
         id: `item_${Date.now()}_0`,
         name: '手动输入',
         prompt: prompt,
         videoPrompt: prompt,
         firstFrameUrl: upstreamImage || null,
-        referenceImages: mentionImages.length > 0 ? mentionImages : [],
+        referenceImages: uniqueMentionImages.length > 0 ? uniqueMentionImages : [],
         videoUrl: null,
         status: 'pending' as const,
       }]
@@ -183,13 +244,16 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
 
       try {
         const dims = aspectRatioToDimensions(aspectRatio)
+        // 去重：参考图中如果包含首帧，则移除
+        const uniqueReferenceImages = item.referenceImages?.filter(url => url !== item.firstFrameUrl) || []
         const resultUrl = await videoGen.mutateAsync({
           prompt: effectivePrompt,
           firstFrame: item.firstFrameUrl || undefined,
-          referenceImages: item.referenceImages || undefined,
+          referenceImages: uniqueReferenceImages.length > 0 ? uniqueReferenceImages : undefined,
           width: dims.width,
           height: dims.height,
           duration,
+          resolution,
           generateAudio,
           model,
           projectId,
@@ -376,26 +440,31 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        {/* 第二行：分辨率 + 时长 */}
+        <div className="flex items-center gap-2">
+          <Select value={resolution} onValueChange={v => setResolution(v)}>
+            <SelectTrigger className="h-7 w-20 text-[10px] shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {availableResolutions.map(r => (
+                <SelectItem key={r} value={r} className="text-[11px]">{r}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={String(duration)} onValueChange={v => setDuration(Number(v))}>
             <SelectTrigger className="h-7 w-14 text-[10px] shrink-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="5" className="text-[11px]">5s</SelectItem>
-              <SelectItem value="10" className="text-[11px]">10s</SelectItem>
-              <SelectItem value="15" className="text-[11px]">15s</SelectItem>
-              <SelectItem value="30" className="text-[11px]">30s</SelectItem>
+              {availableDurations.map(d => (
+                <SelectItem key={d} value={String(d)} className="text-[11px]">{d}s</SelectItem>
+              ))}
             </SelectContent>
           </Select>
-        </div>
-
-        {/* 第二行：运动 + 音频 + 生成 */}
-        <div className="flex items-center gap-2">
-          <div className="flex-1 flex items-center gap-1.5">
-            <span className="text-[10px] text-muted-foreground shrink-0">运动</span>
-            <Slider value={[motionStrength]} onValueChange={([v]) => { if (typeof v === 'number') { setMotionStrength(v); data.motionStrength = v } }} min={1} max={10} step={1} disabled={isRunning} className="flex-1" />
-            <span className="text-[10px] font-medium w-3 text-center">{motionStrength}</span>
-          </div>
+          <div className="flex-1" />
           <label className="flex items-center gap-1 text-[10px] text-muted-foreground nodrag shrink-0">
             <input type="checkbox" checked={generateAudio} onChange={e => setGenerateAudio(e.target.checked)} className="rounded" />
             音频

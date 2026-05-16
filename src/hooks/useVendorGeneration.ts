@@ -65,6 +65,7 @@ export interface VideoGenerationRequest {
   referenceImages?: string[]
   model?: string
   duration?: number
+  resolution?: string
   generateAudio?: boolean
   seed?: number
   fps?: number

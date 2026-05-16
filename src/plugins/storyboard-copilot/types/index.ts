@@ -226,6 +226,7 @@ export interface VideoGenNodeData extends NodeDisplayData {
   }>
   model: string
   duration: number
+  resolution: string
   generateAudio: boolean
   isRunning: boolean
   currentIndex: number
