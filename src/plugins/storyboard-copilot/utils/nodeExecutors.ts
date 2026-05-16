@@ -172,27 +172,41 @@ function createStoryboardSplitExecutor(node: CanvasNode): NodeExecutor {
       ? (inputData as { frames?: Array<{ id: string; imageUrl: string | null; note: string }> }).frames
       : undefined
 
-    context.updateNodeState(nodeId, { progress: 10, status: '准备拆分' })
+    context.updateNodeState(nodeId, { progress: 10, status: '准备中' })
 
-    // 如果有输入帧，直接使用
+    // 多图连接 → 直接替换子图（不拆分）
+    const allOutputs = context.getAllUpstreamOutputs()
+    const imageOutputs = allOutputs.filter((o): o is { imageUrl: string } =>
+      o != null && typeof o === 'object' && 'imageUrl' in (o as Record<string, unknown>)
+    )
+    if (imageOutputs.length > 1) {
+      const frames = imageOutputs.map((output, i) => ({
+        id: `frame-multi-${i}-${Date.now()}`,
+        imageUrl: output.imageUrl,
+        note: `分镜 ${i + 1}`,
+      }))
+      node.data.frames = frames
+      node.data.gridRows = 1
+      node.data.gridCols = frames.length
+      context.updateNodeState(nodeId, { progress: 100, status: `已替换 ${frames.length} 个子图` })
+      return { frames, inputFrames: frames, gridRows: 1, gridCols: frames.length }
+    }
+
+    // 如果有输入帧，合并为一张图片
     if (inputFrames && inputFrames.length > 0) {
-      // 合并帧为一张图片
       const mergedImageUrl = await mergeFramesToImage(inputFrames, data.gridRows || 1, data.gridCols || inputFrames.length)
-      
-      // 更新节点数据，使下游节点可以读取
       node.data.frames = inputFrames
       node.data.imageUrl = mergedImageUrl
-      
       context.updateNodeState(nodeId, { progress: 100, status: '拆分完成' })
       return {
         frames: inputFrames,
         gridRows: data.gridRows || 1,
         gridCols: data.gridCols || inputFrames.length,
-        imageUrl: mergedImageUrl, // 同时返回合并后的图片，供下游节点使用
+        imageUrl: mergedImageUrl,
       }
     }
 
-    // 如果有输入图片，进行真正的切割
+    // 单图输入 → 拆分
     if (inputImage) {
       const rows = data.gridRows || 2
       const cols = data.gridCols || 2
@@ -200,15 +214,12 @@ function createStoryboardSplitExecutor(node: CanvasNode): NodeExecutor {
       context.updateNodeState(nodeId, { progress: 30, status: '加载图片...' })
 
       try {
-        // 转换本地路径为 asset:// URL
         const displayUrl = getImageUrl(inputImage)
         if (!displayUrl) {
           throw new Error('无法获取图片 URL')
         }
 
-        // 加载图片
         const img = new Image()
-        // 对于 asset:// URL 不需要设置 crossOrigin
         if (!displayUrl.startsWith('asset://')) {
           img.crossOrigin = 'anonymous'
         }
@@ -224,7 +235,6 @@ function createStoryboardSplitExecutor(node: CanvasNode): NodeExecutor {
         const cellWidth = width / cols
         const cellHeight = height / rows
 
-        // 切割图片
         const frames: Array<{ id: string; imageUrl: string; note: string }> = []
 
         for (let row = 0; row < rows; row++) {
@@ -234,7 +244,6 @@ function createStoryboardSplitExecutor(node: CanvasNode): NodeExecutor {
             canvas.height = Math.floor(cellHeight)
             const ctx = canvas.getContext('2d')!
 
-            // 从原图裁剪
             ctx.drawImage(
               img,
               col * cellWidth,
@@ -247,7 +256,6 @@ function createStoryboardSplitExecutor(node: CanvasNode): NodeExecutor {
               cellHeight
             )
 
-            // 转换为 base64
             const dataUrl = canvas.toDataURL('image/png')
 
             frames.push({
@@ -263,15 +271,11 @@ function createStoryboardSplitExecutor(node: CanvasNode): NodeExecutor {
           }
         }
 
-        // 更新节点数据
         node.data.frames = frames
         node.data.gridRows = rows
         node.data.gridCols = cols
 
-        // 合并帧为一张图片
         const mergedImageUrl = await mergeFramesToImage(frames, rows, cols)
-        
-        // 更新节点数据，使下游节点可以读取
         node.data.imageUrl = mergedImageUrl
 
         context.updateNodeState(nodeId, { progress: 100, status: '拆分完成' })

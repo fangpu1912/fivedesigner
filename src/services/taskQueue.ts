@@ -308,7 +308,8 @@ export function registerDefaultExecutors() {
         {
           prompt: item.prompt || '',
           imageBase64,
-          size: '1K',
+          width: (params?.width as number) || 1024,
+          height: (params?.height as number) || 576,
         } as any,
         modelId || '',
       )

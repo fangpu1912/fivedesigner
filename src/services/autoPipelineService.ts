@@ -367,6 +367,8 @@ export class AutoPipelineService {
         {
           prompt: sb.video_prompt || sb.prompt || sb.description || '',
           firstImageBase64: imageUrl,
+          width: 1280,
+          height: 720,
           duration: 5,
           generateAudio: false,
         },

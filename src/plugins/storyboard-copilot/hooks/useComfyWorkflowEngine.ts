@@ -30,6 +30,8 @@ export type NodeExecutor = (
 export interface ExecutionContext {
   // 获取上游节点的输出
   getUpstreamOutput: (nodeId: string) => unknown
+  // 获取所有上游节点的输出（用于多输入）
+  getAllUpstreamOutputs: () => unknown[]
   // 更新节点状态
   updateNodeState: (nodeId: string, state: Partial<NodeExecutionState>) => void
   // 信号用于取消执行
@@ -176,6 +178,10 @@ export function useComfyWorkflowEngine() {
         // 创建执行上下文
         const context: ExecutionContext = {
           getUpstreamOutput: (id) => nodeOutputsRef.current.get(id),
+          getAllUpstreamOutputs: () => {
+            const upstreamIds = getUpstreamNodeIds(nodeId, edges)
+            return upstreamIds.map((id) => nodeOutputsRef.current.get(id)).filter(Boolean)
+          },
           updateNodeState: (id, state) => updateNodeState(id, state),
           signal: abortControllerRef.current!.signal,
         }

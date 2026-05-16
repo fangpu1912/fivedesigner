@@ -268,9 +268,13 @@ export const studioService = {
       }
 
       try {
+        const aspectRatio = project.aspect_ratio === '9:16' ? '9:16' : '16:9'
+        const isPortrait = aspectRatio === '9:16'
         const imageConfig: ImageConfig = {
           prompt: sb.prompt,
-          aspectRatio: project.aspect_ratio === '9:16' ? '9:16' : '16:9',
+          width: isPortrait ? 720 : 1280,
+          height: isPortrait ? 1280 : 720,
+          aspectRatio,
         }
 
         const imageUrl = await AI.Image.generate(imageConfig, defaultImageModel, 0)
@@ -310,6 +314,8 @@ export const studioService = {
         const videoConfig: VideoConfig = {
           prompt: sb.video_prompt,
           referenceImages: sb.image ? [sb.image] : undefined,
+          width: 1280,
+          height: 720,
           duration: sb.duration || 5,
         }
 

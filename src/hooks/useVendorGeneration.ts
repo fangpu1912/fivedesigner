@@ -25,6 +25,21 @@ function getVideoResolution(width?: number, height?: number): string {
   return '4K'
 }
 
+/** 将宽高比字符串转为基础分辨率（横向 1280×720 基准，纵向 720×1280 基准） */
+export function aspectRatioToDimensions(ratio: string): { width: number; height: number } {
+  const parts = ratio.split(':').map(Number)
+  if (parts.length !== 2 || isNaN(parts[0]) || isNaN(parts[1])) {
+    return { width: 1280, height: 720 }
+  }
+  const [w, h] = parts
+  const isLandscape = w > h
+  const scale = Math.min(1280 / Math.max(w, h), 720 / Math.min(w, h))
+  if (isLandscape) {
+    return { width: 1280, height: Math.round(1280 * h / w) }
+  }
+  return { width: Math.round(720 * w / h), height: 720 }
+}
+
 export interface ImageGenerationRequest {
   prompt: string
   negativePrompt?: string

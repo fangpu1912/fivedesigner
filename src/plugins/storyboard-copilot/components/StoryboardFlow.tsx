@@ -541,22 +541,74 @@ export function StoryboardFlow({ className }: StoryboardFlowProps) {
 
         case CANVAS_NODE_TYPES.storyboardSplit:
           // 分镜拆分节点 - 接收上游图片数据并触发拆分
-          if (inputData?.imageUrl || inputData?.frames) {
-            setNodes((nds: CanvasNode[]) => nds.map(n => {
-              if (n.id === nodeId) {
-                return {
-                  ...n,
-                  data: {
-                    ...n.data,
-                    ...(inputData.imageUrl && { inputImageUrl: inputData.imageUrl }),
-                    ...(inputData.frames && { inputFrames: inputData.frames }),
-                    _executeTrigger: Date.now(),
-                  } as CanvasNodeData,
-                } as CanvasNode
-              }
-              return n
-            }))
-            toast({ title: '开始拆分分镜' })
+          // 收集所有上游节点的图片
+          const upstreamEdges = edges.filter(e => e.target === nodeId)
+          const upstreamImages: string[] = []
+          for (const edge of upstreamEdges) {
+            const upstreamNode = nodes.find(n => n.id === edge.source)
+            if (upstreamNode?.data?.imageUrl) {
+              upstreamImages.push(upstreamNode.data.imageUrl as string)
+            }
+          }
+
+          if (upstreamImages.length > 0) {
+            // 多图连接 → 直接替换子图
+            if (upstreamImages.length > 1) {
+              const frames = upstreamImages.map((url, i) => ({
+                id: `frame-multi-${i}-${Date.now()}`,
+                imageUrl: url,
+                note: `分镜 ${i + 1}`,
+              }))
+              setNodes((nds: CanvasNode[]) => nds.map(n => {
+                if (n.id === nodeId) {
+                  return {
+                    ...n,
+                    data: {
+                      ...n.data,
+                      frames,
+                      inputFrames: frames,
+                      gridRows: 1,
+                      gridCols: frames.length,
+                      _executeTrigger: Date.now(),
+                    } as CanvasNodeData,
+                  } as CanvasNode
+                }
+                return n
+              }))
+              toast({ title: `已替换 ${frames.length} 个子图` })
+            } else if (inputData?.frames) {
+              // 上游传出帧数组（如有）
+              setNodes((nds: CanvasNode[]) => nds.map(n => {
+                if (n.id === nodeId) {
+                  return {
+                    ...n,
+                    data: {
+                      ...n.data,
+                      inputFrames: inputData.frames,
+                      _executeTrigger: Date.now(),
+                    } as CanvasNodeData,
+                  } as CanvasNode
+                }
+                return n
+              }))
+              toast({ title: '开始拆分分镜' })
+            } else {
+              // 单图 → 触发拆分
+              setNodes((nds: CanvasNode[]) => nds.map(n => {
+                if (n.id === nodeId) {
+                  return {
+                    ...n,
+                    data: {
+                      ...n.data,
+                      inputImageUrl: upstreamImages[0],
+                      _executeTrigger: Date.now(),
+                    } as CanvasNodeData,
+                  } as CanvasNode
+                }
+                return n
+              }))
+              toast({ title: '开始拆分分镜' })
+            }
           } else {
             toast({ title: '请连接上游图片或分镜节点', variant: 'destructive' })
           }

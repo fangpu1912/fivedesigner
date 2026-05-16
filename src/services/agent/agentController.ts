@@ -277,6 +277,8 @@ export class AgentController {
     const videoUrl = await AI.Video.generate(
       {
         prompt: task.params.prompt as string,
+        width: (task.params.width as number) || 1280,
+        height: (task.params.height as number) || 720,
         duration: task.params.duration as number,
         firstImageBase64: frameUrls[0],
         lastImageBase64: frameUrls[frameUrls.length - 1],

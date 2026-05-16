@@ -567,7 +567,7 @@ export const StoryboardNode = memo(({ id, data, selected }: StoryboardNodeProps)
       if (newLength > currentLength) {
         const newFrames = [
           ...frames,
-          ...createDefaultFrames(1, newCols - cols).map((f, i) => ({
+          ...createDefaultFrames(rows, newCols - cols).map((f, i) => ({
             ...f,
             order: currentLength + i,
           })),

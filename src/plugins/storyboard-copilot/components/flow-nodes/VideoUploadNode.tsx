@@ -1,6 +1,6 @@
 import { memo, useCallback, useState, useRef, useEffect } from 'react'
 import { Handle, Position, type NodeProps, useReactFlow, useEdges } from '@xyflow/react'
-import { Video, Play, Pause, RotateCcw, Camera, Maximize } from 'lucide-react'
+import { Video, Play, Pause, RotateCcw, Camera, Maximize, LayoutGrid, Loader2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { getVideoUrl, getImageUrl } from '@/utils/asset'
@@ -34,6 +34,7 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [isExtracting, setIsExtracting] = useState(false)
+  const [isDetectingScenes, setIsDetectingScenes] = useState(false)
   const [showFrames, setShowFrames] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -242,6 +243,59 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
     }
   }, [addFrameToCanvas, currentProjectId, currentEpisodeId, currentTime, data, id, toast, updateNodeData])
 
+  // 分镜拆解 - 复用 FFmpeg 场景检测
+  const handleSceneDetection = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!data.videoUrl) return
+
+    setIsDetectingScenes(true)
+    try {
+      const result = await invoke<{
+        scenes: Array<{ id: number; start_time: number; end_time: number; screenshot_path: string }>
+        total_scenes: number
+      }>('detect_video_scenes', {
+        request: {
+          video_path: data.videoUrl,
+          threshold: 0.3,
+          output_dir: `${data.videoUrl}_scenes`,
+        },
+      })
+
+      if (!result.scenes || result.scenes.length === 0) {
+        toast({ title: '未检测到场景切换', description: '尝试降低检测阈值' })
+        return
+      }
+
+      const currentNode = getNode(id)
+      if (!currentNode) return
+
+      const sceneNodes = result.scenes.map((scene, index) => {
+        const newNodeId = `scene-${Date.now()}-${index}`
+        return {
+          id: newNodeId,
+          type: 'uploadNode' as const,
+          position: {
+            x: (currentNode.position.x ?? 0) + nodeWidth + 20,
+            y: (currentNode.position.y ?? 0) + index * 120,
+          },
+          data: {
+            imageUrl: scene.screenshot_path,
+            previewImageUrl: scene.screenshot_path,
+            displayName: `场景 ${index + 1} (${scene.start_time.toFixed(1)}s)`,
+          },
+        }
+      })
+
+      addNodes(sceneNodes)
+
+      toast({ title: '分镜拆解完成', description: `共 ${result.scenes.length} 个分镜已添加到画布` })
+    } catch (error) {
+      toast({ title: '分镜拆解失败', description: String(error), variant: 'destructive' })
+    } finally {
+      setIsDetectingScenes(false)
+    }
+  }, [addNodes, data.videoUrl, getNode, id, nodeWidth, toast])
+
   // 播放/暂停控制
   const togglePlay = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
@@ -289,6 +343,19 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
         <span className="truncate flex-1">{data.sourceFileName || '视频'}</span>
         {data.videoUrl && (
           <div className="flex items-center gap-1">
+            <button
+              onClick={handleSceneDetection}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="p-0.5 hover:bg-muted rounded transition-colors"
+              title="分镜拆解（FFmpeg 场景检测）"
+              disabled={isDetectingScenes}
+            >
+              {isDetectingScenes ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <LayoutGrid className="h-3 w-3" />
+              )}
+            </button>
             <button
               onClick={handleFullscreen}
               onPointerDown={(e) => e.stopPropagation()}

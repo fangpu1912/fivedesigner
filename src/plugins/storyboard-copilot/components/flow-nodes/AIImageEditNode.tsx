@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/useToast'
+import { NODE_IMAGE_CONTAINER_CLASS } from './NodeStyles'
 import { useUIStore } from '@/store/useUIStore'
 import { getImageUrl } from '@/utils/asset'
 import { ReferenceImageInput } from '@/components/ai/ReferenceImageInput'

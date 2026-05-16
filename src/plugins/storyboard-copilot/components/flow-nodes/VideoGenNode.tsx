@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider'
 import { VendorModelSelector } from '@/components/ai/VendorModelSelector'
 import { useToast } from '@/hooks/useToast'
-import { useVideoGeneration } from '@/hooks/useVendorGeneration'
+import { useVideoGeneration, aspectRatioToDimensions } from '@/hooks/useVendorGeneration'
 import { useUIStore } from '@/store/useUIStore'
 import { useProjectQuery } from '@/hooks/useProjects'
 import { useTaskQueueStore } from '@/store/useTaskQueueStore'
@@ -182,10 +182,13 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
       setItems([...updatedItems])
 
       try {
+        const dims = aspectRatioToDimensions(aspectRatio)
         const resultUrl = await videoGen.mutateAsync({
           prompt: effectivePrompt,
           firstFrame: item.firstFrameUrl || undefined,
           referenceImages: item.referenceImages || undefined,
+          width: dims.width,
+          height: dims.height,
           duration,
           generateAudio,
           model,

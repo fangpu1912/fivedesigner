@@ -110,6 +110,8 @@ export const generateVideoTool: AgentTool = {
         {
           prompt: args.prompt as string,
           firstImageBase64: (args.firstImageUrl as string) || undefined,
+          width: (args.width as number) || 1280,
+          height: (args.height as number) || 720,
           duration: (args.duration as number) || 5,
           generateAudio: false,
         },
