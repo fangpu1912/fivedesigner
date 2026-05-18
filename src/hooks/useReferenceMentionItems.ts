@@ -19,9 +19,15 @@ export function useReferenceMentionItems(
   const items: MentionItem[] = useMemo(() => {
     const result: MentionItem[] = []
     const seenUrls = new Set<string>()
+    const seenIds = new Set<string>()
 
     for (const ref of referenceItems) {
       const mentionType = TYPE_MAP[ref.type]
+      const uniqueId = `${ref.type}:${ref.id}`
+
+      // 基于 ID 去重（同一资产只出现一次）
+      if (seenIds.has(uniqueId)) continue
+      seenIds.add(uniqueId)
 
       if (mentionType === 'video') {
         if (seenUrls.has(ref.url)) continue
@@ -36,6 +42,8 @@ export function useReferenceMentionItems(
           prompt: ref.prompt ?? undefined,
         })
       } else if (mentionType === 'audio') {
+        if (seenUrls.has(ref.url)) continue
+        seenUrls.add(ref.url)
         result.push({
           id: `ref:${ref.type}:${ref.id}`,
           type: mentionType,
@@ -46,9 +54,9 @@ export function useReferenceMentionItems(
           prompt: ref.prompt ?? undefined,
         })
       } else {
-        const url = getImageUrl(ref.url) ?? ref.url
-        if (seenUrls.has(url)) continue
-        seenUrls.add(url)
+        const url = ref.url ? (getImageUrl(ref.url) ?? ref.url) : undefined
+        if (url && seenUrls.has(url)) continue
+        if (url) seenUrls.add(url)
         result.push({
           id: `ref:${ref.type}:${ref.id}`,
           type: mentionType,

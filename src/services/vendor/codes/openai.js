@@ -1,4 +1,3 @@
-// OpenAI 标准供应商代码
 class Vendor {
   constructor(config) {
     this.config = config;
@@ -21,7 +20,18 @@ class Vendor {
           max_tokens: params.maxTokens ?? 2048,
         }),
       });
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error("请求失败 (" + response.status + "): " + error);
+      }
+
       const data = await response.json();
+
+      if (data.error) {
+        throw new Error("API错误: " + (data.error.message || JSON.stringify(data.error)));
+      }
+
       return data.choices?.[0]?.message?.content || "";
     };
   }

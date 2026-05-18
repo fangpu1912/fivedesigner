@@ -106,6 +106,20 @@ const urlToBase64 = async (url) => {
   return bridgeCall('urlToBase64', [url])
 }
 
+// 通过 Tauri HTTP 插件发送请求（绕过 CORS）
+const tauriFetch = async (url, options = {}) => {
+  const result = await bridgeCall('tauriFetch', [url, options])
+  
+  // 包装成类似 fetch Response 的对象
+  return {
+    ok: result.ok,
+    status: result.status,
+    headers: result.headers,
+    json: async () => result._parsedData,
+    text: async () => result._body,
+  }
+}
+
 self.onmessage = async (e) => {
   const data = e.data
 
@@ -165,7 +179,8 @@ self.onmessage = async (e) => {
           readFile,
           pollTask,
           tauriInvoke,
-          urlToBase64
+          urlToBase64,
+          tauriFetch
         )
       } catch (execError) {
         throw new Error(

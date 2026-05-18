@@ -108,8 +108,8 @@ export const analysisService = {
       const videoBase64 = btoa(binary)
       const videoDataUrl = `data:video/mp4;base64,${videoBase64}`
 
-      const analysisPrompt = getActivePrompt('inspiration_creation', {
-        topic: '【对标分析模式】请分析以下参考视频内容，提取所有可复用的创作要素',
+      const analysisPrompt = getActivePrompt('video_remake', {
+        videoDescription: '【对标分析】请分析以下参考视频内容，提取所有可复用的创作要素，包括角色、场景、道具、分镜和整体风格特征。',
       })
 
       // 调用项目中的 AI 视觉分析服务
@@ -162,10 +162,6 @@ export const analysisService = {
       title: String(data.title || '未命名视频'),
       style: String(data.style || ''),
       aspect_ratio: String(data.aspect_ratio || '9:16'),
-      total_duration: Number(data.total_duration || 0),
-      bgm_style: String(data.bgm_style || ''),
-      color_grade: String(data.color_grade || ''),
-      overall_prompt: String(data.overall_prompt || ''),
       characters: Array.isArray(data.characters)
         ? data.characters.map((c: unknown, index: number) => {
             const char = c as Record<string, unknown>
@@ -174,7 +170,6 @@ export const analysisService = {
               name: String(char.name || `角色${index + 1}`),
               description: String(char.description || ''),
               prompt: String(char.prompt || char.appearance_prompt || ''),
-              staticViews: char.staticViews ? String(char.staticViews) : undefined,
               wardrobeVariants: char.wardrobeVariants ? String(char.wardrobeVariants) : undefined,
               replacement_image: null,
             }
@@ -220,9 +215,6 @@ export const analysisService = {
             }
           })
         : [],
-      reverse_prompts: Array.isArray(data.reverse_prompts)
-        ? data.reverse_prompts.map(String)
-        : [],
       raw_analysis: JSON.stringify(data),
     }
   },
@@ -252,7 +244,7 @@ export const analysisService = {
         name: options.customTitle || result.title,
         description: `从对标分析创建：${result.style}`,
         aspect_ratio: result.aspect_ratio,
-        visual_style: result.overall_prompt,
+        visual_style: result.style,
         quality_prompt: 'high quality, detailed',
       })
       projectId = project.id
@@ -269,7 +261,7 @@ export const analysisService = {
     const episode = await episodeDB.create({
       project_id: projectId,
       name: options.customTitle || '主剧集',
-      description: `预估时长: ${result.total_duration}秒`,
+      description: `从对标分析创建`,
       episode_number: maxEpisodeNumber + 1,
     })
 

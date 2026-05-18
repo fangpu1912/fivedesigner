@@ -1,10 +1,10 @@
 {
   "version": "1.0.1",
-  "notes": "🎉 v1.0.1 更新\n\n## 修复内容\n- 分镜拆分节点多图替换显示修复\n- 视频生成节点添加分辨率选项和动态时长\n- 模型选择器按供应商分组显示\n- GeekAI 供应商添加新模型支持（Veo 3.1、Wan2.6、Vidu、Kling、Hailuo、豆包）\n- 图片/视频生成参考图去重处理\n- Grok 4.2 Image 图片URL提取修复\n\n## 安装说明\n- 下载安装包后双击运行即可\n- 首次启动需配置 AI 供应商 API Key",
-  "pub_date": "2026-05-17T01:00:00+08:00",
+  "notes": "🎉 v1.0.1 更新\n\n## 修复内容\n- 分镜拆分节点多图替换显示修复\n- 视频生成节点添加分辨率选项和动态时长\n- 模型选择器按供应商分组显示\n- GeekAI 供应商添加新模型支持（Veo 3.1、Wan2.6、Vidu、Kling、Hailuo、豆包）\n- 图片/视频生成参考图去重处理\n- Grok 4.2 Image 图片URL提取修复\n- 参考图面板支持显示无图片资产（场景、角色等）\n- 分镜关联场景修复\n- 上传文件去重处理\n\n## 安装说明\n- 下载安装包后双击运行即可\n- 首次启动需配置 AI 供应商 API Key",
+  "pub_date": "2026-05-17T12:00:00+08:00",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSU0kva2Rzbk8vRGxHZytyajA0QWdQWFczZzBPWFpDYkJCRzZzdEF0VjVEWGt2N1dPcjlkYk5IY2wzeTF4QzRxckZ0M3hVaCsyRFBvWGx1VzYyVld2eFBGREJmNnJibmd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc4OTU2MDE0CWZpbGU6Rml2ZURlc2lnbmVyXzEuMC4xX3g2NC1zZXR1cC5leGUKZ3R1VkJEQjZTSFBDSDlDcTBmWFUwUC9BSENQRGhHWDhTanJBdFBoTzlnYW5WTThIRk5jMXZGaVNPa25JOFBMNzdpb2duMWx1TnBqZGR1UlpZWC8rQkE9PQo=",
+      "signature": "",
       "url": "https://github.com/fangpu1912/fivedesigner/releases/download/v1.0.1/FiveDesigner_1.0.1_x64-setup.exe"
     }
   }

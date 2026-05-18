@@ -171,13 +171,24 @@ export function ReferenceImageInput({
 
   const availableRefs = useMemo(() => {
     const refs: ReferenceItem[] = []
+    const seenIds = new Set<string>()
+    const seenUrls = new Set<string>()
+
+    const addRef = (item: ReferenceItem) => {
+      const uniqueId = `${item.type}:${item.id}`
+      if (seenIds.has(uniqueId)) return
+      if (item.url && seenUrls.has(item.url)) return
+      seenIds.add(uniqueId)
+      if (item.url) seenUrls.add(item.url)
+      refs.push(item)
+    }
 
     if (activeTab === 'storyboard') {
       storyboards.forEach(sb => {
-        if (sb.image && (selectedEpisodeId === 'all' || sb.episode_id === selectedEpisodeId)) {
-          refs.push({
+        if (selectedEpisodeId === 'all' || sb.episode_id === selectedEpisodeId) {
+          addRef({
             id: sb.id,
-            url: sb.image,
+            url: sb.image || '',
             name: sb.name,
             type: 'storyboard',
             episodeId: sb.episode_id,
@@ -189,10 +200,10 @@ export function ReferenceImageInput({
       })
     } else if (activeTab === 'character') {
       characters.forEach(char => {
-        if (char.image && (selectedEpisodeId === 'all' || char.episode_id === selectedEpisodeId)) {
-          refs.push({
+        if (selectedEpisodeId === 'all' || char.episode_id === selectedEpisodeId) {
+          addRef({
             id: char.id,
-            url: char.image,
+            url: char.image || '',
             name: char.name,
             type: 'character',
             episodeId: char.episode_id,
@@ -203,10 +214,10 @@ export function ReferenceImageInput({
       })
     } else if (activeTab === 'scene') {
       scenes.forEach(scene => {
-        if (scene.image && (selectedEpisodeId === 'all' || scene.episode_id === selectedEpisodeId)) {
-          refs.push({
+        if (selectedEpisodeId === 'all' || scene.episode_id === selectedEpisodeId) {
+          addRef({
             id: scene.id,
-            url: scene.image,
+            url: scene.image || '',
             name: scene.name,
             type: 'scene',
             episodeId: scene.episode_id,
@@ -217,10 +228,10 @@ export function ReferenceImageInput({
       })
     } else if (activeTab === 'prop') {
       props.forEach(prop => {
-        if (prop.image && (selectedEpisodeId === 'all' || prop.episode_id === selectedEpisodeId)) {
-          refs.push({
+        if (selectedEpisodeId === 'all' || prop.episode_id === selectedEpisodeId) {
+          addRef({
             id: prop.id,
-            url: prop.image,
+            url: prop.image || '',
             name: prop.name,
             type: 'prop',
             episodeId: prop.episode_id,
@@ -238,60 +249,64 @@ export function ReferenceImageInput({
 
   const allRefItems = useMemo(() => {
     const items: ReferenceItem[] = []
+    const seenIds = new Set<string>()
+    const seenUrls = new Set<string>()
+
+    const addItem = (item: ReferenceItem) => {
+      const uniqueId = `${item.type}:${item.id}`
+      if (seenIds.has(uniqueId)) return
+      if (item.url && seenUrls.has(item.url)) return
+      seenIds.add(uniqueId)
+      if (item.url) seenUrls.add(item.url)
+      items.push(item)
+    }
+
     storyboards.forEach(sb => {
-      if (sb.image) {
-        items.push({
-          id: sb.id,
-          url: sb.image,
-          name: sb.name,
-          type: 'storyboard',
-          episodeId: sb.episode_id,
-          episodeName: sb.episode_name,
-          prompt: sb.prompt,
-          description: sb.description,
-        })
-      }
+      addItem({
+        id: sb.id,
+        url: sb.image || '',
+        name: sb.name,
+        type: 'storyboard',
+        episodeId: sb.episode_id,
+        episodeName: sb.episode_name,
+        prompt: sb.prompt,
+        description: sb.description,
+      })
     })
     characters.forEach(char => {
-      if (char.image) {
-        items.push({
-          id: char.id,
-          url: char.image,
-          name: char.name,
-          type: 'character',
-          episodeId: char.episode_id,
-          prompt: char.prompt,
-          description: char.description,
-        })
-      }
+      addItem({
+        id: char.id,
+        url: char.image || '',
+        name: char.name,
+        type: 'character',
+        episodeId: char.episode_id,
+        prompt: char.prompt,
+        description: char.description,
+      })
     })
     scenes.forEach(scene => {
-      if (scene.image) {
-        items.push({
-          id: scene.id,
-          url: scene.image,
-          name: scene.name,
-          type: 'scene',
-          episodeId: scene.episode_id,
-          prompt: scene.prompt,
-          description: scene.description,
-        })
-      }
+      addItem({
+        id: scene.id,
+        url: scene.image || '',
+        name: scene.name,
+        type: 'scene',
+        episodeId: scene.episode_id,
+        prompt: scene.prompt,
+        description: scene.description,
+      })
     })
     props.forEach(prop => {
-      if (prop.image) {
-        items.push({
-          id: prop.id,
-          url: prop.image,
-          name: prop.name,
-          type: 'prop',
-          episodeId: prop.episode_id,
-          prompt: prop.prompt,
-          description: prop.description,
-        })
-      }
+      addItem({
+        id: prop.id,
+        url: prop.image || '',
+        name: prop.name,
+        type: 'prop',
+        episodeId: prop.episode_id,
+        prompt: prop.prompt,
+        description: prop.description,
+      })
     })
-    items.push(...uploadedFiles)
+    uploadedFiles.forEach(file => addItem(file))
     return items
   }, [storyboards, characters, scenes, props, uploadedFiles])
 
@@ -370,6 +385,10 @@ export function ReferenceImageInput({
           alert(`最多可选择 ${maxReferences} 个参考`)
           break
         }
+
+        // 去重：检查文件路径是否已存在
+        const alreadyExists = uploadedFiles.some(f => f.url === filePath) || value.includes(filePath)
+        if (alreadyExists) continue
 
         const fileName = filePath.split(/[/\\]/).pop() || 'unknown'
 
@@ -574,13 +593,13 @@ export function ReferenceImageInput({
                       const Icon = tab.icon
                       const count =
                         tab.id === 'storyboard'
-                          ? storyboards.filter(s => s.image).length
+                          ? storyboards.length
                           : tab.id === 'character'
-                            ? characters.filter(c => c.image).length
+                            ? characters.length
                             : tab.id === 'scene'
-                              ? scenes.filter(s => s.image).length
+                              ? scenes.length
                               : tab.id === 'prop'
-                                ? props.filter(p => p.image).length
+                                ? props.length
                                 : uploadedFiles.length
                       return (
                         <button

@@ -1,6 +1,6 @@
 [package]
 name = "fivedesigner"
-version = "1.0.0"
+version = "1.0.2"
 description = "FiveDesigner - AI Video Storyboard Tool"
 authors = ["FiveDesigner Team"]
 license = "MIT"

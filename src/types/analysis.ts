@@ -3,7 +3,6 @@ export interface AnalysisCharacter {
   name: string
   description: string
   prompt: string
-  staticViews?: string
   wardrobeVariants?: string
   replacement_image?: string | null
 }
@@ -40,15 +39,10 @@ export interface AnalysisResult {
   title: string
   style: string
   aspect_ratio: string
-  total_duration: number
-  bgm_style: string
-  color_grade: string
-  overall_prompt: string
   characters: AnalysisCharacter[]
   scenes: AnalysisSceneSetting[]
   props: AnalysisProp[]
   storyboards: AnalysisStoryboard[]
-  reverse_prompts: string[]
   raw_analysis: string
 }
 

@@ -559,6 +559,19 @@ export function StoryboardFlow({ className }: StoryboardFlowProps) {
                 imageUrl: url,
                 note: `分镜 ${i + 1}`,
               }))
+              // 计算最优布局
+              const calculateOptimalGrid = (count: number): { rows: number; cols: number } => {
+                if (count <= 0) return { rows: 1, cols: 1 }
+                if (count <= 4) return { rows: 1, cols: count }
+                if (count <= 6) return { rows: 2, cols: 3 }
+                if (count <= 9) return { rows: 3, cols: 3 }
+                if (count <= 12) return { rows: 3, cols: 4 }
+                if (count <= 16) return { rows: 4, cols: 4 }
+                const cols = Math.ceil(Math.sqrt(count))
+                const rows = Math.ceil(count / cols)
+                return { rows, cols }
+              }
+              const { rows, cols } = calculateOptimalGrid(frames.length)
               setNodes((nds: CanvasNode[]) => nds.map(n => {
                 if (n.id === nodeId) {
                   return {
@@ -567,8 +580,8 @@ export function StoryboardFlow({ className }: StoryboardFlowProps) {
                       ...n.data,
                       frames,
                       inputFrames: frames,
-                      gridRows: 1,
-                      gridCols: frames.length,
+                      gridRows: rows,
+                      gridCols: cols,
                       _executeTrigger: Date.now(),
                     } as CanvasNodeData,
                   } as CanvasNode
@@ -1649,32 +1662,23 @@ export function StoryboardFlow({ className }: StoryboardFlowProps) {
     })
   }, [handleCopy, handlePaste, handleDeleteSelected, handleExecuteNode, executionState.isRunning, handleToggleLock, handleToggleVisibility, handleMoveLayer, selectedNodeIds, nodes])
 
-  // 画布右键菜单
+  // 画布右键菜单 - 显示节点库
   const onPaneContextMenu = useCallback((e: MouseEvent | React.MouseEvent) => {
     e.preventDefault()
     setContextMenuNodeId(null)
+    setContextMenu(null) // 关闭原来的右键菜单
 
-    const menuItems = [
-      {
-        label: '粘贴',
-        icon: <ClipboardPaste className="h-4 w-4" />,
-        onClick: handlePaste,
-        disabled: !clipboardRef.current,
-      },
-      { divider: true, label: '', onClick: () => {} },
-      {
-        label: '导出为 PNG',
-        icon: <ImageDown className="h-4 w-4" />,
-        onClick: handleExportAsPNG,
-      },
-    ]
+    // 显示节点库（QuickNodeMenu）
+    const clientX = 'clientX' in e ? e.clientX : 0
+    const clientY = 'clientY' in e ? e.clientY : 0
 
-    setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      items: menuItems,
+    setQuickMenuState({
+      x: clientX,
+      y: clientY,
+      sourceNodeId: '', // 空白处右键，没有源节点
+      sourceHandleId: null,
     })
-  }, [handlePaste, handleExportAsPNG])
+  }, [])
 
   // 处理图片粘贴
   useEffect(() => {
@@ -1860,7 +1864,14 @@ export function StoryboardFlow({ className }: StoryboardFlowProps) {
   const canRedo = historyRef.current.future.length > 0
 
   return (
-    <div className={cn('relative flex h-full w-full', className)} ref={reactFlowWrapper}>
+    <div
+      className={cn('relative flex h-full w-full', className)}
+      ref={reactFlowWrapper}
+      onContextMenu={(e) => {
+        // 阻止浏览器默认右键菜单
+        e.preventDefault()
+      }}
+    >
       <ReactFlow<CanvasNode, Edge>
         nodes={nodes.map(node => ({
           ...node,

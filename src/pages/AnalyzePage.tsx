@@ -628,16 +628,10 @@ export default function AnalyzePage() {
                     <p className="text-muted-foreground">{task.result.style}</p>
                     <div className="flex gap-2 flex-wrap">
                       <Badge variant="secondary">{task.result.aspect_ratio}</Badge>
-                      <Badge variant="secondary">{task.result.total_duration}s</Badge>
-                      <Badge variant="secondary">{task.result.color_grade}</Badge>
                       <Badge variant="secondary">{task.result.characters.length}角色</Badge>
                       <Badge variant="secondary">{task.result.scenes.length}场景</Badge>
                       <Badge variant="secondary">{task.result.props.length}道具</Badge>
                       <Badge variant="secondary">{task.result.storyboards.length}分镜</Badge>
-                    </div>
-                    <div className="text-sm">
-                      <span className="text-muted-foreground">全局风格提示词：</span>
-                      <span className="font-mono text-xs">{task.result.overall_prompt}</span>
                     </div>
                   </CardContent>
                 </Card>
@@ -666,11 +660,6 @@ export default function AnalyzePage() {
                           <div className="text-sm text-muted-foreground font-mono text-xs bg-muted/50 p-2 rounded">
                             {character.prompt}
                           </div>
-                          {character.staticViews && (
-                            <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded border border-blue-100">
-                              四视图：{character.staticViews}
-                            </div>
-                          )}
                           {character.wardrobeVariants && (
                             <div className="text-xs text-purple-600 bg-purple-50 p-2 rounded border border-purple-100">
                               衍生衣橱：{character.wardrobeVariants}

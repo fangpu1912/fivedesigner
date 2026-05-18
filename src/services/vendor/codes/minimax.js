@@ -162,9 +162,12 @@ class Vendor {
         resolution: params.resolution || "720p",
       };
 
-      // 如果提供了首帧图片，添加到请求
-      if (params.imageUrl) {
-        requestBody.first_frame_image = params.imageUrl;
+      if (params.firstImageBase64) {
+        let firstImage = params.firstImageBase64;
+        if (firstImage.startsWith('data:')) {
+          firstImage = firstImage.split(',')[1] || firstImage;
+        }
+        requestBody.first_frame_image = firstImage;
       }
 
       // 提交视频生成任务

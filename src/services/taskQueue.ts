@@ -1,5 +1,6 @@
 import { useTaskQueueStore, type Task, type TaskResult, type TaskQueueType } from '@/store/useTaskQueueStore'
 import { queryClient } from '@/providers/QueryProvider'
+import { buildFullPrompt } from '@/hooks/useVendorGeneration'
 
 export type TaskExecutor = (
   task: Task,
@@ -295,19 +296,35 @@ export function registerDefaultExecutors() {
 
       const referenceImages = item.reference_images || (item.image ? [item.image] : [])
       const imageBase64: string[] = []
+      const imageUrls: string[] = []
+      const isPublicUrl = (url: string) =>
+        (url.startsWith('http://') || url.startsWith('https://')) && !url.includes('asset.localhost')
+      const isBase64Data = (str: string) => str.startsWith('data:image')
 
       for (const imgUrl of referenceImages) {
         if (signal?.aborted) return { success: false, error: '已取消' }
-        const base64 = await imagePathToBase64(imgUrl)
-        if (base64) imageBase64.push(base64)
+        const converted = await imagePathToBase64(imgUrl)
+        if (converted) {
+          if (isBase64Data(converted)) {
+            imageBase64.push(converted)
+          } else if (isPublicUrl(converted)) {
+            imageUrls.push(converted)
+          }
+        }
       }
 
       updateProgress(30, '发送生成请求')
 
+      let fullPrompt = item.prompt || ''
+      if (projectId) {
+        fullPrompt = await buildFullPrompt(projectId, fullPrompt)
+      }
+
       const imageUrl = await AI.Image.generate(
         {
-          prompt: item.prompt || '',
+          prompt: fullPrompt,
           imageBase64,
+          imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
           width: (params?.width as number) || 1024,
           height: (params?.height as number) || 576,
         } as any,

@@ -1,6 +1,6 @@
 import { memo, useState, useCallback, useRef, useEffect } from 'react'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
-import { Maximize, Loader2, ImageIcon, AlertCircle, Play, X, Cloud } from 'lucide-react'
+import { Maximize, Loader2, ImageIcon, AlertCircle, Play, X, Cloud, ZoomIn, ZoomOut } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -48,6 +48,7 @@ export const UpscaleNode = memo(({ id, data, selected }: UpscaleNodeProps) => {
   const [resultUrl, setResultUrl] = useState<string | null>(data.imageUrl || null)
   const [workflows, setWorkflows] = useState<WorkflowConfig[]>([])
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>(data.workflowId || '')
+  const [scale, setScale] = useState<number>(data.scale || 1)
   const abortControllerRef = useRef<AbortController | null>(null)
 
   // 加载工作流列表（从 localStorage，与分镜绘制页面保持一致）
@@ -182,6 +183,87 @@ export const UpscaleNode = memo(({ id, data, selected }: UpscaleNodeProps) => {
     toast({ title: '已取消放大' })
   }, [data, id, updateNodeData, toast])
 
+  // 使用 Canvas 进行图片缩放（cubic 插值）
+  const handleScale = useCallback(async (newScale: number) => {
+    if (!data.imageUrl) return
+
+    setIsProcessing(true)
+    try {
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      img.src = imageUrl || ''
+      await new Promise((resolve, reject) => {
+        img.onload = resolve
+        img.onerror = reject
+      })
+
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      if (!ctx) throw new Error('无法创建 Canvas 上下文')
+
+      // 设置目标尺寸
+      const targetWidth = Math.round(img.width * newScale)
+      const targetHeight = Math.round(img.height * newScale)
+      canvas.width = targetWidth
+      canvas.height = targetHeight
+
+      // 使用 cubic 插值（高质量缩放）
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
+      ctx.drawImage(img, 0, 0, targetWidth, targetHeight)
+
+      // 转换为 blob
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((b) => {
+          if (b) resolve(b)
+          else reject(new Error('无法生成图片'))
+        }, 'image/png')
+      })
+
+      // 将 Blob 转换为 Uint8Array
+      const arrayBuffer = await blob.arrayBuffer()
+      const uint8Array = new Uint8Array(arrayBuffer)
+
+      // 保存到项目目录
+      const { saveMediaFile } = await import('@/utils/mediaStorage')
+      const savedPath = await saveMediaFile(uint8Array, {
+        projectId: currentProjectId ?? undefined,
+        episodeId: currentEpisodeId ?? undefined,
+        type: 'image',
+        fileName: `upscale_${newScale}x_${Date.now()}.png`,
+      })
+
+      setResultUrl(savedPath)
+      setScale(newScale)
+      updateNodeData(id, {
+        ...data,
+        imageUrl: savedPath,
+        scale: newScale,
+        isProcessing: false,
+        progress: 100,
+      } as UpscaleNodeData)
+
+      // 触发衍生节点
+      canvasEvents.emit({
+        type: 'addResultNode',
+        imageUrl: savedPath,
+        sourceNodeId: id,
+        sourceHandleId: 'source',
+      })
+
+      toast({ title: `${newScale}x 缩放完成` })
+    } catch (error) {
+      console.error('图片缩放失败:', error)
+      toast({
+        title: '缩放失败',
+        description: error instanceof Error ? error.message : '未知错误',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsProcessing(false)
+    }
+  }, [data, id, imageUrl, currentProjectId, currentEpisodeId, updateNodeData, toast])
+
   return (
     <div
       className={getNodeContainerClass(selected, 'flex h-full flex-col')}
@@ -253,6 +335,42 @@ export const UpscaleNode = memo(({ id, data, selected }: UpscaleNodeProps) => {
             </SelectContent>
           </Select>
 
+          {/* 缩放按钮 */}
+          {hasInputImage && !isProcessing && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-2 text-[11px] flex-1"
+                onClick={() => handleScale(0.5)}
+                disabled={!hasInputImage}
+              >
+                <ZoomOut className="w-3 h-3 mr-1" />
+                0.5x
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-2 text-[11px] flex-1"
+                onClick={() => handleScale(2)}
+                disabled={!hasInputImage}
+              >
+                <ZoomIn className="w-3 h-3 mr-1" />
+                2x
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-2 text-[11px] flex-1"
+                onClick={() => handleScale(4)}
+                disabled={!hasInputImage}
+              >
+                <ZoomIn className="w-3 h-3 mr-1" />
+                4x
+              </Button>
+            </div>
+          )}
+
           {/* 按钮 */}
           <div className="flex items-center gap-2">
             {isProcessing ? (
@@ -282,7 +400,7 @@ export const UpscaleNode = memo(({ id, data, selected }: UpscaleNodeProps) => {
                 {resultUrl ? (
                   <><Maximize className="w-3 h-3 mr-1" />重新放大</>
                 ) : hasInputImage ? (
-                  <><Maximize className="w-3 h-3 mr-1" />放大</>
+                  <><Maximize className="w-3 h-3 mr-1" />ComfyUI 放大</>
                 ) : (
                   <><Play className="w-3 h-3 mr-1" />获取并放大</>
                 )}

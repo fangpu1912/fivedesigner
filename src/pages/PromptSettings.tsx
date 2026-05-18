@@ -30,6 +30,7 @@ import {
   Users,
   GitBranch,
   ListTree,
+  Video,
 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
@@ -95,6 +96,7 @@ const TYPE_ICONS: Record<PromptType, React.ReactNode> = {
   script_adaptation_strategy: <GitBranch className="h-4 w-4" />,
   script_outline_generation: <ListTree className="h-4 w-4" />,
   inspiration_creation: <Sparkles className="h-4 w-4" />,
+  video_remake: <Video className="h-4 w-4" />,
 }
 
 // 模板编辑器组件

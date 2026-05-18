@@ -5,6 +5,7 @@ const ALLOWED_TAURI_COMMANDS = new Set([
   'modelscope_submit_task',
   'modelscope_check_status',
   'download_image_to_base64',
+  'http_request',
 ])
 
 const DEFAULT_TIMEOUT = 10 * 60 * 1000
@@ -106,6 +107,11 @@ export class VendorSandbox {
         return await this.urlToBase64(url)
       }
 
+      case 'tauriFetch': {
+        const [url, options] = args as [string, any]
+        return await this.tauriFetch(url, options)
+      }
+
       default:
         throw new Error(`安全限制: 未知的 API 调用 "${method}"`)
     }
@@ -131,6 +137,48 @@ export class VendorSandbox {
       throw new Error(result.error || '下载图片失败')
     }
     return result.data
+  }
+
+  // 使用 Tauri HTTP 插件发送请求（绕过 CORS）
+  private async tauriFetch(url: string, options: any = {}): Promise<any> {
+    const { invoke } = await import('@tauri-apps/api/core')
+    
+    const result = await invoke<{
+      success: boolean
+      status: number
+      headers: Record<string, string>
+      body: string
+      error?: string
+    }>('http_request', {
+      request: {
+        url,
+        method: options.method || 'GET',
+        headers: options.headers || {},
+        body: options.body,
+        timeout: options.timeout || 60000,
+      }
+    })
+
+    if (!result.success) {
+      throw new Error(result.error || 'HTTP 请求失败')
+    }
+
+    // 尝试解析 JSON 响应
+    let parsedData: any = result.body
+    try {
+      parsedData = JSON.parse(result.body)
+    } catch {
+      // 如果不是 JSON，保持原始字符串
+    }
+
+    // 返回可序列化的对象（不包含函数）
+    return {
+      ok: result.status >= 200 && result.status < 300,
+      status: result.status,
+      headers: result.headers,
+      _parsedData: parsedData,
+      _body: result.body,
+    }
   }
 }
 

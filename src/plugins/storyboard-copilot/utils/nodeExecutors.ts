@@ -155,6 +155,20 @@ function createAIEditExecutor(
   }
 }
 
+// 辅助函数：计算最优的行列布局
+function calculateOptimalGrid(count: number): { rows: number; cols: number } {
+  if (count <= 0) return { rows: 1, cols: 1 }
+  if (count <= 4) return { rows: 1, cols: count }
+  if (count <= 6) return { rows: 2, cols: 3 }
+  if (count <= 9) return { rows: 3, cols: 3 }
+  if (count <= 12) return { rows: 3, cols: 4 }
+  if (count <= 16) return { rows: 4, cols: 4 }
+  // 超过16个，尽量保持正方形布局
+  const cols = Math.ceil(Math.sqrt(count))
+  const rows = Math.ceil(count / cols)
+  return { rows, cols }
+}
+
 // 分镜拆分节点执行器
 function createStoryboardSplitExecutor(node: CanvasNode): NodeExecutor {
   return async (nodeId: string, inputData: unknown, context: ExecutionContext) => {
@@ -185,23 +199,29 @@ function createStoryboardSplitExecutor(node: CanvasNode): NodeExecutor {
         imageUrl: output.imageUrl,
         note: `分镜 ${i + 1}`,
       }))
+      // 使用自动计算的最优布局
+      const { rows, cols } = calculateOptimalGrid(frames.length)
       node.data.frames = frames
-      node.data.gridRows = 1
-      node.data.gridCols = frames.length
+      node.data.gridRows = rows
+      node.data.gridCols = cols
       context.updateNodeState(nodeId, { progress: 100, status: `已替换 ${frames.length} 个子图` })
-      return { frames, inputFrames: frames, gridRows: 1, gridCols: frames.length }
+      return { frames, inputFrames: frames, gridRows: rows, gridCols: cols }
     }
 
     // 如果有输入帧，合并为一张图片
     if (inputFrames && inputFrames.length > 0) {
-      const mergedImageUrl = await mergeFramesToImage(inputFrames, data.gridRows || 1, data.gridCols || inputFrames.length)
+      // 使用自动计算的最优布局（覆盖用户设置，确保多图时布局合理）
+      const { rows, cols } = calculateOptimalGrid(inputFrames.length)
+      const mergedImageUrl = await mergeFramesToImage(inputFrames, rows, cols)
       node.data.frames = inputFrames
+      node.data.gridRows = rows
+      node.data.gridCols = cols
       node.data.imageUrl = mergedImageUrl
       context.updateNodeState(nodeId, { progress: 100, status: '拆分完成' })
       return {
         frames: inputFrames,
-        gridRows: data.gridRows || 1,
-        gridCols: data.gridCols || inputFrames.length,
+        gridRows: rows,
+        gridCols: cols,
         imageUrl: mergedImageUrl,
       }
     }
@@ -296,18 +316,22 @@ function createStoryboardSplitExecutor(node: CanvasNode): NodeExecutor {
     // 使用现有数据
     const existingFrames = data.frames || []
     let mergedImageUrl: string | undefined
-    
+
     if (existingFrames.length > 0) {
-      mergedImageUrl = await mergeFramesToImage(existingFrames, data.gridRows || 1, data.gridCols || 1)
+      // 使用自动计算的最优布局（覆盖用户设置，确保多图时布局合理）
+      const { rows, cols } = calculateOptimalGrid(existingFrames.length)
+      mergedImageUrl = await mergeFramesToImage(existingFrames, rows, cols)
       // 更新节点数据，使下游节点可以读取
+      node.data.gridRows = rows
+      node.data.gridCols = cols
       node.data.imageUrl = mergedImageUrl
     }
-    
+
     context.updateNodeState(nodeId, { progress: 100, status: '拆分完成' })
     return {
       frames: existingFrames,
-      gridRows: data.gridRows || 1,
-      gridCols: data.gridCols || 1,
+      gridRows: existingFrames.length > 0 ? calculateOptimalGrid(existingFrames.length).rows : (data.gridRows || 1),
+      gridCols: existingFrames.length > 0 ? calculateOptimalGrid(existingFrames.length).cols : (data.gridCols || 1),
       imageUrl: mergedImageUrl, // 同时返回合并后的图片，供下游节点使用
     }
   }

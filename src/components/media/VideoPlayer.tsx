@@ -43,9 +43,16 @@ export function VideoPlayer({
   useEffect(() => {
     if (!src) return
 
-    if (src.startsWith('http') || src.startsWith('data:') || src.startsWith('blob:')) {
+    // 如果已经是可显示的 URL，直接使用
+    if (src.startsWith('http') || src.startsWith('data:') || src.startsWith('blob:') || src.startsWith('asset:')) {
       setVideoSrc(src)
+    } else if (src.startsWith('file://')) {
+      // file:// URL 需要转换
+      const filePath = src.replace(/^file:\/\//, '')
+      const url = convertFileSrc(filePath)
+      setVideoSrc(url)
     } else {
+      // 本地路径，需要转换
       const url = convertFileSrc(src)
       setVideoSrc(url)
     }

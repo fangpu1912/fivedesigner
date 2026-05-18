@@ -1,5 +1,5 @@
 import { join } from '@tauri-apps/api/path'
-import { writeFile, mkdir, exists } from '@tauri-apps/plugin-fs'
+import { writeFile, writeTextFile, mkdir, exists, open, BaseDirectory } from '@tauri-apps/plugin-fs'
 import { fetch } from '@tauri-apps/plugin-http'
 
 import { workspaceService } from '@/services/workspace/WorkspaceService'
@@ -168,7 +168,15 @@ export async function saveMediaFile(
     fileData = data
   }
 
-  await writeFile(filePath, fileData)
+  // 使用 FileHandle 写入大文件，避免 writeFile 的 "unexpected invoke body" 错误
+  try {
+    const file = await open(filePath, { write: true, create: true })
+    await file.write(fileData)
+    await file.close()
+  } catch (error) {
+    console.error('[saveMediaFile] 写入文件失败:', error)
+    throw error
+  }
 
   // 返回绝对路径
   return filePath

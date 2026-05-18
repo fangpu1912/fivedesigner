@@ -421,7 +421,8 @@ export function StoryboardDraw() {
     if (validSelectedIds.length !== selectedIds.length) {
       setSelectedIds(validSelectedIds)
     }
-  }, [activeItemId, currentItems, setActiveItemId, selectedIds, setSelectedIds])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeItemId, currentItems, selectedIds])
 
   // Load ComfyUI workflows
   useEffect(() => {
@@ -2181,10 +2182,15 @@ export function StoryboardDraw() {
                   description: (item as any).description,
                   prompt: (item as any).prompt,
                   image: (item as any).image,
+                  reference_images: (item as any).reference_images,
                 }))}
                 type={activeTab}
                 episodeId={currentEpisodeId || undefined}
                 projectId={currentProjectId || undefined}
+                defaultModelId={selectedModelId}
+                defaultComfyUIParams={comfyUIParams}
+                defaultGenerationMode={generationType === 'video' ? 'ai' : undefined}
+                modelParams={modelParams as any}
                 onComplete={handleBatchComplete}
                 onCancel={() => setViewMode('batch')}
               />

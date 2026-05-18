@@ -212,20 +212,32 @@ export function useImageGeneration() {
         }
 
         const imageBase64: string[] = []
+        const imageUrls: string[] = []
+        const isPublicUrl = (url: string) =>
+          (url.startsWith('http://') || url.startsWith('https://')) && !url.includes('asset.localhost')
+        const isBase64Data = (str: string) => str.startsWith('data:image')
         
         if (request.imageUrl) {
-          const base64 = await imagePathToBase64(request.imageUrl)
-          if (base64) {
-            imageBase64.push(base64)
+          const converted = await imagePathToBase64(request.imageUrl)
+          if (converted) {
+            if (isBase64Data(converted)) {
+              imageBase64.push(converted)
+            } else if (isPublicUrl(converted)) {
+              imageUrls.push(converted)
+            }
           }
         }
         
         if (request.referenceImages && request.referenceImages.length > 0) {
           for (const imgUrl of request.referenceImages) {
             if (imgUrl === request.imageUrl) continue
-            const base64 = await imagePathToBase64(imgUrl)
-            if (base64) {
-              imageBase64.push(base64)
+            const converted = await imagePathToBase64(imgUrl)
+            if (converted) {
+              if (isBase64Data(converted)) {
+                imageBase64.push(converted)
+              } else if (isPublicUrl(converted)) {
+                imageUrls.push(converted)
+              }
             }
           }
         }
@@ -233,22 +245,7 @@ export function useImageGeneration() {
         useTaskQueueStore.getState().updateTask(taskId, { progress: 40, stepName: '发送生成请求' })
         if (dbTaskId) {
           taskDB.update(dbTaskId, { progress: 40, step_name: '发送生成请求' }).catch(() => {})
-          taskLog(dbTaskId, 'info', '发送生成请求', { imageBase64Count: imageBase64.length })
-        }
-
-        const imageUrls: string[] = []
-        const isPublicUrl = (url: string) =>
-          (url.startsWith('http://') || url.startsWith('https://')) && !url.includes('asset.localhost')
-        if (request.imageUrl && isPublicUrl(request.imageUrl)) {
-          imageUrls.push(request.imageUrl)
-        }
-        if (request.referenceImages) {
-          for (const imgUrl of request.referenceImages) {
-            if (imgUrl === request.imageUrl) continue
-            if (isPublicUrl(imgUrl)) {
-              imageUrls.push(imgUrl)
-            }
-          }
+          taskLog(dbTaskId, 'info', '发送生成请求', { imageBase64Count: imageBase64.length, imageUrlsCount: imageUrls.length })
         }
 
         let maskBase64: string | undefined

@@ -1,6 +1,6 @@
 import { memo, useCallback, useState, useRef, useEffect } from 'react'
 import { Handle, Position, type NodeProps, useReactFlow, useEdges } from '@xyflow/react'
-import { Video, Play, Pause, RotateCcw, Camera, Maximize, LayoutGrid, Loader2 } from 'lucide-react'
+import { Video, Play, Pause, RotateCcw, Camera, Maximize, LayoutGrid, Loader2, SkipBack, SkipForward } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { getVideoUrl, getImageUrl } from '@/utils/asset'
@@ -175,14 +175,11 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
     toast({ title: '已添加到画布', description: `帧 ${timestamp.toFixed(1)}s` })
   }, [addNodes, data.extractedFrames?.length, data.width, getNode, id, toast])
 
-  // 截取当前帧（复用 VideoSceneExtraction 的 capture_frame）
-  const handleExtractFrame = useCallback(async (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (!data.videoUrl) return
+  // 截取指定时间的帧
+  const captureFrameAtTime = useCallback(async (timestamp: number, label: string): Promise<string | null> => {
+    if (!data.videoUrl) return null
 
-    setIsExtracting(true)
     try {
-      const timestamp = currentTime || 0
       const outputPath = `${data.videoUrl}_frame_${Date.now()}.jpg`
 
       const result = await invoke<string>('capture_frame', {
@@ -200,12 +197,33 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
       const updatedFrames = [...(data.extractedFrames || []), newFrame]
       updateNodeData(id, { ...data, extractedFrames: updatedFrames })
 
-      // 自动添加到画布
       addFrameToCanvas(result, timestamp)
-    } catch (error) {
+
+      toast({ title: `${label}已截取`, description: `${timestamp.toFixed(1)}s` })
+
+      return result
+    } catch {
       // 如果 Rust 命令不存在，使用 canvas 方式
       if (videoRef.current) {
         const video = videoRef.current
+        const wasPlaying = !video.paused
+        if (wasPlaying) video.pause()
+
+        // 跳转到指定时间
+        const origTime = video.currentTime
+        video.currentTime = timestamp
+
+        await new Promise<void>((resolve) => {
+          const onSeeked = () => {
+            video.removeEventListener('seeked', onSeeked)
+            resolve()
+          }
+          video.addEventListener('seeked', onSeeked)
+        })
+
+        // 等待一帧渲染
+        await new Promise(resolve => requestAnimationFrame(resolve))
+
         const canvas = document.createElement('canvas')
         canvas.width = video.videoWidth
         canvas.height = video.videoHeight
@@ -224,24 +242,62 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
 
             const newFrame = {
               id: `frame_${Date.now()}`,
-              timestamp: currentTime,
+              timestamp,
               imageUrl: savedPath,
             }
 
             const updatedFrames = [...(data.extractedFrames || []), newFrame]
             updateNodeData(id, { ...data, extractedFrames: updatedFrames })
 
-            // 自动添加到画布
-            addFrameToCanvas(savedPath, currentTime)
+            addFrameToCanvas(savedPath, timestamp)
+
+            toast({ title: `${label}已截取`, description: `${timestamp.toFixed(1)}s` })
+
+            return savedPath
           } catch (err) {
             toast({ title: '帧提取失败', description: String(err), variant: 'destructive' })
           }
         }
+
+        // 恢复原始时间
+        video.currentTime = origTime
+        if (wasPlaying) video.play()
       }
-    } finally {
-      setIsExtracting(false)
+      return null
     }
-  }, [addFrameToCanvas, currentProjectId, currentEpisodeId, currentTime, data, id, toast, updateNodeData])
+  }, [addFrameToCanvas, currentProjectId, currentEpisodeId, data, id, toast, updateNodeData])
+
+  // 截取当前帧
+  const handleExtractFrame = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIsExtracting(true)
+    await captureFrameAtTime(currentTime || 0, '当前帧')
+    setIsExtracting(false)
+  }, [captureFrameAtTime, currentTime])
+
+  // 截取首帧
+  const handleCaptureFirstFrame = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIsExtracting(true)
+    const result = await captureFrameAtTime(0, '首帧')
+    if (result) {
+      updateNodeData(id, { ...data, firstFrameUrl: result } as VideoUploadNodeData)
+    }
+    setIsExtracting(false)
+  }, [captureFrameAtTime, data, id, updateNodeData])
+
+  // 截取尾帧
+  const handleCaptureLastFrame = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!data.duration) return
+    setIsExtracting(true)
+    const lastFrameTime = data.duration
+    const result = await captureFrameAtTime(lastFrameTime, '尾帧')
+    if (result) {
+      updateNodeData(id, { ...data, lastFrameUrl: result } as VideoUploadNodeData)
+    }
+    setIsExtracting(false)
+  }, [captureFrameAtTime, data, id, updateNodeData])
 
   // 分镜拆解 - 复用 FFmpeg 场景检测
   const handleSceneDetection = useCallback(async (e: React.MouseEvent) => {
@@ -344,6 +400,33 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
         {data.videoUrl && (
           <div className="flex items-center gap-1">
             <button
+              onClick={handleCaptureFirstFrame}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="p-0.5 hover:bg-muted rounded transition-colors"
+              title="截取首帧"
+              disabled={isExtracting}
+            >
+              <SkipBack className="h-3 w-3" />
+            </button>
+            <button
+              onClick={handleCaptureLastFrame}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="p-0.5 hover:bg-muted rounded transition-colors"
+              title="截取尾帧"
+              disabled={isExtracting}
+            >
+              <SkipForward className="h-3 w-3" />
+            </button>
+            <button
+              onClick={handleExtractFrame}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="p-0.5 hover:bg-muted rounded transition-colors"
+              title="截取当前帧"
+              disabled={isExtracting}
+            >
+              <Camera className="h-3 w-3" />
+            </button>
+            <button
               onClick={handleSceneDetection}
               onPointerDown={(e) => e.stopPropagation()}
               className="p-0.5 hover:bg-muted rounded transition-colors"
@@ -357,14 +440,6 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
               )}
             </button>
             <button
-              onClick={handleFullscreen}
-              onPointerDown={(e) => e.stopPropagation()}
-              className="p-0.5 hover:bg-muted rounded transition-colors"
-              title="全屏播放"
-            >
-              <Maximize className="h-3 w-3" />
-            </button>
-            <button
               onClick={handleReupload}
               onPointerDown={(e) => e.stopPropagation()}
               className="p-0.5 hover:bg-muted rounded transition-colors"
@@ -373,13 +448,12 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
               <RotateCcw className="h-3 w-3" />
             </button>
             <button
-              onClick={handleExtractFrame}
+              onClick={handleFullscreen}
               onPointerDown={(e) => e.stopPropagation()}
               className="p-0.5 hover:bg-muted rounded transition-colors"
-              title="截取当前帧"
-              disabled={isExtracting}
+              title="全屏播放"
             >
-              <Camera className="h-3 w-3" />
+              <Maximize className="h-3 w-3" />
             </button>
           </div>
         )}
@@ -392,6 +466,7 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
             <video
               ref={videoRef}
               src={videoSource || ''}
+              crossOrigin="anonymous"
               className={cn("w-full h-full", isFullscreen ? 'object-contain' : 'object-cover')}
               preload="auto"
               onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
@@ -416,29 +491,60 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
           </div>
 
           {/* 底部控制栏 */}
-          <div className="flex items-center justify-between px-2 py-1.5 text-[10px] text-muted-foreground bg-muted/20">
-            <button
-              onClick={togglePlay}
-              onPointerDown={(e) => e.stopPropagation()}
-              className="p-0.5 rounded hover:bg-muted transition-colors"
-            >
-              {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-            </button>
-            <span>{formatTime(currentTime)} / {formatTime(data.duration || 0)}</span>
-            <div className="flex items-center gap-1.5">
-              {resolutionText && <span>{resolutionText}</span>}
-              {data.extractedFrames && data.extractedFrames.length > 0 && (
+          <div className="px-2 py-1 text-[10px] text-muted-foreground bg-muted/20 space-y-0.5">
+            {/* 进度条 */}
+            <input
+              type="range"
+              min={0}
+              max={data.duration || 0}
+              step={0.1}
+              value={currentTime || 0}
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => {
+                e.stopPropagation()
+                if (videoRef.current) {
+                  videoRef.current.pause()
+                  setIsPlaying(false)
+                }
+              }}
+              onChange={(e) => {
+                const time = parseFloat(e.target.value)
+                setCurrentTime(time)
+                if (videoRef.current) {
+                  videoRef.current.currentTime = time
+                }
+              }}
+              className="w-full h-1 accent-primary cursor-pointer"
+            />
+            {/* 控件行 */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setShowFrames(!showFrames)}
+                  onClick={togglePlay}
                   onPointerDown={(e) => e.stopPropagation()}
-                  className={cn(
-                    "px-1.5 py-0.5 rounded text-[9px] transition-colors",
-                    showFrames ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                  )}
+                  className="p-0.5 rounded hover:bg-muted transition-colors shrink-0"
                 >
-                  {data.extractedFrames.length} 帧
+                  {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
                 </button>
-              )}
+                <span className="tabular-nums">{formatTime(currentTime)} / {formatTime(data.duration || 0)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {resolutionText && (
+                  <span className="text-[9px] text-muted-foreground tabular-nums">{resolutionText}</span>
+                )}
+                {data.extractedFrames && data.extractedFrames.length > 0 && (
+                  <button
+                    onClick={() => setShowFrames(!showFrames)}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className={cn(
+                      "px-1.5 py-0.5 rounded text-[9px] transition-colors",
+                      showFrames ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                    )}
+                  >
+                    {data.extractedFrames.length} 帧
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 

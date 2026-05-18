@@ -1,5 +1,6 @@
-import type { NodeDefinition, CanvasNodeType } from '../types'
 import { CANVAS_NODE_TYPES, DEFAULT_ASPECT_RATIO } from '../types'
+
+import type { NodeDefinition, CanvasNodeType } from '../types'
 
 export const nodeDefinitions: NodeDefinition[] = [
   // ==================== 输入 ====================
@@ -185,6 +186,31 @@ export const nodeDefinitions: NodeDefinition[] = [
     },
   },
 
+  // ==================== 视频反推 ====================
+  {
+    type: CANVAS_NODE_TYPES.videoReverse,
+    label: '视频反推',
+    category: 'video',
+    description: '使用AI分析视频内容，提取角色、场景、动作信息',
+    inputs: [
+      { id: 'target', name: 'target', type: 'data', label: '视频', required: true },
+    ],
+    outputs: [
+      { id: 'prompt', name: 'prompt', type: 'data', label: '分析结果' },
+    ],
+    defaultProperties: {
+      videoUrl: null,
+      prompt: '',
+      description: '',
+      characters: [],
+      scenes: [],
+      summary: '',
+      tags: [],
+      extractedFrames: [],
+      isAnalyzing: false,
+    },
+  },
+
   // ==================== 视频生成 ====================
   {
     type: CANVAS_NODE_TYPES.videoGen,
@@ -293,6 +319,7 @@ export function getDefaultNodeDimensions(type: CanvasNodeType) {
     [CANVAS_NODE_TYPES.audioUpload]: { width: 280, height: 140 },
     [CANVAS_NODE_TYPES.imageToPrompt]: { width: 360, height: 420 },
     [CANVAS_NODE_TYPES.imageCompare]: { width: 320, height: 280 },
+    [CANVAS_NODE_TYPES.videoReverse]: { width: 420, height: 560 },
   }
   return defaults[type]
 }
@@ -319,6 +346,7 @@ export const NODE_HANDLES: Record<string, { source: string[]; target: string[] }
   [CANVAS_NODE_TYPES.audioUpload]: { source: ['audio'], target: ['target'] },
   [CANVAS_NODE_TYPES.imageToPrompt]: { source: ['prompt'], target: ['target'] },
   [CANVAS_NODE_TYPES.imageCompare]: { source: [], target: ['left', 'right'] },
+  [CANVAS_NODE_TYPES.videoReverse]: { source: ['prompt'], target: ['target'] },
 }
 
 export function isValidEdge(

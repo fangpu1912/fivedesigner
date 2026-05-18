@@ -33,7 +33,9 @@ class VendorConfigService {
     
     if (vendorsData) {
       // 正常情况：使用保存的配置
-      this.vendors = JSON.parse(vendorsData)
+      const savedVendors: VendorConfig[] = JSON.parse(vendorsData)
+      // 清理已不存在的供应商（如 seedData 中删除的）
+      this.vendors = savedVendors.filter(sv => defaultVendors.some(dv => dv.id === sv.id))
       // 自动同步 code 字段：确保已保存的供应商使用最新的源代码
       let codeUpdated = false
       for (const vendor of this.vendors) {
@@ -43,7 +45,7 @@ class VendorConfigService {
           codeUpdated = true
         }
       }
-      if (codeUpdated) {
+      if (codeUpdated || savedVendors.length !== this.vendors.length) {
         await this.saveVendors()
       }
     } else {

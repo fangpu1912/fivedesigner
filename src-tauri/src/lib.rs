@@ -341,6 +341,101 @@ async fn http_proxy(request: HttpRequest) -> Result<HttpResponse, String> {
     })
 }
 
+// HTTP 请求命令（供供应商代码使用，绕过 CORS）
+#[derive(Serialize, Deserialize, Debug)]
+pub struct HttpRequestArgs {
+    pub url: String,
+    pub method: Option<String>,
+    pub headers: Option<serde_json::Value>,
+    pub body: Option<String>,
+    pub timeout: Option<u64>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct HttpRequestResult {
+    pub success: bool,
+    pub status: u16,
+    pub headers: serde_json::Value,
+    pub body: String,
+    pub error: Option<String>,
+}
+
+#[tauri::command]
+async fn http_request(request: HttpRequestArgs) -> Result<HttpRequestResult, String> {
+    let timeout = request.timeout.unwrap_or(60000);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_millis(timeout))
+        .danger_accept_invalid_certs(true)  // 接受无效证书（用于测试）
+        .build()
+        .map_err(|e| format!("Failed to create client: {}", e))?;
+    
+    let method = request.method.unwrap_or_else(|| "GET".to_string());
+    let mut req_builder = match method.to_uppercase().as_str() {
+        "GET" => client.get(&request.url),
+        "POST" => client.post(&request.url),
+        "PUT" => client.put(&request.url),
+        "DELETE" => client.delete(&request.url),
+        "PATCH" => client.patch(&request.url),
+        _ => return Err(format!("Unsupported HTTP method: {}", method)),
+    };
+
+    // 添加默认 User-Agent
+    req_builder = req_builder.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+
+    if let Some(headers) = request.headers {
+        if let Some(headers_obj) = headers.as_object() {
+            for (key, value) in headers_obj {
+                if let Some(val_str) = value.as_str() {
+                    req_builder = req_builder.header(key, val_str);
+                }
+            }
+        }
+    }
+
+    if let Some(body) = request.body {
+        req_builder = req_builder.body(body);
+    }
+
+    let response = req_builder
+        .send()
+        .await;
+
+    match response {
+        Ok(resp) => {
+            let status = resp.status().as_u16();
+            
+            let mut headers_map = serde_json::Map::new();
+            for (key, value) in resp.headers() {
+                if let Ok(val_str) = value.to_str() {
+                    headers_map.insert(key.to_string(), serde_json::Value::String(val_str.to_string()));
+                }
+            }
+
+            let body = resp
+                .text()
+                .await
+                .unwrap_or_default();
+
+            Ok(HttpRequestResult {
+                success: status >= 200 && status < 300,
+                status,
+                headers: serde_json::Value::Object(headers_map),
+                body,
+                error: None,
+            })
+        }
+        Err(e) => {
+            Ok(HttpRequestResult {
+                success: false,
+                status: 0,
+                headers: serde_json::Value::Object(serde_json::Map::new()),
+                body: String::new(),
+                error: Some(format!("Request failed: {}", e)),
+            })
+        }
+    }
+}
+
 #[tauri::command]
 async fn get_app_data_dir(app: AppHandle) -> Result<String, String> {
     let path = app
@@ -2179,6 +2274,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             http_proxy,
+            http_request,
             get_app_data_dir,
             ensure_data_dir,
             save_file,

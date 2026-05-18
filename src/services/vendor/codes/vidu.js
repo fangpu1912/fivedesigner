@@ -1,4 +1,3 @@
-// Vidu供应商代码
 class Vendor {
   constructor(config) {
     this.config = config;
@@ -30,7 +29,7 @@ class Vendor {
         const blob = new Blob([Buffer.from(compressed, "base64")], { type: "image/jpeg" });
         formData.append("last_frame", blob, "last_frame.jpg");
       }
-      
+
       if (input.referenceImages && input.referenceImages.length > 0) {
         for (let i = 0; i < input.referenceImages.length; i++) {
           const base64 = input.referenceImages[i];
@@ -49,9 +48,47 @@ class Vendor {
         },
         body: formData,
       });
-      
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error("视频生成任务提交失败: " + error);
+      }
+
       const data = await response.json();
-      return data.task_id || data.id || "";
+      const taskId = data.task_id || data.id || data.data?.task_id;
+
+      if (!taskId) {
+        throw new Error("视频生成任务提交失败: 未返回任务ID");
+      }
+
+      const result = await pollTask(async () => {
+        const queryRes = await fetch(this.baseUrl + '/tasks/' + taskId + '/creations', {
+          headers: { Authorization: "Bearer " + this.apiKey },
+        });
+
+        if (!queryRes.ok) return { completed: false };
+
+        const queryData = await queryRes.json();
+        const state = queryData.state || queryData.status;
+
+        if (state === "success" || state === "succeed" || state === "completed") {
+          const creations = queryData.creations;
+          if (creations && creations.length > 0) {
+            return { completed: true, data: creations[0].url };
+          }
+          const videoUrl = queryData.video_url || queryData.url || queryData.data?.url;
+          if (videoUrl) {
+            return { completed: true, data: videoUrl };
+          }
+          return { completed: true, error: "视频生成成功但未返回视频URL" };
+        } else if (state === "failed" || state === "error") {
+          return { completed: true, error: "视频生成失败: " + (queryData.err_code || queryData.error || "未知错误") };
+        }
+        return { completed: false };
+      }, { interval: 5000, maxAttempts: 120 });
+
+      if (result.error) throw new Error(result.error);
+      return result.data;
     };
   }
 
@@ -79,9 +116,43 @@ class Vendor {
         },
         body: formData,
       });
-      
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error("图片生成任务提交失败: " + error);
+      }
+
       const data = await response.json();
-      return data.url || data.data?.[0]?.url || "";
+      const taskId = data.task_id || data.id || data.data?.task_id;
+
+      if (!taskId) {
+        return data.url || data.data?.[0]?.url || "";
+      }
+
+      const result = await pollTask(async () => {
+        const queryRes = await fetch(this.baseUrl + '/tasks/' + taskId + '/creations', {
+          headers: { Authorization: "Bearer " + this.apiKey },
+        });
+
+        if (!queryRes.ok) return { completed: false };
+
+        const queryData = await queryRes.json();
+        const state = queryData.state || queryData.status;
+
+        if (state === "success" || state === "succeed" || state === "completed") {
+          const creations = queryData.creations;
+          if (creations && creations.length > 0) {
+            return { completed: true, data: creations[0].url };
+          }
+          return { completed: true, data: queryData.url || data.data?.url || "" };
+        } else if (state === "failed" || state === "error") {
+          return { completed: true, error: "图片生成失败: " + (queryData.err_code || queryData.error || "未知错误") };
+        }
+        return { completed: false };
+      }, { interval: 3000, maxAttempts: 120 });
+
+      if (result.error) throw new Error(result.error);
+      return result.data;
     };
   }
 }

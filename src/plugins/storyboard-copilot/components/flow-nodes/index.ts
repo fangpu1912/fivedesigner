@@ -1,21 +1,23 @@
-import type { NodeTypes, EdgeTypes } from '@xyflow/react'
 import { CANVAS_NODE_TYPES } from '../../types'
 
-import { UploadNode } from './UploadNode'
-import { ImageEditNode } from './ImageEditNode'
 import { AIImageEditNode } from './AIImageEditNode'
-import { BlankImageNode } from './BlankImageNode'
-import { StoryboardNode } from './StoryboardNode'
-import { SceneDirectorNode } from './SceneDirectorNode'
-import { TextAnnotationNode } from './TextAnnotationNode'
-import { UpscaleNode } from './UpscaleNode'
-import { VideoGenNode } from './VideoGenNode'
-import { VideoUploadNode } from './VideoUploadNode'
 import { AudioUploadNode } from './AudioUploadNode'
-import { ImageToPromptNode } from './ImageToPromptNode'
-import { ImageCompareNode } from './ImageCompareNode'
+import { BlankImageNode } from './BlankImageNode'
 import { CustomEdge } from './CustomEdge'
 import { ExecutionStatusBadge, NodeExecutionOverlay, type ExecutionStatus } from './ExecutionStatusBadge'
+import { ImageCompareNode } from './ImageCompareNode'
+import { ImageEditNode } from './ImageEditNode'
+import { ImageToPromptNode } from './ImageToPromptNode'
+import { SceneDirectorNode } from './SceneDirectorNode'
+import { StoryboardNode } from './StoryboardNode'
+import { TextAnnotationNode } from './TextAnnotationNode'
+import { UploadNode } from './UploadNode'
+import { UpscaleNode } from './UpscaleNode'
+import { VideoGenNode } from './VideoGenNode'
+import { VideoReverseNode } from './VideoReverseNode'
+import { VideoUploadNode } from './VideoUploadNode'
+
+import type { NodeTypes, EdgeTypes } from '@xyflow/react'
 
 export const nodeTypes = {
   [CANVAS_NODE_TYPES.upload]: UploadNode,
@@ -31,6 +33,7 @@ export const nodeTypes = {
   [CANVAS_NODE_TYPES.audioUpload]: AudioUploadNode,
   [CANVAS_NODE_TYPES.imageToPrompt]: ImageToPromptNode,
   [CANVAS_NODE_TYPES.imageCompare]: ImageCompareNode,
+  [CANVAS_NODE_TYPES.videoReverse]: VideoReverseNode,
 } as unknown as NodeTypes
 
 export const edgeTypes = {
@@ -41,6 +44,6 @@ export {
   UploadNode, ImageEditNode, AIImageEditNode, BlankImageNode, StoryboardNode,
   SceneDirectorNode, TextAnnotationNode, UpscaleNode, CustomEdge, VideoGenNode,
   VideoUploadNode, AudioUploadNode, ImageToPromptNode,
-  ImageCompareNode,
+  ImageCompareNode, VideoReverseNode,
   ExecutionStatusBadge, NodeExecutionOverlay, type ExecutionStatus
 }

@@ -16,6 +16,7 @@ export const CANVAS_NODE_TYPES = {
   audioUpload: 'audioUploadNode',
   imageToPrompt: 'imageToPromptNode',
   imageCompare: 'imageCompareNode',
+  videoReverse: 'videoReverseNode',
 } as const
 
 export type CanvasNodeType = (typeof CANVAS_NODE_TYPES)[keyof typeof CANVAS_NODE_TYPES]
@@ -246,6 +247,8 @@ export interface VideoUploadNodeData extends NodeDisplayData {
   frameRate?: number
   width?: number
   height?: number
+  firstFrameUrl?: string | null
+  lastFrameUrl?: string | null
   extractedFrames?: Array<{
     id: string
     timestamp: number
@@ -265,11 +268,35 @@ export interface AudioUploadNodeData extends NodeDisplayData {
 // 图片提示词反推节点数据
 export interface ImageToPromptNodeData extends NodeDisplayData {
   imageUrl: string | null
-  prompt: string // 下游节点通过 useUpstreamData 获取
+  prompt: string
   promptZh: string
   promptEn: string
   tags: string[]
   jsonResult: Record<string, unknown>
+  isAnalyzing: boolean
+}
+
+// 视频反推节点数据
+export interface VideoReverseNodeData extends NodeDisplayData {
+  videoUrl: string | null
+  prompt: string
+  description: string
+  characters: Array<{
+    name: string
+    description: string
+    prompt: string
+  }>
+  scenes: Array<{
+    name: string
+    description: string
+    prompt: string
+  }>
+  summary: string
+  tags: string[]
+  extractedFrames: Array<{
+    timestamp: number
+    imageUrl: string | null
+  }>
   isAnalyzing: boolean
 }
 
@@ -290,6 +317,7 @@ export type CanvasNodeData =
   | VideoUploadNodeData
   | AudioUploadNodeData
   | ImageToPromptNodeData
+  | VideoReverseNodeData
 
 // ==================== 画布类型 ====================
 export interface CanvasNode {

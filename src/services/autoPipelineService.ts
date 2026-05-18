@@ -4,6 +4,7 @@ import { characterDB, sceneDB, propDB, storyboardDB, dubbingDB } from '@/db'
 import { createProductionScheduler, type ProductionTask, type ProductionProgress } from '@/services/productionAgentService'
 import { saveGeneratedImage, saveGeneratedVideo, saveGeneratedAudio } from '@/utils/mediaStorage'
 import { getImageUrl, getVideoUrl, getAudioUrl } from '@/utils/asset'
+import { imagePathToBase64 } from '@/utils/imageUtils'
 import logger from '@/utils/logger'
 import {
   runPipeline,
@@ -361,12 +362,15 @@ export class AutoPipelineService {
       const sb = await storyboardDB.getById(storyboardId)
       if (!sb) throw new Error('分镜不存在')
 
-      const imageUrl = getImageUrl(sb.image) || sb.image
+      let firstImageBase64: string | undefined
+      if (sb.image) {
+        firstImageBase64 = await imagePathToBase64(sb.image) || undefined
+      }
 
       const videoUrl = await AI.Video.generate(
         {
           prompt: sb.video_prompt || sb.prompt || sb.description || '',
-          firstImageBase64: imageUrl,
+          firstImageBase64,
           width: 1280,
           height: 720,
           duration: 5,

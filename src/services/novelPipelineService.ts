@@ -19,7 +19,6 @@ export interface PipelineCharacter {
   name: string
   description: string
   prompt: string
-  staticViews?: string
   wardrobeVariants?: string
   voiceProfile?: string
 }

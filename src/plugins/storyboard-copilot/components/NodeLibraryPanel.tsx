@@ -1,4 +1,5 @@
 import { useState } from 'react'
+
 import {
   Upload,
   Wand2,
@@ -16,14 +17,16 @@ import {
   View,
   Box,
   SplitSquareHorizontal,
+  Clapperboard,
 } from 'lucide-react'
 
-import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
-import type { CanvasNodeType } from '../types'
 import { CANVAS_NODE_TYPES } from '../types'
 import { nodeCategories, getNodeDefinition } from '../utils'
+
+import type { CanvasNodeType } from '../types'
 
 interface NodeLibraryPanelProps {
   onAddNode: (type: CanvasNodeType) => void
@@ -43,6 +46,7 @@ const nodeIcons: Record<CanvasNodeType, React.ReactNode> = {
   [CANVAS_NODE_TYPES.audioUpload]: <Mic className="h-3.5 w-3.5" />,
   [CANVAS_NODE_TYPES.imageToPrompt]: <Lightbulb className="h-3.5 w-3.5" />,
   [CANVAS_NODE_TYPES.imageCompare]: <SplitSquareHorizontal className="h-3.5 w-3.5" />,
+  [CANVAS_NODE_TYPES.videoReverse]: <Clapperboard className="h-3.5 w-3.5" />,
 }
 
 const _categoryIcons: Record<string, React.ReactNode> = {

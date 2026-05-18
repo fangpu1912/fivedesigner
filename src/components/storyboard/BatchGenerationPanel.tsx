@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 
 import { Play, Pause, SkipForward, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 
@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import type { Storyboard, Character } from '@/types';
 import { getWorkflowConfigs } from '@/services/workflowConfigService';
 import { getComfyUIServerUrl } from '@/services/configService';
 import { ComfyUIClient } from '@/services/comfyui/ComfyUIClient';
@@ -39,6 +38,10 @@ interface BatchGenerationPanelProps {
   type: ItemType;
   episodeId?: string;
   projectId?: string;
+  defaultModelId?: string;
+  defaultComfyUIParams?: ComfyUIParams;
+  defaultGenerationMode?: GenerationMode;
+  modelParams?: Record<string, unknown>;
   onComplete?: (results: Map<string, GenerationResult>) => void;
   onCancel?: () => void;
 }
@@ -54,7 +57,7 @@ interface BatchTask {
 
 type GenerationMode = 'ai' | 'comfyui';
 
-export function BatchGenerationPanel({ items, type, episodeId, projectId, onComplete, onCancel }: BatchGenerationPanelProps) {
+export function BatchGenerationPanel({ items, type, episodeId, projectId, defaultModelId, defaultComfyUIParams, defaultGenerationMode, modelParams, onComplete, onCancel }: BatchGenerationPanelProps) {
   const { toast } = useToast();
   const { data: currentProject } = useProjectQuery(projectId || '');
   const [tasks, setTasks] = useState<BatchTask[]>(() =>
@@ -70,15 +73,15 @@ export function BatchGenerationPanel({ items, type, episodeId, projectId, onComp
   const stopRef = useRef(false);
 
   // 模式选择
-  const [generationMode, setGenerationMode] = useState<GenerationMode>('ai');
+  const [generationMode, setGenerationMode] = useState<GenerationMode>(defaultGenerationMode || 'ai');
 
   // AI 模式
-  const [selectedModelId, setSelectedModelId] = useState('');
+  const [selectedModelId, setSelectedModelId] = useState(defaultModelId || '');
 
   // ComfyUI 模式
   const [workflowConfigs, setWorkflowConfigs] = useState<WorkflowConfig[]>([]);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>('');
-  const [comfyUIParams, setComfyUIParams] = useState<ComfyUIParams>({});
+  const [comfyUIParams, setComfyUIParams] = useState<ComfyUIParams>(defaultComfyUIParams || {});
   const getComfyUIParamsRef = useRef<(() => ComfyUIParams) | null>(null);
   const comfyUIClientRef = useRef<ComfyUIClient | null>(null);
 
@@ -141,11 +144,6 @@ export function BatchGenerationPanel({ items, type, episodeId, projectId, onComp
 
   // 当前正在运行的任务索引
   const currentIndex = tasks.findIndex((t) => t.status === 'running');
-
-  const getItemPrompt = (item: BatchItem): string => {
-    // 简化：仅使用 prompt 字段，没有提示词返回空字符串
-    return item.prompt || '';
-  };
 
   // 监听全局任务队列状态，同步更新本地 UI
   useEffect(() => {
@@ -218,7 +216,7 @@ export function BatchGenerationPanel({ items, type, episodeId, projectId, onComp
           generationMode,
           modelId: selectedModelId,
           workflowId: selectedWorkflowId,
-          params: comfyUIParams,
+          params: { ...comfyUIParams, ...modelParams },
           projectId,
           episodeId,
         },

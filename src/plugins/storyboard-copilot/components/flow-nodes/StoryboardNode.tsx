@@ -327,20 +327,30 @@ export const StoryboardNode = memo(({ id, data, selected }: StoryboardNodeProps)
     updateNodeInternals(id)
   }, [id, updateNodeInternals])
 
+  // 同步 data 到本地 state
   useEffect(() => {
     if (data.frames && data.frames !== frames) {
       setFrames(data.frames)
     }
+  }, [data.frames, frames])
+
+  useEffect(() => {
     if (data.gridRows !== undefined && data.gridRows !== rows) {
       setRows(data.gridRows)
     }
+  }, [data.gridRows, rows])
+
+  useEffect(() => {
     if (data.gridCols !== undefined && data.gridCols !== cols) {
       setCols(data.gridCols)
     }
+  }, [data.gridCols, cols])
+
+  useEffect(() => {
     if (data.gap !== undefined && data.gap !== gap) {
       setGap(data.gap)
     }
-  }, [data.frames, data.gridRows, data.gridCols, data.gap])
+  }, [data.gap, gap])
 
   useEffect(() => {
     if (data._executeTrigger && data._executeTrigger !== lastExecuteTrigger.current) {
@@ -352,11 +362,16 @@ export const StoryboardNode = memo(({ id, data, selected }: StoryboardNodeProps)
       if (inputImageUrl) {
         performSplit(inputImageUrl)
       } else if (inputFrames && inputFrames.length > 0) {
+        // 使用传入的行列设置或保持当前设置
+        const newRows = data.gridRows || rows
+        const newCols = data.gridCols || cols
         setFrames(inputFrames)
-        updateNodeData(id, { frames: inputFrames })
+        setRows(newRows)
+        setCols(newCols)
+        updateNodeData(id, { frames: inputFrames, gridRows: newRows, gridCols: newCols })
       }
     }
-  }, [data._executeTrigger, data.inputImageUrl, data.inputFrames])
+  }, [data._executeTrigger, data.inputImageUrl, data.inputFrames, data.gridRows, data.gridCols, rows, cols, id, updateNodeData])
 
   const performSplit = async (imageUrl: string) => {
     setIsExecuting(true)

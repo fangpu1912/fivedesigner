@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Video, Music } from 'lucide-react'
+import { Video, Music, ImageIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getImageUrl, getVideoUrl } from '@/utils/asset'
 
@@ -117,5 +117,12 @@ export function MediaThumbnail({ url, mediaType, alt = '', className, iconClassN
   }
 
   const imageSrc = getImageUrl(url) ?? url
+  if (!imageSrc) {
+    return (
+      <div className={cn('w-full h-full bg-muted flex items-center justify-center', className)}>
+        <ImageIcon className={cn('w-6 h-6 text-muted-foreground', iconClassName)} />
+      </div>
+    )
+  }
   return <img src={imageSrc} alt={alt} className={cn('w-full h-full object-cover', className)} />
 }

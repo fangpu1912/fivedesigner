@@ -137,26 +137,104 @@ export function ImagePreviewDialog({
 
       if (!savePath) return
 
-      const isLocalFile = currentSrc.startsWith('file://') || currentSrc.startsWith('asset://')
-
-      if (isLocalFile) {
+      // 处理 data: URL (base64 图片)
+      if (currentSrc.startsWith('data:')) {
+        // 解析 data URL
+        const match = currentSrc.match(/^data:([^;]+);base64,(.+)$/)
+        if (!match) {
+          throw new Error('无法解析 data URL')
+        }
+        const base64Data = match[2]
+        const binaryData = atob(base64Data)
+        const uint8Array = new Uint8Array(binaryData.length)
+        for (let i = 0; i < binaryData.length; i++) {
+          uint8Array[i] = binaryData.charCodeAt(i)
+        }
+        await writeFile(savePath, uint8Array)
+      } else if (currentSrc.startsWith('file://') || currentSrc.startsWith('asset://') || currentSrc.includes('asset.localhost')) {
+        // 本地文件
         let filePath = currentSrc
         if (filePath.startsWith('file://')) {
           filePath = decodeURIComponent(filePath.slice(7))
         } else if (filePath.startsWith('asset://')) {
           filePath = decodeURIComponent(filePath.slice(8))
+        } else if (filePath.includes('asset.localhost')) {
+          // 处理 http://asset.localhost/E%3A%5Cpath%5Cto%5Cfile.png 格式
+          try {
+            const urlObj = new URL(filePath)
+            filePath = decodeURIComponent(urlObj.pathname)
+            if (filePath.startsWith('/')) {
+              filePath = filePath.substring(1)
+            }
+          } catch {
+            console.error('无法解析 asset.localhost URL:', filePath)
+            throw new Error('无法解析本地文件路径')
+          }
         }
 
         const fileData = await readFile(filePath)
         await writeFile(savePath, fileData)
       } else {
-        const response = await fetch(currentSrc)
-        const blob = await response.blob()
-        const arrayBuffer = await blob.arrayBuffer()
-        await writeFile(savePath, new Uint8Array(arrayBuffer))
+        // 使用流式下载处理大文件
+        const response = await fetch(currentSrc, {
+          headers: {
+            'Accept': 'image/*,*/*',
+          },
+        })
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        }
+
+        const contentLength = response.headers.get('content-length')
+        const totalSize = contentLength ? parseInt(contentLength, 10) : 0
+
+        // 对于大文件，使用流式读取
+        if (totalSize > 10 * 1024 * 1024) { // 大于 10MB
+          const reader = response.body?.getReader()
+          if (!reader) {
+            throw new Error('无法读取响应流')
+          }
+
+          const chunks: Uint8Array[] = []
+          let receivedSize = 0
+
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+
+            chunks.push(value)
+            receivedSize += value.length
+
+            // 可以在这里添加进度回调
+            if (totalSize > 0) {
+              const progress = Math.round((receivedSize / totalSize) * 100)
+              console.log(`下载进度: ${progress}%`)
+            }
+          }
+
+          // 合并所有 chunks
+          const allChunks = new Uint8Array(receivedSize)
+          let position = 0
+          for (const chunk of chunks) {
+            allChunks.set(chunk, position)
+            position += chunk.length
+          }
+
+          await writeFile(savePath, allChunks)
+        } else {
+          // 小文件使用原来的方式
+          const blob = await response.blob()
+          const arrayBuffer = await blob.arrayBuffer()
+          await writeFile(savePath, new Uint8Array(arrayBuffer))
+        }
       }
+
+      // 显示成功提示
+      console.log('下载成功:', savePath)
     } catch (error) {
       console.error('下载失败:', error)
+      alert(`下载失败: ${error instanceof Error ? error.message : '未知错误'}`)
     }
   }
 

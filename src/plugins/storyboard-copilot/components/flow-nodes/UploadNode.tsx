@@ -1,6 +1,6 @@
 import { memo, useCallback, useState, useRef, useEffect } from 'react'
 import { Handle, Position, type NodeProps, useReactFlow, useEdges } from '@xyflow/react'
-import { Upload, X, ZoomIn, Pencil, Crop } from 'lucide-react'
+import { Upload, X, ZoomIn, Pencil, Crop, FlipHorizontal } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { getImageUrl } from '@/utils/asset'
@@ -182,6 +182,35 @@ export const UploadNode = memo(({ id, data, selected }: UploadNodeProps) => {
 
   const imageSource = data.imageUrl ? getImageUrl(data.imageUrl) : null
 
+  // 左右翻转
+  const handleFlipHorizontal = useCallback(async () => {
+    if (!imageSource) return
+    try {
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      img.src = imageSource
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve()
+        img.onerror = () => reject(new Error('图片加载失败'))
+      })
+
+      const canvas = document.createElement('canvas')
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      const ctx = canvas.getContext('2d')
+      if (!ctx) throw new Error('无法创建 Canvas 上下文')
+
+      ctx.translate(canvas.width, 0)
+      ctx.scale(-1, 1)
+      ctx.drawImage(img, 0, 0)
+
+      const dataUrl = canvas.toDataURL('image/png')
+      await createNewNode(dataUrl, '翻转')
+    } catch (error) {
+      toast({ title: '翻转失败', description: String(error), variant: 'destructive' })
+    }
+  }, [createNewNode, imageSource, toast])
+
   const imageWidth = (data as Record<string, unknown>).imageWidth as number | undefined
   const imageHeight = (data as Record<string, unknown>).imageHeight as number | undefined
   const resolutionText = imageWidth && imageHeight ? `${imageWidth}×${imageHeight}` : null
@@ -239,28 +268,35 @@ export const UploadNode = memo(({ id, data, selected }: UploadNodeProps) => {
               {resolutionText}
             </span>
           )}
-          {/* 三个操作按钮 */}
-          <div className="absolute inset-0 flex items-center justify-center gap-3 bg-black/40 opacity-0 group-hover/image:opacity-100 transition-opacity">
+          {/* 操作按钮 */}
+          <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 group-hover/image:opacity-100 transition-opacity">
             <button
               onClick={(e) => { e.stopPropagation(); setIsPreviewOpen(true) }}
-              className="w-10 h-10 rounded-lg bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
+              className="w-9 h-9 rounded-lg bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
               title="预览"
             >
-              <ZoomIn className="h-5 w-5 text-white" />
+              <ZoomIn className="h-4.5 w-4.5 text-white" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); setIsEditorOpen(true) }}
-              className="w-10 h-10 rounded-lg bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
+              className="w-9 h-9 rounded-lg bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
               title="标注"
             >
-              <Pencil className="h-5 w-5 text-white" />
+              <Pencil className="h-4.5 w-4.5 text-white" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); setIsCropOpen(true) }}
-              className="w-10 h-10 rounded-lg bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
+              className="w-9 h-9 rounded-lg bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
               title="裁剪"
             >
-              <Crop className="h-5 w-5 text-white" />
+              <Crop className="h-4.5 w-4.5 text-white" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleFlipHorizontal() }}
+              className="w-9 h-9 rounded-lg bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
+              title="水平翻转"
+            >
+              <FlipHorizontal className="h-4.5 w-4.5 text-white" />
             </button>
           </div>
         </div>

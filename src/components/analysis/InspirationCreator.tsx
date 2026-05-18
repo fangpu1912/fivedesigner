@@ -34,7 +34,6 @@ interface GeneratedContent {
     name: string
     description: string
     prompt: string
-    staticViews?: string
     wardrobeVariants?: string
   }>
   scenes: Array<{
@@ -51,6 +50,7 @@ interface GeneratedContent {
     description: string
     prompt: string
     videoPrompt: string
+    scene?: string
     characters?: string[]
     props?: string[]
     camera?: string
@@ -90,7 +90,6 @@ function normalizeGeneratedContent(raw: Record<string, unknown>): GeneratedConte
             name: String(obj.name || ''),
             description: String(obj.description || ''),
             prompt: String(obj.prompt || obj.appearance_prompt || ''),
-            staticViews: obj.staticViews ? String(obj.staticViews) : undefined,
             wardrobeVariants: obj.wardrobeVariants ? String(obj.wardrobeVariants) : undefined,
           }
         })
@@ -124,6 +123,7 @@ function normalizeGeneratedContent(raw: Record<string, unknown>): GeneratedConte
             description: String(obj.description || ''),
             prompt: String(obj.prompt || obj.image_prompt || ''),
             videoPrompt: String(obj.videoPrompt || obj.video_prompt || ''),
+            scene: obj.scene ? String(obj.scene) : undefined,
             characters: normalizeStringArray(obj.characters),
             props: normalizeStringArray(obj.props),
             camera: obj.camera ? String(obj.camera) : undefined,
@@ -496,9 +496,7 @@ export function InspirationCreator() {
           .map(name => propIdMap.get(name))
           .filter((id): id is string => !!id)
 
-        const sceneId = sb.characters && sb.characters.length > 0
-          ? undefined
-          : (generatedContent.scenes.length > 0 ? sceneIdMap.values().next().value as string | undefined : undefined)
+        const sceneId = sb.scene ? sceneIdMap.get(sb.scene) : undefined
 
         await storyboardMutations.createStoryboard.mutateAsync({
           project_id: currentProjectId,
@@ -549,9 +547,6 @@ export function InspirationCreator() {
     generatedContent.characters.forEach((char, index) => {
       lines.push(`【角色 ${index + 1}】${char.name}`)
       lines.push(`${char.prompt}`)
-      if (char.staticViews) {
-        lines.push(`${char.staticViews}`)
-      }
       if (char.wardrobeVariants) {
         lines.push(`${char.wardrobeVariants}`)
       }
@@ -886,14 +881,6 @@ export function InspirationCreator() {
                           <div className="text-xs font-medium text-muted-foreground">当前状态剧照</div>
                           <div className="text-xs text-muted-foreground/70 bg-muted p-2 rounded">{char.prompt}</div>
                         </div>
-                        
-                        {/* 静态四视图 */}
-                        {char.staticViews && (
-                          <div className="space-y-1">
-                            <div className="text-xs font-medium text-blue-600">静态四视图（无道具）</div>
-                            <div className="text-xs text-muted-foreground/70 bg-blue-50 p-2 rounded border border-blue-100">{char.staticViews}</div>
-                          </div>
-                        )}
                         
                         {/* 衍生状态四视图 */}
                         {char.wardrobeVariants && (
