@@ -1,6 +1,6 @@
 import { memo, useCallback, useState, useRef, useEffect } from 'react'
 import { Handle, Position, type NodeProps, useReactFlow, useEdges } from '@xyflow/react'
-import { Video, Play, Pause, RotateCcw, Camera, Maximize, LayoutGrid, Loader2, SkipBack, SkipForward } from 'lucide-react'
+import { Video, Play, Pause, RotateCcw, Camera, Maximize, LayoutGrid, Loader2, SkipBack, SkipForward, Scissors } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { getVideoUrl, getImageUrl } from '@/utils/asset'
@@ -13,16 +13,14 @@ import {
   getNodeContainerClass,
   getSourceHandleClass,
   getTargetHandleClass,
-  NODE_MIN_WIDTH,
-  NODE_MIN_HEIGHT,
 } from './NodeStyles'
 import { NodeResizeHandle } from './NodeResizeHandle'
 import { open } from '@tauri-apps/plugin-dialog'
-import { readFile } from '@tauri-apps/plugin-fs'
 import { invoke } from '@tauri-apps/api/core'
 import { canvasEvents } from '../../utils/canvasEvents'
 import { useUpstreamData } from '../../hooks/useUpstreamData'
 import { useEnlargedHandles } from '../../hooks/useEnlargedHandles'
+import { VideoClipDialog } from '../VideoClipDialog'
 
 interface VideoUploadNodeProps extends NodeProps {
   data: VideoUploadNodeData
@@ -37,6 +35,9 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
   const [isDetectingScenes, setIsDetectingScenes] = useState(false)
   const [showFrames, setShowFrames] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [clipDialogOpen, setClipDialogOpen] = useState(false)
+  const [sceneThreshold, setSceneThreshold] = useState(30)
+  const [showThresholdPopover, setShowThresholdPopover] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const currentProjectId = useUIStore((state) => state.currentProjectId)
   const currentEpisodeId = useUIStore((state) => state.currentEpisodeId)
@@ -103,6 +104,19 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
   }, [])
 
+  // 点击外部关闭灵敏度弹窗
+  useEffect(() => {
+    if (!showThresholdPopover) return
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('.threshold-popover')) {
+        setShowThresholdPopover(false)
+      }
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [showThresholdPopover])
+
   const handleUpload = useCallback(async () => {
     try {
       const selected = await open({
@@ -117,31 +131,22 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
       if (!selected) return
 
       const filePath = Array.isArray(selected) ? selected[0] : selected
-      const ext = filePath.split('.').pop() || 'mp4'
-      const fileName = filePath.split(/[/\\]/).pop() || `video_${Date.now()}.${ext}`
+      const fileName = filePath.split(/[/\\]/).pop() || `video_${Date.now()}.mp4`
 
-      const fileData = await readFile(filePath)
-
-      const savedPath = await saveMediaFile(fileData, {
-        projectId: currentProjectId || 'temp',
-        episodeId: currentEpisodeId || 'temp',
-        type: 'video',
-        fileName: `upload_${Date.now()}.${ext}`,
-        extension: ext,
-      })
-
+      // 直接使用原文件路径，避免复制大文件
+      // 只有在需要跨设备/项目共享时才复制
       updateNodeData(id, {
         ...data,
-        videoUrl: savedPath,
+        videoUrl: filePath,
         sourceFileName: fileName,
         extractedFrames: [], // 清空之前提取的帧
       })
 
-      toast({ title: '视频上传成功' })
+      toast({ title: '视频已加载', description: fileName })
     } catch (error) {
-      toast({ title: '上传失败', description: String(error), variant: 'destructive' })
+      toast({ title: '加载失败', description: String(error), variant: 'destructive' })
     }
-  }, [currentProjectId, currentEpisodeId, data, id, toast, updateNodeData])
+  }, [data, id, toast, updateNodeData])
 
   // 重新上传
   const handleReupload = useCallback(async (e: React.MouseEvent) => {
@@ -312,7 +317,7 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
       }>('detect_video_scenes', {
         request: {
           video_path: data.videoUrl,
-          threshold: 0.3,
+          threshold: sceneThreshold / 100,
           output_dir: `${data.videoUrl}_scenes`,
         },
       })
@@ -426,18 +431,62 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
             >
               <Camera className="h-3 w-3" />
             </button>
+            <div className="relative">
+              <button
+                onClick={handleSceneDetection}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="p-0.5 hover:bg-muted rounded transition-colors"
+                title="分镜拆解（FFmpeg 场景检测）"
+                disabled={isDetectingScenes}
+              >
+                {isDetectingScenes ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <LayoutGrid className="h-3 w-3" />
+                )}
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowThresholdPopover(!showThresholdPopover)
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-primary text-[7px] text-primary-foreground rounded-full flex items-center justify-center cursor-pointer hover:bg-primary/90"
+                title="设置检测灵敏度"
+              >
+                {sceneThreshold}
+              </button>
+              {showThresholdPopover && (
+                <div
+                  className="threshold-popover absolute top-full left-1/2 -translate-x-1/2 mt-1 w-40 p-2 bg-popover border rounded-md shadow-lg z-50"
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[10px]">
+                      <span className="text-muted-foreground">灵敏度</span>
+                      <span>{sceneThreshold}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={10}
+                      max={90}
+                      value={sceneThreshold}
+                      onChange={(e) => setSceneThreshold(Number(e.target.value))}
+                      className="w-full h-1 accent-primary cursor-pointer"
+                    />
+                    <p className="text-[8px] text-muted-foreground">值越小越灵敏</p>
+                  </div>
+                </div>
+              )}
+            </div>
             <button
-              onClick={handleSceneDetection}
+              onClick={() => setClipDialogOpen(true)}
               onPointerDown={(e) => e.stopPropagation()}
               className="p-0.5 hover:bg-muted rounded transition-colors"
-              title="分镜拆解（FFmpeg 场景检测）"
-              disabled={isDetectingScenes}
+              title="截取视频片段"
             >
-              {isDetectingScenes ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <LayoutGrid className="h-3 w-3" />
-              )}
+              <Scissors className="h-3 w-3" />
             </button>
             <button
               onClick={handleReupload}
@@ -468,7 +517,7 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
               src={videoSource || ''}
               crossOrigin="anonymous"
               className={cn("w-full h-full", isFullscreen ? 'object-contain' : 'object-cover')}
-              preload="auto"
+              preload="metadata"
               onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
               onEnded={() => setIsPlaying(false)}
             />
@@ -598,6 +647,18 @@ export const VideoUploadNode = memo(({ id, data, selected }: VideoUploadNodeProp
         minHeight={120}
         maxWidth={800}
         maxHeight={800}
+      />
+
+      {/* 视频截取弹窗 */}
+      <VideoClipDialog
+        open={clipDialogOpen}
+        onClose={() => setClipDialogOpen(false)}
+        videoUrl={data.videoUrl || ''}
+        videoDuration={data.duration}
+        videoFps={data.frameRate}
+        projectId={currentProjectId || undefined}
+        episodeId={currentEpisodeId || undefined}
+        sourceNodeId={id}
       />
     </div>
   )

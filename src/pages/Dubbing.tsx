@@ -9,7 +9,7 @@ import { ComfyUIClient } from '@/services/comfyui/ComfyUIClient'
 import { getComfyUIServerUrl } from '@/services/configService'
 import { getWorkflowConfigs } from '@/services/workflowConfigService'
 import { type WorkflowConfig } from '@/types'
-import { pollComfyUIHistoryUntilDone, extractComfyUIMediaOutputs } from '@/services/comfyui/resultUtils'
+
 import {
   type ComfyUIParams,
 } from '@/components/ai'
@@ -316,7 +316,7 @@ export function Dubbing() {
 
         initialDubbings[storyboard.id] = {}
         const storyboardDubbingsMap = initialDubbings[storyboard.id]
-        if (!storyboardDubbingsMap) return initialDubbings
+        if (!storyboardDubbingsMap) return
 
         let sequence = 0
 

@@ -308,7 +308,7 @@ export function PromptDiffViewer({ oldVersion, newVersion, onClose }: PromptDiff
               <div className="text-sm font-mono">
                 {filteredDiff.map((line, index) => (
                   <div
-                    key={index}
+                    key={'line-' + index}
                     className={cn(
                       'px-3 py-0.5 flex',
                       line.type === 'added' && 'bg-green-100',

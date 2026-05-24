@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactCrop, { centerCrop, makeAspectCrop, type Crop, type PixelCrop } from 'react-image-crop'
 import 'react-image-crop/dist/ReactCrop.css'
 
-import { Check, RotateCcw } from 'lucide-react'
+import { Check, RotateCcw, Lock, Unlock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { getImageUrl } from '@/utils/asset'
 import { useToast } from '@/hooks/useToast'
 
@@ -64,21 +65,24 @@ const RATIO_OPTIONS = [
   { label: '3:4', value: '3:4' },
 ]
 
-export function ImageCropDialog({ 
-  open, 
-  imageUrl, 
-  onClose, 
+export function ImageCropDialog({
+  open,
+  imageUrl,
+  onClose,
   onSave,
 }: ImageCropDialogProps) {
   const { toast } = useToast()
   const imageRef = useRef<HTMLImageElement | null>(null)
   const viewportRef = useRef<HTMLDivElement | null>(null)
-  
+
   const [crop, setCrop] = useState<Crop>()
   const [completedCrop, setCompletedCrop] = useState<PixelCrop | null>(null)
   const [aspectMode, setAspectMode] = useState('free')
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 })
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
+  const [customWidth, setCustomWidth] = useState('')
+  const [customHeight, setCustomHeight] = useState('')
+  const [lockAspect, setLockAspect] = useState(false)
 
   const displayUrl = useMemo(() => getImageUrl(imageUrl) || imageUrl, [imageUrl])
 
@@ -88,6 +92,9 @@ export function ImageCropDialog({
     setCompletedCrop(null)
     setAspectMode('free')
     setNaturalSize({ width: 0, height: 0 })
+    setCustomWidth('')
+    setCustomHeight('')
+    setLockAspect(false)
   }, [open, imageUrl])
 
   useEffect(() => {
@@ -127,7 +134,6 @@ export function ImageCropDialog({
     setNaturalSize({ width: image.naturalWidth, height: image.naturalHeight })
   }, [])
 
-  // 初始化默认裁剪区域
   useEffect(() => {
     if (!renderedImageSize) return
     const next = buildDefaultCrop(renderedImageSize.width, renderedImageSize.height, resolvedAspect)
@@ -145,7 +151,6 @@ export function ImageCropDialog({
     }
   }, [renderedImageSize, resolvedAspect])
 
-  // 执行裁剪
   const performCrop = useCallback((pixelCrop: PixelCrop): string | null => {
     if (!renderedImageSize || naturalSize.width <= 0) return null
 
@@ -180,7 +185,6 @@ export function ImageCropDialog({
     }
   }, [renderedImageSize, naturalSize])
 
-  // 裁剪保存
   const handleCrop = useCallback(() => {
     if (!completedCrop) {
       onClose()
@@ -198,7 +202,89 @@ export function ImageCropDialog({
     if (!renderedImageSize) return
     const next = buildDefaultCrop(renderedImageSize.width, renderedImageSize.height, resolvedAspect)
     setCrop(next)
+    setCustomWidth('')
+    setCustomHeight('')
   }, [renderedImageSize, resolvedAspect])
+
+  const applyCustomSize = useCallback((targetW?: number, targetH?: number) => {
+    if (!renderedImageSize || !completedCrop) return
+
+    const scaleX = naturalSize.width / renderedImageSize.width
+    const scaleY = naturalSize.height / renderedImageSize.height
+
+    let newRenderW = completedCrop.width
+    let newRenderH = completedCrop.height
+
+    if (targetW && targetH) {
+      newRenderW = targetW / scaleX
+      newRenderH = targetH / scaleY
+    } else if (targetW) {
+      newRenderW = targetW / scaleX
+      if (lockAspect && completedCrop.height > 0) {
+        newRenderH = newRenderW * (completedCrop.height / completedCrop.width)
+      }
+    } else if (targetH) {
+      newRenderH = targetH / scaleY
+      if (lockAspect && completedCrop.width > 0) {
+        newRenderW = newRenderH * (completedCrop.width / completedCrop.height)
+      }
+    }
+
+    newRenderW = Math.min(newRenderW, renderedImageSize.width)
+    newRenderH = Math.min(newRenderH, renderedImageSize.height)
+
+    let newX = completedCrop.x + (completedCrop.width - newRenderW) / 2
+    let newY = completedCrop.y + (completedCrop.height - newRenderH) / 2
+
+    newX = Math.max(0, Math.min(newX, renderedImageSize.width - newRenderW))
+    newY = Math.max(0, Math.min(newY, renderedImageSize.height - newRenderH))
+
+    const newCrop: PixelCrop = {
+      unit: 'px',
+      x: Math.round(newX),
+      y: Math.round(newY),
+      width: Math.round(newRenderW),
+      height: Math.round(newRenderH),
+    }
+    setCrop(newCrop)
+    setCompletedCrop(newCrop)
+  }, [renderedImageSize, completedCrop, naturalSize, lockAspect])
+
+  const handleCustomWidthChange = useCallback((value: string) => {
+    setCustomWidth(value)
+    const num = parseInt(value, 10)
+    if (!Number.isFinite(num) || num <= 0) return
+    const clamped = Math.min(num, naturalSize.width)
+    if (lockAspect && naturalSize.width > 0 && naturalSize.height > 0) {
+      const ratio = completedCrop ? completedCrop.height / completedCrop.width : naturalSize.height / naturalSize.width
+      applyCustomSize(clamped, Math.round(clamped * ratio))
+    } else {
+      applyCustomSize(clamped, undefined)
+    }
+  }, [naturalSize, lockAspect, completedCrop, applyCustomSize])
+
+  const handleCustomHeightChange = useCallback((value: string) => {
+    setCustomHeight(value)
+    const num = parseInt(value, 10)
+    if (!Number.isFinite(num) || num <= 0) return
+    const clamped = Math.min(num, naturalSize.height)
+    if (lockAspect && naturalSize.width > 0 && naturalSize.height > 0) {
+      const ratio = completedCrop ? completedCrop.width / completedCrop.height : naturalSize.width / naturalSize.height
+      applyCustomSize(Math.round(clamped * ratio), clamped)
+    } else {
+      applyCustomSize(undefined, clamped)
+    }
+  }, [naturalSize, lockAspect, completedCrop, applyCustomSize])
+
+  const currentCropWidth = useMemo(() => {
+    if (!completedCrop || !renderedImageSize || naturalSize.width <= 0) return 0
+    return Math.round(completedCrop.width * naturalSize.width / renderedImageSize.width)
+  }, [completedCrop, renderedImageSize, naturalSize])
+
+  const currentCropHeight = useMemo(() => {
+    if (!completedCrop || !renderedImageSize || naturalSize.height <= 0) return 0
+    return Math.round(completedCrop.height * naturalSize.height / renderedImageSize.height)
+  }, [completedCrop, renderedImageSize, naturalSize])
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -223,6 +309,42 @@ export function ImageCropDialog({
               {item.label}
             </button>
           ))}
+          <div className="h-5 w-px bg-border mx-1" />
+          {/* 自定义宽高输入 */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">宽</span>
+            <Input
+              value={customWidth}
+              onChange={e => handleCustomWidthChange(e.target.value)}
+              placeholder={currentCropWidth > 0 ? String(currentCropWidth) : '宽'}
+              className="h-7 w-24 text-xs text-center"
+              type="number"
+              min={1}
+              max={naturalSize.width || 9999}
+            />
+            <span className="text-xs text-muted-foreground">高</span>
+            <Input
+              value={customHeight}
+              onChange={e => handleCustomHeightChange(e.target.value)}
+              placeholder={currentCropHeight > 0 ? String(currentCropHeight) : '高'}
+              className="h-7 w-24 text-xs text-center"
+              type="number"
+              min={1}
+              max={naturalSize.height || 9999}
+            />
+            <button
+              type="button"
+              className={`rounded p-1 transition-colors ${
+                lockAspect
+                  ? 'text-primary bg-primary/15'
+                  : 'text-muted-foreground hover:bg-muted'
+              }`}
+              onClick={() => setLockAspect(!lockAspect)}
+              title={lockAspect ? '解锁宽高比' : '锁定宽高比'}
+            >
+              {lockAspect ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+            </button>
+          </div>
           <div className="flex-1" />
           <Button variant="outline" size="sm" onClick={handleReset}>
             <RotateCcw className="h-4 w-4 mr-1" />
@@ -280,7 +402,7 @@ export function ImageCropDialog({
             {naturalSize.width > 0 && `原图: ${naturalSize.width} × ${naturalSize.height}`}
             {completedCrop && renderedImageSize && (
               <span className="ml-3">
-                裁剪: {Math.round(completedCrop.width * naturalSize.width / renderedImageSize.width)} × {Math.round(completedCrop.height * naturalSize.height / renderedImageSize.height)}
+                裁剪: {currentCropWidth} × {currentCropHeight}
               </span>
             )}
           </div>

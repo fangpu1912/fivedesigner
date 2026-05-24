@@ -1,7 +1,7 @@
 {
   "identifier": "main-capability",
   "description": "Main window permissions",
-  "windows": ["main", "jimeng-automation"],
+  "windows": ["main", "jimeng-automation", "browser_*"],
   "permissions": [
     "core:default",
     "core:window:default",
@@ -15,6 +15,8 @@
     "core:webview:allow-webview-show",
     "core:webview:allow-webview-hide",
     "core:webview:allow-webview-close",
+    "core:webview:allow-set-webview-focus",
+    "core:window:allow-set-focus",
     "dialog:default",
     "fs:default",
     "fs:allow-appdata-read-recursive",

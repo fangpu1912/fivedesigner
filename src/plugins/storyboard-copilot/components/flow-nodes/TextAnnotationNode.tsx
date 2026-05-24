@@ -1,5 +1,5 @@
 import { memo, useCallback, useState, useEffect, useRef } from 'react'
-import { Handle, Position, type NodeProps, useEdges, useNodes } from '@xyflow/react'
+import { Handle, Position, type NodeProps, useEdges, useNodes, useReactFlow } from '@xyflow/react'
 import { FileText } from 'lucide-react'
 
 import type { TextAnnotationNodeData } from '../../types'
@@ -20,6 +20,7 @@ const MAX_WIDTH = 900
 const MAX_HEIGHT = 900
 
 export const TextAnnotationNode = memo(({ id, data, selected, width, height }: TextAnnotationNodeProps) => {
+  const { updateNodeData } = useReactFlow()
   const [content, setContent] = useState(data.content || '')
   const [displayName, setDisplayName] = useState(data.displayName || '文本标注')
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -69,7 +70,7 @@ export const TextAnnotationNode = memo(({ id, data, selected, width, height }: T
         // 如果有新文本且与当前内容不同，则更新
         if (incomingText && incomingText !== content) {
           setContent(incomingText)
-          data.content = incomingText
+          updateNodeData(id, { ...data, content: incomingText, prompt: incomingText })
         }
       }
     }
@@ -92,14 +93,14 @@ export const TextAnnotationNode = memo(({ id, data, selected, width, height }: T
   const handleContentChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newContent = e.target.value
     setContent(newContent)
-    data.content = newContent
-  }, [data])
+    updateNodeData(id, { ...data, content: newContent, prompt: newContent })
+  }, [data, id, updateNodeData])
 
   const handleTitleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newTitle = e.target.value
     setDisplayName(newTitle)
-    data.displayName = newTitle
-  }, [data])
+    updateNodeData(id, { ...data, displayName: newTitle })
+  }, [data, id, updateNodeData])
 
   const handleTitleBlur = useCallback(() => {
     setIsEditingTitle(false)

@@ -26,6 +26,11 @@ import {
   EyeOff,
   Trash2,
   Download,
+  Paperclip,
+  FileImage,
+  FileVideo,
+  FileAudio,
+  X,
 } from 'lucide-react'
 
 import { RichTextEditor } from '@/components/editor'
@@ -38,8 +43,6 @@ import { Separator } from '@/components/ui/separator'
 import { useToast } from '@/hooks/useToast'
 import { cn } from '@/lib/utils'
 import { AI } from '@/services/vendor'
-import { getEnabledAIConfigsWithSecrets } from '@/services/configService'
-import { getActivePrompt } from '@/services/promptConfigService'
 import { useUIStore } from '@/store/useUIStore'
 import { useEpisodeQuery } from '@/hooks/useEpisodes'
 import { useScriptQuery, useUpdateScriptMutation, useCreateScriptMutation } from '@/hooks/useScript'
@@ -64,11 +67,20 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
+  attachments?: Attachment[]
 }
 
 interface AIAgentMessage extends Message {
   promptForImage?: string
   promptForVideo?: string
+}
+
+interface Attachment {
+  id: string
+  type: 'text' | 'image' | 'video' | 'audio'
+  name: string
+  content?: string
+  path?: string
 }
 
 export const ScriptCreation: React.FC = () => {
@@ -96,10 +108,6 @@ export const ScriptCreation: React.FC = () => {
     setOutline([])
   }, [])
 
-  const [aiConfigsWithSecrets, setAiConfigsWithSecrets] = useState<
-    Awaited<ReturnType<typeof getEnabledAIConfigsWithSecrets>>
-  >([])
-
   const [content, setContent] = useState<string>('')
   const [title, setTitle] = useState<string>('未命名脚本')
   const [scriptId, setScriptId] = useState<string | null>(null)
@@ -110,6 +118,7 @@ export const ScriptCreation: React.FC = () => {
   const [messages, setMessages] = useState<AIAgentMessage[]>([])
   const [inputMessage, setInputMessage] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
+  const [attachments, setAttachments] = useState<Attachment[]>([])
 
   const [outline, setOutline] = useState<OutlineItem[]>([])
 
@@ -139,18 +148,6 @@ export const ScriptCreation: React.FC = () => {
       setTitle(script.title)
     }
   }, [currentEpisodeId, episode?.id, script?.id, resetEpisodeScopedState])
-
-  useEffect(() => {
-    const loadAIConfigs = async () => {
-      try {
-        const configs = await getEnabledAIConfigsWithSecrets()
-        setAiConfigsWithSecrets(configs)
-      } catch (error) {
-        console.error('Failed to load AI configs:', error)
-      }
-    }
-    loadAIConfigs()
-  }, [])
 
   useEffect(() => {
     if (saveTimeoutRef.current) {
@@ -340,42 +337,118 @@ export const ScriptCreation: React.FC = () => {
     toast({ title: '导出成功', description: `已保存到 ${savePath}` })
   }
 
+  const handleFileSelect = async () => {
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog')
+      const { readFile } = await import('@tauri-apps/plugin-fs')
+      
+      const selected = await open({
+        multiple: true,
+        filters: [
+          { name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] },
+          { name: '视频', extensions: ['mp4', 'mov', 'avi', 'mkv', 'webm'] },
+          { name: '音频', extensions: ['mp3', 'wav', 'ogg', 'm4a'] },
+          { name: '文本', extensions: ['txt', 'md', 'json', 'csv'] },
+          { name: '所有文件', extensions: ['*'] },
+        ],
+        title: '选择文件',
+      })
+      
+      if (!selected) return
+      
+      const files = Array.isArray(selected) ? selected : [selected]
+      
+      for (const filePath of files) {
+        const fileName = filePath.split(/[/\\]/).pop() || 'unknown'
+        const ext = fileName.split('.').pop()?.toLowerCase() || ''
+        
+        let type: Attachment['type'] = 'text'
+        if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) type = 'image'
+        else if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext)) type = 'video'
+        else if (['mp3', 'wav', 'ogg', 'm4a'].includes(ext)) type = 'audio'
+        
+        let content = ''
+        
+        // 文本文件读取内容
+        if (type === 'text') {
+          try {
+            const data = await readFile(filePath)
+            content = new TextDecoder().decode(data)
+          } catch (e) {
+            console.error('读取文件失败:', e)
+          }
+        }
+        
+        const attachment: Attachment = {
+          id: `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          type,
+          name: fileName,
+          content,
+          path: filePath,
+        }
+        
+        setAttachments(prev => [...prev, attachment])
+      }
+      
+      toast({ title: '文件已添加', description: `已添加 ${files.length} 个文件` })
+    } catch (error) {
+      toast({ title: '添加文件失败', description: String(error), variant: 'destructive' })
+    }
+  }
+  
+  const removeAttachment = (id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id))
+  }
+  
+  const getAttachmentIcon = (type: Attachment['type']) => {
+    switch (type) {
+      case 'image': return <FileImage className="h-4 w-4" />
+      case 'video': return <FileVideo className="h-4 w-4" />
+      case 'audio': return <FileAudio className="h-4 w-4" />
+      default: return <FileText className="h-4 w-4" />
+    }
+  }
+
   const handleSendMessage = async () => {
-    if (!inputMessage.trim() || isGenerating) return
+    if ((!inputMessage.trim() && attachments.length === 0) || isGenerating) return
+
+    // 构建消息内容
+    let messageContent = inputMessage
+    
+    // 添加附件信息
+    if (attachments.length > 0) {
+      const attachmentInfo = attachments.map(a => {
+        if (a.type === 'text' && a.content) {
+          return `[文件: ${a.name}]\n${a.content}`
+        }
+        return `[文件: ${a.name} (${a.type})]`
+      }).join('\n\n')
+      
+      if (messageContent) {
+        messageContent += '\n\n' + attachmentInfo
+      } else {
+        messageContent = attachmentInfo
+      }
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: inputMessage,
+      content: inputMessage || `[${attachments.length}个文件]`,
       timestamp: new Date(),
+      attachments: [...attachments],
     }
 
     setMessages(prev => [...prev, userMessage])
     setInputMessage('')
+    setAttachments([])
     setIsGenerating(true)
 
     try {
-      let chatConfig = aiConfigsWithSecrets.find(c => c.type === 'chat' && c.apiKey)
-
-      if (!chatConfig) {
-        throw new Error('请先在设置中配置对话AI，或在下方直接输入API Key、地址和模型')
-      }
-
-      const systemPrompt = getActivePrompt('assistant_chat', {
-        content: content.replace(/<[^>]*>/g, ' ').substring(0, 500),
-        characters: dbCharacters
-          .map(c => `- ${c.name}`)
-          .join('\n'),
-      })
-
-      if (!systemPrompt) {
-        throw new Error('未找到AI助手模板，请先在提示词设置中配置')
-      }
-
+      // 直接使用 AI.Text.generate，不指定 modelName，让它自动使用 universalAi 配置
       const response = await AI.Text.generate({
         messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: inputMessage },
+          { role: 'user', content: messageContent },
         ],
       })
 
@@ -847,6 +920,7 @@ export const ScriptCreation: React.FC = () => {
                   maxHeight={undefined}
                   showCharacterCount={true}
                   className="h-full"
+                  onEditorReady={(editor) => { editorRef.current = editor }}
                 />
               )}
             </div>
@@ -996,6 +1070,20 @@ export const ScriptCreation: React.FC = () => {
                   )}
                 >
                   <div className="whitespace-pre-wrap">{message.content}</div>
+                  {/* 显示附件 */}
+                  {message.attachments && message.attachments.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {message.attachments.map(attachment => (
+                        <div
+                          key={attachment.id}
+                          className="flex items-center gap-1 px-2 py-1 bg-background/20 rounded text-xs"
+                        >
+                          {getAttachmentIcon(attachment.type)}
+                          <span className="max-w-[100px] truncate">{attachment.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {message.role === 'assistant' && (
                     <div className="flex gap-1 mt-2 pt-2 border-t border-border/50">
                       <Button
@@ -1033,7 +1121,36 @@ export const ScriptCreation: React.FC = () => {
           </div>
 
           <div className="p-3 border-t">
+            {/* 附件预览 */}
+            {attachments.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {attachments.map(attachment => (
+                  <div
+                    key={attachment.id}
+                    className="flex items-center gap-1 px-2 py-1 bg-muted rounded-md text-xs"
+                  >
+                    {getAttachmentIcon(attachment.type)}
+                    <span className="max-w-[100px] truncate">{attachment.name}</span>
+                    <button
+                      onClick={() => removeAttachment(attachment.id)}
+                      className="ml-1 hover:text-destructive"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleFileSelect}
+                disabled={isGenerating}
+                title="添加文件"
+              >
+                <Paperclip className="h-4 w-4" />
+              </Button>
               <Input
                 value={inputMessage}
                 onChange={e => setInputMessage(e.target.value)}
@@ -1050,7 +1167,7 @@ export const ScriptCreation: React.FC = () => {
               <Button
                 size="icon"
                 onClick={handleSendMessage}
-                disabled={!inputMessage.trim() || isGenerating}
+                disabled={(!inputMessage.trim() && attachments.length === 0) || isGenerating}
               >
                 {isGenerating ? (
                   <RefreshCw className="h-4 w-4 animate-spin" />

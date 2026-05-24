@@ -160,7 +160,7 @@ export function RenderDialog({ isOpen, onClose, clips, projectName }: RenderDial
     setIsInstallingFFmpeg(true)
     setInstallProgress(0)
 
-    const _result = await downloadFFmpeg((progress, _message) => {
+    const result = await downloadFFmpeg((progress, _message) => {
       setInstallProgress(progress)
     })
 

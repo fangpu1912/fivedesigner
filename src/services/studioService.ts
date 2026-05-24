@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/**
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/**
  * 专业工作台服务
  * 基于项目现有架构实现
  * - 复用现有的 Project/Episode/Storyboard 结构
@@ -137,6 +137,7 @@ export const studioService = {
       const scene = s as Record<string, unknown>
       return {
         id: `shot_${i + 1}`,
+        scene_id: '',
         scene: String(scene.scene || `场景${i + 1}`),
         description: String(scene.description || ''),
         duration: String(scene.duration || '5秒'),
@@ -269,11 +270,8 @@ export const studioService = {
 
       try {
         const aspectRatio = project.aspect_ratio === '9:16' ? '9:16' : '16:9'
-        const isPortrait = aspectRatio === '9:16'
         const imageConfig: ImageConfig = {
           prompt: sb.prompt,
-          width: isPortrait ? 720 : 1280,
-          height: isPortrait ? 1280 : 720,
           aspectRatio,
         }
 
@@ -314,8 +312,6 @@ export const studioService = {
         const videoConfig: VideoConfig = {
           prompt: sb.video_prompt,
           referenceImages: sb.image ? [sb.image] : undefined,
-          width: 1280,
-          height: 720,
           duration: sb.duration || 5,
         }
 

@@ -145,6 +145,9 @@ export function ImagePreviewDialog({
           throw new Error('无法解析 data URL')
         }
         const base64Data = match[2]
+        if (!base64Data) {
+          throw new Error('无法解析 data URL')
+        }
         const binaryData = atob(base64Data)
         const uint8Array = new Uint8Array(binaryData.length)
         for (let i = 0; i < binaryData.length; i++) {
@@ -288,7 +291,7 @@ export function ImagePreviewDialog({
             >
               {imageList.map((img, index) => (
                 <button
-                  key={index}
+                  key={'img-' + index}
                   onClick={() => handleThumbnailClick(index)}
                   className={cn(
                     'flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all',

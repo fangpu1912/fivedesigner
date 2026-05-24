@@ -4,7 +4,6 @@ import { Loader2, Image as ImageIcon, Play, Pencil, Crop, ZoomIn, Sparkles, X } 
 
 import { Button } from '@/components/ui/button'
 import { NodePromptInput, type MentionInputRef } from './NodePromptInput'
-import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -50,15 +49,17 @@ const ASPECT_RATIO_SIZES: Record<string, { width: number; height: number }> = {
 }
 
 function calculateSize(baseSize: { width: number; height: number }, size: ImageSize): { width: number; height: number } {
-  const multiplier = {
+  const multiplier: Record<string, number> = {
+    '0.5K': 0.5,
     '1K': 1,
     '2K': 2,
     '4K': 4,
-  }[size] || 1
+  }
+  const mult = multiplier[size] ?? 1
 
   return {
-    width: Math.round(baseSize.width * multiplier),
-    height: Math.round(baseSize.height * multiplier),
+    width: Math.round(baseSize.width * mult),
+    height: Math.round(baseSize.height * mult),
   }
 }
 

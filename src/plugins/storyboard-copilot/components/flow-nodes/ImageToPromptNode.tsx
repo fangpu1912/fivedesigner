@@ -47,7 +47,7 @@ export const ImageToPromptNode = memo(({ id, data, selected }: ImageToPromptNode
   const { toast } = useToast()
   const [activeLang, setActiveLang] = useState<'zh' | 'en' | 'json'>('zh')
   const [copied, setCopied] = useState(false)
-  const { getUpstreamImageData, upstreamImage } = useUpstreamData(id)
+  const { upstreamImage } = useUpstreamData(id)
   const upstreamImageRef = useRef<string | null>(null)
   const enlargedHandles = useEnlargedHandles(id)
 

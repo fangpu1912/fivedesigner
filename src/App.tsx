@@ -13,6 +13,7 @@ import { QueryProvider } from '@/providers/QueryProvider'
 import { workspaceService } from '@/services/workspace'
 import { startTaskProcessor, stopTaskProcessor, registerDefaultExecutors } from '@/services/taskQueue'
 import { useTaskResume } from '@/hooks/useTaskResume'
+import logger from '@/utils/logger'
 
 function AppContent() {
   const queryClient = useQueryClient()
@@ -21,11 +22,23 @@ function AppContent() {
   useTaskResume()
 
   useEffect(() => {
+    // 全局未捕获错误处理 - 静默处理，不记录到日志
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      // 静默处理所有 Promise rejection，防止控制台污染
+      event.preventDefault()
+    }
+    const handleError = (event: ErrorEvent) => {
+      // 静默处理所有错误，防止控制台污染
+      event.preventDefault()
+    }
+    window.addEventListener('unhandledrejection', handleUnhandledRejection)
+    window.addEventListener('error', handleError)
+
     const initApp = async () => {
       try {
         await workspaceService.initialize()
       } catch (error) {
-        console.error('[App] Failed to initialize workspace:', error)
+        logger.error('[App] Failed to initialize workspace:', error)
       }
 
       setReady(true)
@@ -62,6 +75,8 @@ function AppContent() {
 
     return () => {
       stopTaskProcessor()
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection)
+      window.removeEventListener('error', handleError)
     }
   }, [queryClient])
 

@@ -91,7 +91,6 @@ export function CanvasDrawingTool({
   height = 768,
 }: CanvasDrawingToolProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const canvasRefs = useRef<Map<string, HTMLCanvasElement>>(new Map())
   const backgroundCanvasRef = useRef<HTMLCanvasElement>(null)
   const drawingCanvasRef = useRef<HTMLCanvasElement>(null)
   const annotationCanvasRef = useRef<HTMLCanvasElement>(null)

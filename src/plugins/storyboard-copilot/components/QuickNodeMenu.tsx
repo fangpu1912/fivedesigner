@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import {
   Upload, Wand2, Image as ImageIcon, Grid3X3, Type, Camera,
-  ZoomIn, Sparkles, LayoutGrid, Video, Pen, Search, Play,
+  ZoomIn, Sparkles, Video, Search, Play,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'

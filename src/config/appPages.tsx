@@ -27,8 +27,8 @@ import { Settings as SettingsPage } from '@/pages/Settings'
 import StoryboardCopilot from '@/pages/StoryboardCopilot'
 import { StoryboardDraw } from '@/pages/StoryboardDraw'
 import Support from '@/pages/Support'
-import VideoBatchDownload from '@/pages/VideoBatchDownload'
 import VideoSceneExtraction from '@/pages/VideoSceneExtraction'
+import BrowserManager from '@/pages/BrowserManager'
 
 import type { LucideIcon } from 'lucide-react'
 
@@ -178,13 +178,13 @@ export const appPages: AppPageDefinition[] = [
     component: MediaAssetManage,
   },
   {
-    navPath: '/video-batch-download',
-    routePaths: ['/video-batch-download'],
-    label: '视频下载',
-    description: '批量下载豆包/即梦等平台的视频，支持无水印下载。',
+    navPath: '/browser-manager',
+    routePaths: ['/browser-manager'],
+    label: '页内浏览',
+    description: '多账号浏览器管理，支持Cookie隔离和扩展插件。',
     icon: Download,
     section: 'system',
-    component: VideoBatchDownload,
+    component: BrowserManager,
   },
 ]
 

@@ -313,7 +313,6 @@ const openaiImageConfig: ProviderConfig = {
   }),
   parseResponse: response => {
     const url = response.data?.[0]?.url
-    const _revisedPrompt = response.data?.[0]?.revised_prompt
     return { url }
   },
 }

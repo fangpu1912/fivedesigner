@@ -47,35 +47,26 @@ export class ComfyUIClient {
     this.episodeId = episodeId
   }
 
+  private connectPromise: Promise<void> | null = null
+
   connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      // 如果已经连接，直接返回
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        resolve()
-        return
-      }
+    // 如果已经连接，直接返回
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      return Promise.resolve()
+    }
 
-      // 如果正在连接中，等待连接完成
-      if (this.isConnecting) {
-        // 设置一个超时检查
-        const checkInterval = setInterval(() => {
-          if (this.ws?.readyState === WebSocket.OPEN) {
-            clearInterval(checkInterval)
-            resolve()
-          } else if (!this.isConnecting) {
-            clearInterval(checkInterval)
-            reject(new Error('Connection failed'))
-          }
-        }, 100)
-        return
-      }
+    // 如果正在连接中，返回现有的 Promise
+    if (this.isConnecting && this.connectPromise) {
+      return this.connectPromise
+    }
 
-      // 清理旧的连接
-      this.cleanup()
+    // 清理旧的连接
+    this.cleanup()
 
-      this.isConnecting = true
-      this.shouldReconnect = true
+    this.isConnecting = true
+    this.shouldReconnect = true
 
+    const promise = new Promise<void>((resolve, reject) => {
       // 设置连接超时
       const connectionTimeout = setTimeout(() => {
         if (this.isConnecting) {
@@ -93,12 +84,21 @@ export class ComfyUIClient {
           this.isConnecting = false
           this.reconnectAttempts = 0
           this.emit({ type: 'connected', data: { clientId: this.clientId } })
-          resolve()
+          resolve(undefined)
         }
 
         this.ws.onclose = event => {
+          const wasConnecting = this.isConnecting
           this.isConnecting = false
           this.emit({ type: 'disconnected', data: { code: event.code, reason: event.reason } })
+
+          // 如果还在连接中就收到 close，说明连接失败
+          if (wasConnecting) {
+            clearTimeout(connectionTimeout)
+            this.cleanup()
+            reject(new Error(`WebSocket closed unexpectedly: ${event.code} ${event.reason}`))
+            return
+          }
 
           // 清理当前连接
           this.cleanup()
@@ -135,9 +135,14 @@ export class ComfyUIClient {
         clearTimeout(connectionTimeout)
         this.isConnecting = false
         this.cleanup()
-        reject(error)
+        reject(error instanceof Error ? error : new Error(String(error)))
       }
+    }).finally(() => {
+      this.connectPromise = null
     })
+
+    this.connectPromise = promise
+    return promise
   }
 
   disconnect(): void {

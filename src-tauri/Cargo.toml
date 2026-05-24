@@ -1,6 +1,6 @@
 [package]
 name = "fivedesigner"
-version = "1.0.2"
+version = "1.0.4"
 description = "FiveDesigner - AI Video Storyboard Tool"
 authors = ["FiveDesigner Team"]
 license = "MIT"
@@ -38,7 +38,10 @@ uuid = { version = "1", features = ["v4"] }
 zip = "0.6"
 futures-util = "0.3"
 base64 = "0.22"
+shellexpand = "3.0"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+lazy_static = "1.4"
+rand = "0.8"
 
 [features]
 default = ["custom-protocol"]

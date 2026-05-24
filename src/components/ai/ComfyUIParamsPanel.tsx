@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/**
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/**
  * ComfyUI 参数面板
  * 选择工作流后，自动解析并显示可配置参数
  */
@@ -89,32 +89,6 @@ interface ComfyUIParamsPanelProps {
   characterPrompts?: string[]
   scenePrompts?: string[]
   propPrompts?: string[]
-}
-
-// 节点类型分类
-const NODE_CATEGORIES = {
-  // 提示词相关
-  PROMPT: ['CLIPTextEncode', 'Text Multiline', 'Prompt', 'Text'],
-  // 图像生成
-  IMAGE_GEN: ['EmptyLatentImage', 'LatentImage', 'LoadImage', 'Image'],
-  // 视频生成
-  VIDEO_GEN: ['WanVaceToVideo', 'WanVideo', 'Video', 'AnimateDiff', 'Frame'],
-  // 音频生成
-  AUDIO_GEN: ['TTS', 'Audio', 'Voice', 'Speech'],
-  // 采样器
-  SAMPLER: ['KSampler', 'Sampler'],
-  // 尺寸
-  SIZE: ['EmptyLatentImage', 'LatentImage'],
-}
-
-// 获取节点分类
-function _getNodeCategory(classType: string): ComfyUIParam['category'] {
-  if (NODE_CATEGORIES.PROMPT.some(t => classType?.includes(t))) return 'prompt'
-  if (NODE_CATEGORIES.VIDEO_GEN.some(t => classType?.includes(t))) return 'video'
-  if (NODE_CATEGORIES.AUDIO_GEN.some(t => classType?.includes(t))) return 'audio'
-  if (NODE_CATEGORIES.SAMPLER.some(t => classType?.includes(t))) return 'sampling'
-  if (NODE_CATEGORIES.SIZE.some(t => classType?.includes(t))) return 'size'
-  return 'other'
 }
 
 // 从项目获取风格提示词

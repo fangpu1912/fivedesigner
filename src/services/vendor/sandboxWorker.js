@@ -11,7 +11,7 @@ const zipImage = async (base64, maxSize) => {
   if (!base64) return ''
   let cleanBase64 = base64
   if (base64.includes(',')) {
-    cleanBase64 = base64.split(',')[1] ?? ''
+    cleanBase64 = base64.split(',')[1] || ''
   }
   cleanBase64 = cleanBase64.replace(/\s/g, '')
   if (!cleanBase64) return base64
@@ -32,7 +32,7 @@ const Buffer = {
       if (encoding === 'base64') {
         let cleanData = data
         if (data.includes(',')) {
-          cleanData = data.split(',')[1] ?? ''
+          cleanData = data.split(',')[1] || ''
         }
         cleanData = cleanData.replace(/\s/g, '')
         if (!cleanData) return new Uint8Array(0)
@@ -159,6 +159,7 @@ self.onmessage = async (e) => {
           'pollTask',
           'tauriInvoke',
           'urlToBase64',
+          'tauriFetch',
           code
         )
       } catch (syntaxError) {

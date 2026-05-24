@@ -6,14 +6,17 @@
  */
 
 import { readFile } from '@tauri-apps/plugin-fs'
+import { invoke } from '@tauri-apps/api/core'
 import { v4 as uuidv4 } from 'uuid'
 
-import { projectDB, episodeDB, scriptDB, storyboardDB, characterDB } from '@/db'
+import { projectDB, episodeDB, scriptDB, storyboardDB, characterDB, sceneDB, propDB } from '@/db'
 import type { AnalysisTask, AnalysisResult } from '@/types/analysis'
 import type { ExtractedAsset, ExtractedDubbing, ExtractedShot } from '@/types'
 import { AI } from './vendor/aiService'
 import { db } from '@/db'
 import { getActivePrompt } from './promptConfigService'
+import logger from '@/utils/logger'
+import { matchAssetsByName } from '@/utils/storyboardReferences'
 
 // 定义数据库行类型
 type AnalysisTaskRow = {
@@ -26,10 +29,173 @@ type AnalysisTaskRow = {
   error: string | null
 }
 
+// 场景检测结果
+type SceneDetectionInfo = {
+  id: number
+  start_time: number
+   end_time: number
+  start_time_formatted: string
+  end_time_formatted: string
+  duration: number
+  duration_formatted: string
+  screenshot_path: string
+}
+
+type SceneDetectionResult = {
+  scenes: SceneDetectionInfo[]
+  total_scenes: number
+  video_duration: number
+  video_fps: number
+  video_width: number
+  video_height: number
+}
+
+/**
+ * 读取图片文件为 base64 Data URL
+ */
+async function readImageAsDataUrl(imagePath: string): Promise<string> {
+  const imageData = await readFile(imagePath)
+  let binary = ''
+  const chunkSize = 8192
+  for (let i = 0; i < imageData.length; i += chunkSize) {
+    binary += String.fromCharCode(...imageData.slice(i, i + chunkSize))
+  }
+  const base64 = btoa(binary)
+  const ext = imagePath.split('.').pop()?.toLowerCase() || 'png'
+  const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png'
+  return `data:${mimeType};base64,${base64}`
+}
+
+/**
+ * 读取视频文件为 base64 Data URL
+ */
+async function readVideoAsDataUrl(videoPath: string): Promise<string> {
+  const videoData = await readFile(videoPath)
+  let binary = ''
+  const chunkSize = 8192
+  for (let i = 0; i < videoData.length; i += chunkSize) {
+    binary += String.fromCharCode(...videoData.slice(i, i + chunkSize))
+  }
+  const base64 = btoa(binary)
+  const ext = videoPath.split('.').pop()?.toLowerCase() || 'mp4'
+  const mimeType = ext === 'mov' ? 'video/quicktime' : 'video/mp4'
+  return `data:${mimeType};base64,${base64}`
+}
+
+/**
+ * 使用 FFmpeg 按场景（分镜）抽取关键帧
+ *
+ * 策略：
+ * 1. 场景切换检测（分镜边界）
+ * 2. 每个有效场景取3帧：开始帧、中间帧、结束帧
+ * 3. 过滤微小场景（<1秒的接缝帧/转场）
+ * 4. 场景前后帧（确保捕捉完整场景内容）
+ *
+ * 返回截图路径列表（按时间顺序）
+ */
+async function extractVideoFrames(filePath: string): Promise<string[]> {
+  const allFramePaths: string[] = []
+
+  try {
+    // 1. 场景切换检测
+    logger.info('[AnalysisService] Detecting scenes (shots)...')
+    const result = await invoke<SceneDetectionResult>('detect_video_scenes', {
+      request: {
+        video_path: filePath,
+        threshold: 0.25,
+        output_dir: '',
+      },
+    })
+
+    if (!result.scenes || result.scenes.length === 0) {
+      throw new Error('未检测到场景切换')
+    }
+
+    logger.info(`[AnalysisService] Detected ${result.scenes.length} raw scenes`)
+
+    // 2. 过滤微小场景（<1秒的可能是转场/闪烁）
+    const validScenes = result.scenes.filter(s => s.duration >= 1.0)
+    logger.info(`[AnalysisService] Valid scenes (>=1s): ${validScenes.length}`)
+
+    // 3. 为每个有效场景提取关键帧
+    for (const scene of validScenes) {
+      const timestamps: number[] = []
+
+      // 场景开始帧（延后0.2秒，避免切镜模糊）
+      timestamps.push(scene.start_time + 0.2)
+
+      // 场景中间帧（如果场景超过3秒）
+      if (scene.duration > 3.0) {
+        timestamps.push(scene.start_time + scene.duration * 0.5)
+      }
+
+      // 场景结束帧（提前0.3秒，避免切到下一个场景）
+      if (scene.duration > 2.0) {
+        timestamps.push(scene.end_time - 0.3)
+      }
+
+      // 截取帧
+      for (const ts of timestamps) {
+        try {
+          const outputPath = await invoke<string>('capture_frame', {
+            videoPath: filePath,
+            timestamp: ts,
+            outputPath: '',
+          })
+          if (outputPath && outputPath.length > 0) {
+            allFramePaths.push(outputPath)
+          }
+        } catch (error) {
+          logger.warn(`[AnalysisService] Failed to capture frame at ${ts}s:`, error)
+        }
+      }
+    }
+
+    // 4. 如果场景太少，补充首帧和尾帧
+    if (validScenes.length < 3 && result.video_duration > 0) {
+      // 首帧
+      try {
+        const firstFrame = await invoke<string>('capture_frame', {
+          videoPath: filePath,
+          timestamp: 0.5,
+          outputPath: '',
+        })
+        if (firstFrame) allFramePaths.unshift(firstFrame)
+      } catch { /* ignore */ }
+
+      // 尾帧
+      try {
+        const lastFrame = await invoke<string>('capture_frame', {
+          videoPath: filePath,
+          timestamp: Math.max(0, result.video_duration - 1),
+          outputPath: '',
+        })
+        if (lastFrame) allFramePaths.push(lastFrame)
+      } catch { /* ignore */ }
+    }
+  } catch (error) {
+    logger.error('[AnalysisService] Scene-based frame extraction failed:', error)
+    throw error
+  }
+
+  // 去重
+  const uniqueFrames = allFramePaths.filter((p, i, arr) =>
+    p && p.length > 0 && arr.indexOf(p) === i
+  )
+
+  logger.info(`[AnalysisService] Total extracted frames: ${uniqueFrames.length}`)
+
+  return uniqueFrames
+}
+
 // 视频分析服务
 export const analysisService = {
   // 上传并分析视频
-  async uploadAndAnalyze(filePath: string, filename: string): Promise<string> {
+  async uploadAndAnalyze(
+    filePath: string,
+    filename: string,
+    options: { mode?: 'frames' | 'video' } = {}
+  ): Promise<string> {
     const analysisId = uuidv4()
     const now = new Date().toISOString()
 
@@ -40,8 +206,8 @@ export const analysisService = {
     )
 
     // 异步开始分析
-    this.processAnalysis(analysisId, filePath).catch(error => {
-      console.error('[AnalysisService] Analysis failed:', error)
+    this.processAnalysis(analysisId, filePath, options).catch(error => {
+      logger.error('[AnalysisService] Analysis failed:', error)
       db.execute(
         `UPDATE analysis_tasks SET status = $1, error = $2, updated_at = $3 WHERE id = $4`,
         ['failed', error instanceof Error ? error.message : '分析失败', new Date().toISOString(), analysisId]
@@ -90,7 +256,13 @@ export const analysisService = {
   },
 
   // 处理分析任务
-  async processAnalysis(analysisId: string, filePath: string): Promise<void> {
+  async processAnalysis(
+    analysisId: string,
+    filePath: string,
+    options: { mode?: 'frames' | 'video' } = {}
+  ): Promise<void> {
+    const mode = options.mode || 'frames'
+
     // 更新状态为处理中
     await db.execute(
       `UPDATE analysis_tasks SET status = $1, updated_at = $2 WHERE id = $3`,
@@ -98,27 +270,75 @@ export const analysisService = {
     )
 
     try {
-      // 读取视频文件并转换为 base64（分块处理避免爆栈）
-      const videoData = await readFile(filePath)
-      let binary = ''
-      const chunkSize = 8192
-      for (let i = 0; i < videoData.length; i += chunkSize) {
-        binary += String.fromCharCode(...videoData.slice(i, i + chunkSize))
-      }
-      const videoBase64 = btoa(binary)
-      const videoDataUrl = `data:video/mp4;base64,${videoBase64}`
+      let messages: { role: string; content: string }[]
 
-      const analysisPrompt = getActivePrompt('video_remake', {
-        videoDescription: '【对标分析】请分析以下参考视频内容，提取所有可复用的创作要素，包括角色、场景、道具、分镜和整体风格特征。',
-      })
+      if (mode === 'video') {
+        // ===== 视频上传模式 =====
+        logger.info('[AnalysisService] Video upload mode: reading video file...')
 
-      // 调用项目中的 AI 视觉分析服务
-      // 优先使用 vlAgent，如果没有配置则回退到 universalAi
-      const response = await AI.VL.analyze({
-        messages: [
+        // 读取视频为 base64
+        const videoDataUrl = await readVideoAsDataUrl(filePath)
+
+        // 构建提示词
+        const analysisPrompt = getActivePrompt('video_remake', {
+          videoDescription: `【对标分析】请分析以下参考视频，拆解其核心创作要素，提取角色、场景、道具、分镜和整体风格特征。`,
+        })
+
+        // 构建消息：提示词 + 视频
+        messages = [
           { role: 'user', content: analysisPrompt },
-          { role: 'user', content: `视频文件: ${videoDataUrl}` }
-        ],
+          { role: 'user', content: `参考视频: ${videoDataUrl}` },
+        ]
+
+        logger.info('[AnalysisService] Calling AI VL analyze with video upload...')
+      } else {
+        // ===== 关键帧模式（默认） =====
+        logger.info('[AnalysisService] Frame extraction mode: extracting key frames...')
+
+        // 1. 按场景（分镜）抽取关键帧
+        const framePaths = await extractVideoFrames(filePath)
+
+        if (framePaths.length === 0) {
+          throw new Error('无法从视频中提取关键帧，请确保 FFmpeg 已安装')
+        }
+
+        // 2. 读取关键帧为 base64
+        const frameDataUrls: string[] = []
+        for (const framePath of framePaths) {
+          try {
+            const dataUrl = await readImageAsDataUrl(framePath)
+            frameDataUrls.push(dataUrl)
+          } catch (error) {
+            logger.warn(`[AnalysisService] Failed to read frame ${framePath}:`, error)
+          }
+        }
+
+        if (frameDataUrls.length === 0) {
+          throw new Error('无法读取视频帧图片')
+        }
+
+        // 3. 构建提示词
+        const analysisPrompt = getActivePrompt('video_remake', {
+          videoDescription: `【对标分析】请分析以下参考视频的关键帧。这些帧按时间顺序排列，每个场景（分镜）包含开始帧、中间帧和结束帧，完整展示了视频的分镜结构和视觉内容。请基于这些帧提取所有可复用的创作要素，包括角色、场景、道具、分镜和整体风格特征。`,
+        })
+
+        // 4. 构建消息：提示词 + 关键帧图片
+        messages = [{ role: 'user', content: analysisPrompt }]
+
+        // 添加关键帧图片（按时间顺序，标注场景信息）
+        for (let i = 0; i < frameDataUrls.length; i++) {
+          messages.push({
+            role: 'user',
+            content: `关键帧 ${i + 1}/${frameDataUrls.length}: ${frameDataUrls[i]}`,
+          })
+        }
+
+        logger.info(`[AnalysisService] Calling AI VL analyze with ${frameDataUrls.length} frames...`)
+      }
+
+      // 调用 AI 视觉分析
+      const response = await AI.VL.analyze({
+        messages,
         temperature: 0.7,
         maxTokens: 4096,
       })
@@ -127,15 +347,33 @@ export const analysisService = {
       let result: AnalysisResult
       try {
         const text = typeof response === 'string' ? response : JSON.stringify(response)
-        const jsonMatch = text.match(/\{[\s\S]*\}/)
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0])
+        logger.info('[AnalysisService] AI response length:', text.length, 'first 200:', text.substring(0, 200))
+        
+        // 尝试多种 JSON 提取方式
+        let jsonStr: string | null = null
+        
+        // 1. 尝试提取 markdown 代码块中的 JSON
+        const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
+        if (codeBlockMatch && codeBlockMatch[1]) {
+          jsonStr = codeBlockMatch[1].trim()
+        }
+        
+        // 2. 尝试直接匹配 JSON 对象
+        if (!jsonStr) {
+          const jsonMatch = text.match(/\{[\s\S]*\}/)
+          if (jsonMatch) {
+            jsonStr = jsonMatch[0]
+          }
+        }
+        
+        if (jsonStr) {
+          const parsed = JSON.parse(jsonStr)
           result = this.normalizeAnalysisResult(parsed)
         } else {
           throw new Error('AI 返回的结果无法解析为 JSON')
         }
       } catch (parseError) {
-        console.error('[AnalysisService] Failed to parse analysis result:', parseError)
+        logger.error('[AnalysisService] Failed to parse analysis result:', parseError)
         throw new Error('分析结果解析失败，请检查 AI 服务配置')
       }
 
@@ -144,8 +382,10 @@ export const analysisService = {
         `UPDATE analysis_tasks SET status = $1, result = $2, updated_at = $3 WHERE id = $4`,
         ['completed', JSON.stringify(result), new Date().toISOString(), analysisId]
       )
+
+      logger.info('[AnalysisService] Analysis completed successfully')
     } catch (error) {
-      console.error('[AnalysisService] Analysis error:', error)
+      logger.error('[AnalysisService] Analysis error:', error)
       await db.execute(
         `UPDATE analysis_tasks SET status = $1, error = $2, updated_at = $3 WHERE id = $4`,
         ['failed', error instanceof Error ? error.message : '分析失败', new Date().toISOString(), analysisId]
@@ -158,63 +398,74 @@ export const analysisService = {
   normalizeAnalysisResult(parsed: unknown): AnalysisResult {
     const data = parsed as Record<string, unknown>
 
+    // 提取角色列表用于后续分镜提示词生成
+    const characters = Array.isArray(data.characters)
+      ? data.characters.map((c: unknown, index: number) => {
+          const char = c as Record<string, unknown>
+          return {
+            character_id: Number(char.character_id || index + 1),
+            name: String(char.name || `角色${index + 1}`),
+            description: String(char.description || ''),
+            prompt: String(char.prompt || char.appearance_prompt || ''),
+            wardrobeVariants: char.wardrobeVariants ? String(char.wardrobeVariants) : undefined,
+            replacement_image: null,
+          }
+        })
+      : []
+
+    const scenes = Array.isArray(data.scenes)
+      ? data.scenes.map((s: unknown, index: number) => {
+          const scene = s as Record<string, unknown>
+          return {
+            scene_id: Number(scene.scene_id || index + 1),
+            name: String(scene.name || `场景${index + 1}`),
+            description: String(scene.description || ''),
+            prompt: String(scene.prompt || ''),
+          }
+        })
+      : []
+
+    const props = Array.isArray(data.props)
+      ? data.props.map((p: unknown, index: number) => {
+          const prop = p as Record<string, unknown>
+          return {
+            prop_id: Number(prop.prop_id || index + 1),
+            name: String(prop.name || `道具${index + 1}`),
+            description: String(prop.description || ''),
+            prompt: String(prop.prompt || ''),
+          }
+        })
+      : []
+
+    // 处理分镜：直接使用AI返回的结果，不做自动生成
+    const storyboards = Array.isArray(data.storyboards || data.scenes)
+      ? ((data.storyboards || data.scenes) as unknown[]).map((s: unknown, index: number) => {
+          const sb = s as Record<string, unknown>
+          return {
+            storyboard_id: Number(sb.storyboard_id || sb.scene_id || index + 1),
+            timestamp: String(sb.timestamp || ''),
+            duration: Number(sb.duration || 5),
+            shot_type: String(sb.shot_type || ''),
+            camera_motion: String(sb.camera_motion || ''),
+            description: String(sb.description || sb.voiceover || ''),
+            prompt: String(sb.prompt || sb.image_prompt || ''),
+            videoPrompt: String(sb.videoPrompt || sb.video_prompt || ''),
+            scene_id: sb.scene_id ? String(sb.scene_id) : undefined,
+            characters: Array.isArray(sb.characters) ? sb.characters.map(String) : undefined,
+            props: Array.isArray(sb.props) ? sb.props.map(String) : undefined,
+            transition: String(sb.transition || ''),
+          }
+        })
+      : []
+
     return {
       title: String(data.title || '未命名视频'),
       style: String(data.style || ''),
       aspect_ratio: String(data.aspect_ratio || '9:16'),
-      characters: Array.isArray(data.characters)
-        ? data.characters.map((c: unknown, index: number) => {
-            const char = c as Record<string, unknown>
-            return {
-              character_id: Number(char.character_id || index + 1),
-              name: String(char.name || `角色${index + 1}`),
-              description: String(char.description || ''),
-              prompt: String(char.prompt || char.appearance_prompt || ''),
-              wardrobeVariants: char.wardrobeVariants ? String(char.wardrobeVariants) : undefined,
-              replacement_image: null,
-            }
-          })
-        : [],
-      scenes: Array.isArray(data.scenes)
-        ? data.scenes.map((s: unknown, index: number) => {
-            const scene = s as Record<string, unknown>
-            return {
-              scene_id: Number(scene.scene_id || index + 1),
-              name: String(scene.name || `场景${index + 1}`),
-              description: String(scene.description || ''),
-              prompt: String(scene.prompt || ''),
-            }
-          })
-        : [],
-      props: Array.isArray(data.props)
-        ? data.props.map((p: unknown, index: number) => {
-            const prop = p as Record<string, unknown>
-            return {
-              prop_id: Number(prop.prop_id || index + 1),
-              name: String(prop.name || `道具${index + 1}`),
-              description: String(prop.description || ''),
-              prompt: String(prop.prompt || ''),
-            }
-          })
-        : [],
-      storyboards: Array.isArray(data.storyboards || data.scenes)
-        ? ((data.storyboards || data.scenes) as unknown[]).map((s: unknown, index: number) => {
-            const sb = s as Record<string, unknown>
-            return {
-              storyboard_id: Number(sb.storyboard_id || sb.scene_id || index + 1),
-              timestamp: String(sb.timestamp || ''),
-              duration: Number(sb.duration || 5),
-              shot_type: String(sb.shot_type || ''),
-              camera_motion: String(sb.camera_motion || ''),
-              description: String(sb.description || sb.voiceover || ''),
-              prompt: String(sb.prompt || sb.image_prompt || ''),
-              videoPrompt: String(sb.videoPrompt || sb.video_prompt || ''),
-              characters: Array.isArray(sb.characters) ? sb.characters.map(String) : undefined,
-              props: Array.isArray(sb.props) ? sb.props.map(String) : undefined,
-              transition: String(sb.transition || ''),
-            }
-          })
-        : [],
+      characters,
+      scenes,
+      props,
+      storyboards,
       raw_analysis: JSON.stringify(data),
     }
   },
@@ -227,7 +478,7 @@ export const analysisService = {
       customTitle?: string
       projectId?: string
     } = {}
-  ): Promise<{ projectId: string; episodeId: string; characterCount: number; storyboardCount: number }> {
+  ): Promise<{ projectId: string; episodeId: string; characterCount: number; storyboardCount: number; sceneCount: number; propCount: number }> {
     const task = await this.getAnalysisTask(analysisId)
     if (!task || !task.result) {
       throw new Error('分析任务或结果不存在')
@@ -265,9 +516,22 @@ export const analysisService = {
       episode_number: maxEpisodeNumber + 1,
     })
 
-    // 4. 创建角色
-    const characterMap = new Map<number, string>()
+    // 4. 创建角色，建立名称到ID的映射
+    const existingMatch = await matchAssetsByName(
+      episode.id,
+      result.characters.map(c => c.name),
+      result.scenes.map(s => s.name),
+      result.props.map(p => p.name),
+    )
+
+    const characterMap = new Map<string, string>(existingMatch.characterMap) // name -> db id
+    const characterIdMap = new Map<number, string>() // analysis character_id -> db id
     for (const char of result.characters) {
+      if (characterMap.has(char.name)) {
+        logger.info(`[Analysis] 复用已有角色: ${char.name}`)
+        characterIdMap.set(char.character_id, characterMap.get(char.name)!)
+        continue
+      }
       const character = await characterDB.create({
         project_id: projectId,
         episode_id: episode.id,
@@ -276,9 +540,51 @@ export const analysisService = {
         prompt: char.prompt,
         image: char.replacement_image || undefined,
       })
-      characterMap.set(char.character_id, character.id)
+      characterMap.set(char.name, character.id)
+      characterIdMap.set(char.character_id, character.id)
     }
 
+    // 5. 创建场景，建立名称到ID的映射
+    const sceneMap = new Map<string, string>(existingMatch.sceneMap) // name -> db id
+    const sceneIdMap = new Map<number, string>() // analysis scene_id -> db id
+    for (const scene of result.scenes) {
+      if (sceneMap.has(scene.name)) {
+        logger.info(`[Analysis] 复用已有场景: ${scene.name}`)
+        sceneIdMap.set(scene.scene_id, sceneMap.get(scene.name)!)
+        continue
+      }
+      const createdScene = await sceneDB.create({
+        project_id: projectId,
+        episode_id: episode.id,
+        name: scene.name,
+        description: scene.description,
+        prompt: scene.prompt,
+      })
+      sceneMap.set(scene.name, createdScene.id)
+      sceneIdMap.set(scene.scene_id, createdScene.id)
+    }
+
+    // 6. 创建道具，建立名称到ID的映射
+    const propMap = new Map<string, string>(existingMatch.propMap) // name -> db id
+    const propIdMap = new Map<number, string>() // analysis prop_id -> db id
+    for (const prop of result.props) {
+      if (propMap.has(prop.name)) {
+        logger.info(`[Analysis] 复用已有道具: ${prop.name}`)
+        propIdMap.set(prop.prop_id, propMap.get(prop.name)!)
+        continue
+      }
+      const createdProp = await propDB.create({
+        project_id: projectId,
+        episode_id: episode.id,
+        name: prop.name,
+        description: prop.description,
+        prompt: prop.prompt,
+      })
+      propMap.set(prop.name, createdProp.id)
+      propIdMap.set(prop.prop_id, createdProp.id)
+    }
+
+    // 7. 创建剧本
     const scriptContent = result.storyboards.map((s, i) =>
       `分镜${i + 1}：${s.description}`
     ).join('\n\n')
@@ -313,6 +619,7 @@ export const analysisService = {
       })) as ExtractedDubbing[],
       extracted_shots: result.storyboards.map(s => ({
         id: `shot_${s.storyboard_id}`,
+        scene_id: '',
         scene: `分镜${s.storyboard_id}`,
         description: s.description,
         duration: `${s.duration}秒`,
@@ -321,8 +628,41 @@ export const analysisService = {
       })) as ExtractedShot[],
     })
 
+    // 8. 创建分镜，关联角色/场景/道具
     for (let i = 0; i < result.storyboards.length; i++) {
       const sb = result.storyboards[i]!
+
+      // 解析分镜中提到的角色名称，匹配到数据库ID
+      const characterIds: string[] = []
+      if (sb.characters && sb.characters.length > 0) {
+        for (const charName of sb.characters) {
+          const charId = characterMap.get(charName)
+          if (charId) {
+            characterIds.push(charId)
+          }
+        }
+      }
+
+      // 解析分镜中提到的道具名称，匹配到数据库ID
+      const propIds: string[] = []
+      if (sb.props && sb.props.length > 0) {
+        for (const propName of sb.props) {
+          const propId = propMap.get(propName)
+          if (propId) {
+            propIds.push(propId)
+          }
+        }
+      }
+
+      // 尝试从分镜描述中匹配场景
+      let sceneId: string | undefined
+      for (const [sceneName, sid] of sceneMap) {
+        if (sb.description.includes(sceneName)) {
+          sceneId = sid
+          break
+        }
+      }
+
       await storyboardDB.create({
         project_id: projectId,
         episode_id: episode.id,
@@ -333,8 +673,9 @@ export const analysisService = {
         duration: sb.duration,
         sort_order: i,
         status: 'pending',
-        character_ids: [],
-        prop_ids: [],
+        scene_id: sceneId,
+        character_ids: characterIds,
+        prop_ids: propIds,
         reference_images: [],
         video_reference_images: [],
       })
@@ -344,7 +685,9 @@ export const analysisService = {
       projectId,
       episodeId: episode.id,
       characterCount: result.characters.length,
-      storyboardCount: result.scenes.length,
+      storyboardCount: result.storyboards.length,
+      sceneCount: result.scenes.length,
+      propCount: result.props.length,
     }
   },
 

@@ -1,7 +1,8 @@
 import { useState, useMemo, useCallback, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 
-import { confirm, open } from '@tauri-apps/plugin-dialog'
-import { readFile } from '@tauri-apps/plugin-fs'
+import { confirm } from '@tauri-apps/plugin-dialog'
+import { importProjectFromZip, exportProjectAsJSON, exportProjectAsArchive } from '@/services/projectExportService'
 import {
   Plus,
   Trash2,
@@ -58,7 +59,6 @@ import {
 } from '@/hooks/useProjects'
 import { useStoryboards } from '@/hooks/useStoryboards'
 import { useToast } from '@/hooks/useToast'
-import { WorkspaceService } from '@/services/workspace/WorkspaceService'
 import { useUIStore } from '@/store/useUIStore'
 import type { Project, Episode } from '@/types'
 import { ART_STYLES as ART_STYLES_CONFIG, IMAGE_ASPECT_RATIOS } from '@/types'
@@ -67,68 +67,6 @@ type ViewMode = 'card' | 'list'
 type SortField = 'name' | 'created_at' | 'updated_at'
 type SortOrder = 'asc' | 'desc'
 
-interface ProjectExport {
-  version: string
-  exportedAt: string
-  project: Project
-  episodes: Episode[]
-  storyboards: Array<{
-    id: string
-    episode_id: string
-    project_id: string
-    name: string
-    shot_type?: string
-    scene?: string
-    location?: string
-    time?: string
-    description?: string
-    prompt?: string
-    video_prompt?: string
-    image?: string
-    video?: string
-    status?: string
-    sort_order?: number
-    created_at: string
-    updated_at: string
-  }>
-  characters: Array<{
-    id: string
-    project_id: string
-    episode_id?: string
-    name: string
-    description?: string
-    prompt?: string
-    image?: string
-    tags?: string[]
-    created_at: string
-    updated_at: string
-  }>
-  scenes: Array<{
-    id: string
-    project_id: string
-    episode_id?: string
-    name: string
-    description?: string
-    prompt?: string
-    image?: string
-    tags?: string[]
-    created_at: string
-    updated_at: string
-  }>
-  props: Array<{
-    id: string
-    project_id: string
-    episode_id?: string
-    name: string
-    description?: string
-    prompt?: string
-    image?: string
-    tags?: string[]
-    created_at: string
-    updated_at: string
-  }>
-}
-
 export function ProjectManage() {
   const { data: projects = [] } = useProjectsQuery()
   const createProject = useCreateProjectMutation()
@@ -136,6 +74,7 @@ export function ProjectManage() {
   const deleteProject = useDeleteProjectMutation()
   const { currentProjectId, setCurrentProjectId, setCurrentEpisodeId } = useUIStore()
   const { toast } = useToast()
+  const queryClient = useQueryClient()
 
   const [isCreating, setIsCreating] = useState(false)
   const [isEditing, setIsEditing] = useState<Project | null>(null)
@@ -165,61 +104,39 @@ export function ProjectManage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isImporting, setIsImporting] = useState(false)
-  const [isUploadingCover, setIsUploadingCover] = useState(false)
+  const [exportingProjectId, setExportingProjectId] = useState<string | null>(null)
 
-  // 处理封面上传
-  const _handleCoverUpload = async (isEditingProject: boolean = false) => {
+  // 处理导出 JSON
+  const handleExportJSON = useCallback(async (project: Project) => {
+    if (exportingProjectId) return
+    setExportingProjectId(project.id)
     try {
-      setIsUploadingCover(true)
-
-      // 打开文件选择对话框
-      const selected = await open({
-        multiple: false,
-        filters: [
-          {
-            name: '图片文件',
-            extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'],
-          },
-        ],
-      })
-
-      if (!selected || Array.isArray(selected)) return
-
-      // 读取文件
-      const fileData = await readFile(selected)
-      const fileName = selected.split(/[\\/]/).pop() || 'cover.jpg'
-
-      // 保存到工作区
-      const workspace = WorkspaceService.getInstance()
-      const metadata = await workspace.saveFile(
-        fileData,
-        'storyboard', // 使用 storyboard 类型存储封面
-        fileName,
-        { mimeType: 'image/' + fileName.split('.').pop() }
-      )
-
-      // 获取可访问的URL（使用绝对路径）
-      const assetUrl = await workspace.getAssetUrl(metadata.path)
-
-      // 更新状态
-      if (isEditingProject && isEditing) {
-        setIsEditing({ ...isEditing, cover_image: assetUrl })
-      } else {
-        setNewProject({ ...newProject, cover_image: assetUrl })
+      const success = await exportProjectAsJSON(project)
+      if (success) {
+        toast({ title: '导出成功', description: `项目 "${project.name}" 已导出为 JSON` })
       }
-
-      toast({ title: '封面上传成功' })
     } catch (error) {
-      console.error('封面上传失败:', error)
-      toast({
-        title: '封面上传失败',
-        description: (error as Error).message,
-        variant: 'destructive',
-      })
+      toast({ title: '导出失败', description: String(error), variant: 'destructive' })
     } finally {
-      setIsUploadingCover(false)
+      setExportingProjectId(null)
     }
-  }
+  }, [exportingProjectId, toast])
+
+  // 处理导出归档
+  const handleExportArchive = useCallback(async (project: Project) => {
+    if (exportingProjectId) return
+    setExportingProjectId(project.id)
+    try {
+      const success = await exportProjectAsArchive(project)
+      if (success) {
+        toast({ title: '导出成功', description: `项目 "${project.name}" 已导出为归档文件` })
+      }
+    } catch (error) {
+      toast({ title: '导出失败', description: String(error), variant: 'destructive' })
+    } finally {
+      setExportingProjectId(null)
+    }
+  }, [exportingProjectId, toast])
 
   const filteredAndSortedProjects = useMemo(() => {
     let result = [...projects]
@@ -402,208 +319,23 @@ export function ProjectManage() {
     setCurrentEpisodeId(episode.id)
   }
 
-  const exportProjectAsJSON = useCallback(
-    async (project: Project) => {
-      try {
-        const { episodeDB, storyboardDB, characterDB, sceneDB, propDB } = await import('@/db')
-
-        const [projectEpisodes, projectCharacters, projectScenes, projectProps] = await Promise.all(
-          [
-            episodeDB.getAll(project.id),
-            characterDB.getAll(project.id),
-            sceneDB.getAll(project.id),
-            propDB.getAll(project.id),
-          ]
-        )
-
-        const allStoryboards = []
-        for (const episode of projectEpisodes) {
-          const storyboards = await storyboardDB.getAll(episode.id)
-          allStoryboards.push(...storyboards)
-        }
-
-        const exportData: ProjectExport = {
-          version: '1.0.0',
-          exportedAt: new Date().toISOString(),
-          project,
-          episodes: projectEpisodes,
-          storyboards: allStoryboards,
-          characters: projectCharacters,
-          scenes: projectScenes,
-          props: projectProps,
-        }
-
-        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `${project.name}_${new Date().toISOString().split('T')[0]}.json`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-
-        toast({ title: '导出成功', description: `已导出项目: ${project.name}` })
-      } catch (error) {
-        toast({ title: '导出失败', description: (error as Error).message, variant: 'destructive' })
-      }
-    },
-    [toast]
-  )
-
-  const importProjectFromJSON = useCallback(
+  const handleImportProject = useCallback(
     async (file: File) => {
       setIsImporting(true)
       try {
-        const text = await file.text()
-        const data: ProjectExport = JSON.parse(text)
-
-        if (!data.project || !data.project.name) {
-          throw new Error('无效的项目文件格式')
-        }
-
-        const { projectDB, episodeDB, storyboardDB, characterDB, sceneDB, propDB } =
-          await import('@/db')
-
-        const newProject = await projectDB.create({
-          name: `${data.project.name} (导入)`,
-          description: data.project.description,
-          aspect_ratio: data.project.aspect_ratio,
-          visual_style: data.project.visual_style,
-        })
-
-        const episodeIdMap = new Map<string, string>()
-        for (const episode of data.episodes || []) {
-          const newEpisode = await episodeDB.create({
-            name: episode.name,
-            description: episode.description,
-            episode_number: episode.episode_number,
-            project_id: newProject.id,
-          })
-          episodeIdMap.set(episode.id, newEpisode.id)
-        }
-
-        for (const storyboard of data.storyboards || []) {
-          const newEpisodeId = episodeIdMap.get(storyboard.episode_id) || ''
-          await storyboardDB.create({
-            name: storyboard.name,
-            shot_type: storyboard.shot_type,
-            scene: storyboard.scene,
-            location: storyboard.location,
-            time: storyboard.time,
-            description: storyboard.description,
-            prompt: storyboard.prompt,
-            video_prompt: storyboard.video_prompt,
-            image: storyboard.image,
-            video: storyboard.video,
-            status: storyboard.status,
-            sort_order: storyboard.sort_order,
-            episode_id: newEpisodeId,
-            project_id: newProject.id,
-          })
-        }
-
-        for (const character of data.characters || []) {
-          const newEpisodeId = episodeIdMap.get(character.episode_id || '') || undefined
-          await characterDB.create({
-            name: character.name,
-            description: character.description,
-            prompt: character.prompt,
-            image: character.image,
-            tags: character.tags,
-            episode_id: newEpisodeId,
-            project_id: newProject.id,
-          })
-        }
-
-        for (const scene of data.scenes || []) {
-          const newEpisodeId = episodeIdMap.get(scene.episode_id || '') || undefined
-          await sceneDB.create({
-            name: scene.name,
-            description: scene.description,
-            prompt: scene.prompt,
-            image: scene.image,
-            tags: scene.tags,
-            episode_id: newEpisodeId,
-            project_id: newProject.id,
-          })
-        }
-
-        for (const prop of data.props || []) {
-          const newEpisodeId = episodeIdMap.get(prop.episode_id || '') || undefined
-          await propDB.create({
-            name: prop.name,
-            description: prop.description,
-            prompt: prop.prompt,
-            image: prop.image,
-            tags: prop.tags,
-            episode_id: newEpisodeId,
-            project_id: newProject.id,
-          })
-        }
-
-        toast({ title: '导入成功', description: `已导入项目: ${newProject.name}` })
+        const arrayBuffer = await file.arrayBuffer()
+        const zipData = new Uint8Array(arrayBuffer)
+        await importProjectFromZip(zipData)
+        toast({ title: '导入成功', description: '项目已导入' })
+        // 刷新项目列表
+        queryClient.invalidateQueries({ queryKey: ['projects'] })
       } catch (error) {
         toast({ title: '导入失败', description: (error as Error).message, variant: 'destructive' })
       } finally {
         setIsImporting(false)
       }
     },
-    [toast]
-  )
-
-  const exportProjectAsArchive = useCallback(
-    async (project: Project) => {
-      try {
-        const { episodeDB, storyboardDB, characterDB, sceneDB, propDB } = await import('@/db')
-
-        const [projectEpisodes, projectCharacters, projectScenes, projectProps] = await Promise.all(
-          [
-            episodeDB.getAll(project.id),
-            characterDB.getAll(project.id),
-            sceneDB.getAll(project.id),
-            propDB.getAll(project.id),
-          ]
-        )
-
-        const allStoryboards = []
-        for (const episode of projectEpisodes) {
-          const storyboards = await storyboardDB.getAll(episode.id)
-          allStoryboards.push(...storyboards)
-        }
-
-        const exportData: ProjectExport = {
-          version: '1.0.0',
-          exportedAt: new Date().toISOString(),
-          project,
-          episodes: projectEpisodes,
-          storyboards: allStoryboards,
-          characters: projectCharacters,
-          scenes: projectScenes,
-          props: projectProps,
-        }
-
-        const manifest = JSON.stringify(exportData, null, 2)
-        const blob = new Blob([manifest], { type: 'application/json' })
-
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `${project.name}_${new Date().toISOString().split('T')[0]}_archive.json`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-
-        toast({
-          title: '导出成功',
-          description: `已导出项目归档: ${project.name}（注：资产文件路径已保存，实际文件需手动打包）`,
-        })
-      } catch (error) {
-        toast({ title: '导出失败', description: (error as Error).message, variant: 'destructive' })
-      }
-    },
-    [toast]
+    [toast, queryClient]
   )
 
   const selectedProject = projects.find(p => p.id === currentProjectId)
@@ -636,7 +368,7 @@ export function ProjectManage() {
             onChange={e => {
               const file = e.target.files?.[0]
               if (file) {
-                importProjectFromJSON(file)
+                handleImportProject(file)
                 e.target.value = ''
               }
             }}
@@ -1263,8 +995,9 @@ export function ProjectManage() {
                     })
                   }
                   onDelete={() => handleDelete(project.id)}
-                  onExportJSON={() => exportProjectAsJSON(project)}
-                  onExportArchive={() => exportProjectAsArchive(project)}
+                  onExportJSON={() => handleExportJSON(project)}
+                  onExportArchive={() => handleExportArchive(project)}
+                  isExporting={exportingProjectId === project.id}
                 />
               ))}
             </div>
@@ -1287,8 +1020,9 @@ export function ProjectManage() {
                         })
                       }
                       onDelete={() => handleDelete(project.id)}
-                      onExportJSON={() => exportProjectAsJSON(project)}
-                      onExportArchive={() => exportProjectAsArchive(project)}
+                      onExportJSON={() => handleExportJSON(project)}
+                      onExportArchive={() => handleExportArchive(project)}
+                      isExporting={exportingProjectId === project.id}
                     />
                   ))}
                 </div>
@@ -1345,6 +1079,7 @@ interface ProjectCardProps {
   onDelete: () => void
   onExportJSON: () => void
   onExportArchive: () => void
+  isExporting?: boolean
 }
 
 function ProjectCard({
@@ -1355,6 +1090,7 @@ function ProjectCard({
   onDelete,
   onExportJSON,
   onExportArchive,
+  isExporting,
 }: ProjectCardProps) {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const artStyle = ART_STYLES_CONFIG.find(s => s.id === project.visual_style)
@@ -1422,6 +1158,7 @@ function ProjectCard({
                     e.stopPropagation()
                     onExportJSON()
                   }}
+                  disabled={isExporting}
                 >
                   <FileJson className="w-4 h-4 mr-2" /> 导出 JSON
                 </DropdownMenuItem>
@@ -1430,6 +1167,7 @@ function ProjectCard({
                     e.stopPropagation()
                     onExportArchive()
                   }}
+                  disabled={isExporting}
                 >
                   <Archive className="w-4 h-4 mr-2" /> 导出归档
                 </DropdownMenuItem>
@@ -1489,6 +1227,7 @@ interface ProjectListItemProps {
   onDelete: () => void
   onExportJSON: () => void
   onExportArchive: () => void
+  isExporting?: boolean
 }
 
 function ProjectListItem({
@@ -1499,6 +1238,7 @@ function ProjectListItem({
   onDelete,
   onExportJSON,
   onExportArchive,
+  isExporting,
 }: ProjectListItemProps) {
   return (
     <div
@@ -1539,6 +1279,7 @@ function ProjectListItem({
               e.stopPropagation()
               onExportJSON()
             }}
+            disabled={isExporting}
           >
             <FileJson className="w-4 h-4 mr-2" /> 导出 JSON
           </DropdownMenuItem>
@@ -1547,6 +1288,7 @@ function ProjectListItem({
               e.stopPropagation()
               onExportArchive()
             }}
+            disabled={isExporting}
           >
             <Archive className="w-4 h-4 mr-2" /> 导出归档
           </DropdownMenuItem>

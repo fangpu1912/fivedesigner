@@ -303,7 +303,7 @@ export const SceneDirectorNode = memo(({ id, data, selected }: SceneDirectorNode
     [toast]
   )
 
-  const _handleResetCamera = useCallback(() => {
+  useCallback(() => {
     setCamera(DEFAULT_CAMERA)
     toast({ title: '相机已重置' })
   }, [toast])
@@ -353,8 +353,6 @@ export const SceneDirectorNode = memo(({ id, data, selected }: SceneDirectorNode
     },
     [toast]
   )
-
-  const _selectedCharacter = characters.find((c) => c.id === selectedCharacterId)
 
   return (
     <TooltipProvider>

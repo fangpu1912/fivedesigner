@@ -19,23 +19,6 @@ import type { WorkflowConfig, Character, Project } from '@/types'
 
 type GenerationMode = 'ai' | 'comfyui'
 
-type AudioProviderType = 'openai' | 'azure' | 'elevenlabs' | 'volcengine' | 'minimax' | 'comfyui'
-
-function _normalizeAudioProvider(provider: string): AudioProviderType {
-  if (provider === 'hailuo') return 'minimax'
-  if (
-    provider === 'openai' ||
-    provider === 'azure' ||
-    provider === 'elevenlabs' ||
-    provider === 'volcengine' ||
-    provider === 'minimax' ||
-    provider === 'comfyui'
-  ) {
-    return provider as AudioProviderType
-  }
-  return 'minimax'
-}
-
 interface DubbingConfigPanelProps {
   config: TTSConfig
   characters: Character[]
@@ -176,16 +159,6 @@ export function DubbingConfigPanel({
   const comfyuiConnected = externalConnected ?? internalConnected
   const workflowParams = externalParams ?? internalParams
   const getComfyUIParamsRef = externalGetParamsRef ?? internalGetParamsRef
-
-  const _setSelectedWorkflowId = (workflowId: string) => {
-    setInternalSelectedWorkflowId(workflowId)
-    onWorkflowChange?.(workflowId)
-  }
-
-  const _setWorkflowParams = (params: ComfyUIParams) => {
-    setInternalParams(params)
-    onWorkflowParamsChange?.(params)
-  }
 
   // 当 config 变化时，同步 selectedWorkflowId 和 workflowParams
   useEffect(() => {

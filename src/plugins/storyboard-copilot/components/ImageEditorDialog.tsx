@@ -16,9 +16,9 @@ import {
 const VIEWPORT_PADDING_PX = 32
 const VIEWPORT_MIN_WIDTH_PX = 1000
 const VIEWPORT_MIN_HEIGHT_PX = 700
-const DEFAULT_LINE_WIDTH_PERCENT = 0.4
+const DEFAULT_LINE_WIDTH_PERCENT = 4
 const MIN_LINE_WIDTH_PERCENT = 0.1
-const MAX_LINE_WIDTH_PERCENT = 3
+const MAX_LINE_WIDTH_PERCENT = 12
 const DEFAULT_TEXT_SIZE_PERCENT = 10
 const MIN_TEXT_SIZE_PERCENT = 1
 const MAX_TEXT_SIZE_PERCENT = 30
@@ -265,7 +265,7 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
   
   // 人脸网格参数
-  const [gridOpacity, setGridOpacity] = useState(0.15)
+  const [gridOpacity, setGridOpacity] = useState(0.35)
   const [gridSize, setGridSize] = useState(6)
   const [gridAngle, setGridAngle] = useState(45)
   const [gridColor, setGridColor] = useState('#000000')
@@ -701,7 +701,7 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
               </div>
               <div className="flex items-center gap-1">
                 <span className="text-muted-foreground">透明度</span>
-                <input type="range" min={5} max={50} step={1} value={gridOpacity * 100} onChange={e => setGridOpacity(Number(e.target.value) / 100)} className="w-16" />
+                <input type="range" min={5} max={80} step={1} value={gridOpacity * 100} onChange={e => setGridOpacity(Number(e.target.value) / 100)} className="w-16" />
                 <span className="text-muted-foreground w-8">{Math.round(gridOpacity * 100)}%</span>
               </div>
               <div className="flex items-center gap-1">

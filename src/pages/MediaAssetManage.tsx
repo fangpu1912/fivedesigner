@@ -1,19 +1,23 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 
 import { join } from '@tauri-apps/api/path'
 import { open, confirm, save } from '@tauri-apps/plugin-dialog'
 import { writeFile, readFile, mkdir, exists, copyFile } from '@tauri-apps/plugin-fs'
 import {
+  CheckSquare,
   Download,
   FileImage,
   FileJson,
   FileText,
   Film,
   Folder,
+  FolderPlus,
   Image,
   Loader2,
   Pencil,
   Search,
+  Square,
+  Tags,
   Trash2,
   Upload,
   Video,
@@ -41,34 +45,55 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { useMediaAssets, useMediaAssetMutations } from '@/hooks/useMediaAssets'
+import { useMediaAssets, useMediaCategories, useMediaAssetMutations, saveMediaCategory, deleteMediaCategory, mediaAssetKeys } from '@/hooks/useMediaAssets'
 import { useToast } from '@/hooks/useToast'
 import { cn } from '@/lib/utils'
+import { useQueryClient } from '@tanstack/react-query'
 import { workspaceService } from '@/services/workspace/WorkspaceService'
 import { getImageUrl, getVideoUrl } from '@/utils/asset'
 
 
 export default function MediaAssetManage() {
   const [filterType, setFilterType] = useState<'all' | 'image' | 'video'>('all')
+  const [filterTag, setFilterTag] = useState<string | null>(null)
+  const [filterCategory, setFilterCategory] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [editingAsset, setEditingAsset] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editPrompt, setEditPrompt] = useState('')
   const [editTags, setEditTags] = useState('')
   const [editDescription, setEditDescription] = useState('')
+  const [editCategory, setEditCategory] = useState('')
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const [previewVideo, setPreviewVideo] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
   const [exporting, setExporting] = useState<'prompt' | 'file' | 'json' | null>(null)
 
+  const [batchMode, setBatchMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [batchTagInput, setBatchTagInput] = useState('')
+  const [batchCategoryInput, setBatchCategoryInput] = useState('')
+  const [showBatchTagDialog, setShowBatchTagDialog] = useState(false)
+  const [showBatchCategoryDialog, setShowBatchCategoryDialog] = useState(false)
+  const [showNewCategoryDialog, setShowNewCategoryDialog] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+
   const { toast } = useToast()
+  const queryClient = useQueryClient()
   const { data: assets = [], isLoading } = useMediaAssets({
     type: filterType === 'all' ? undefined : filterType,
+    tag: filterTag || undefined,
+    category: filterCategory || undefined,
     search: searchQuery || undefined,
   })
+  const { data: categories = [] } = useMediaCategories()
+  const assetsRef = useRef(assets)
+  useEffect(() => { assetsRef.current = assets }, [assets])
   const mutations = useMediaAssetMutations()
 
-  const allTags = [...new Set(assets.flatMap(a => a.tags || []))].sort()
+  const allTags = useMemo(() => {
+    return [...new Set(assets.flatMap(a => a.tags || []))].sort()
+  }, [assets])
 
   const handleImport = useCallback(async () => {
     const selected = await open({
@@ -113,6 +138,7 @@ export default function MediaAssetManage() {
           type: isImage ? 'image' : 'video',
           file_path: destPath,
           source: 'imported',
+          category: filterCategory || undefined,
         })
         imported++
       }
@@ -123,7 +149,7 @@ export default function MediaAssetManage() {
     } finally {
       setImporting(false)
     }
-  }, [mutations, toast])
+  }, [mutations, toast, filterCategory])
 
   const handleDelete = useCallback(async (id: string) => {
     const confirmed = await confirm('确定要删除吗？删除后文件将从媒体库移除。', {
@@ -148,6 +174,7 @@ export default function MediaAssetManage() {
     setEditPrompt(asset.prompt || '')
     setEditTags((asset.tags || []).join(', '))
     setEditDescription(asset.description || '')
+    setEditCategory(asset.category || '')
   }, [])
 
   const handleSaveEdit = useCallback(async () => {
@@ -160,6 +187,7 @@ export default function MediaAssetManage() {
           prompt: editPrompt || undefined,
           tags: editTags.split(',').map(t => t.trim()).filter(Boolean),
           description: editDescription || undefined,
+          category: editCategory || undefined,
         },
       })
       toast({ title: '保存成功' })
@@ -167,10 +195,11 @@ export default function MediaAssetManage() {
     } catch (error) {
       toast({ title: '保存失败', description: String(error), variant: 'destructive' })
     }
-  }, [editingAsset, editName, editPrompt, editTags, editDescription, mutations, toast])
+  }, [editingAsset, editName, editPrompt, editTags, editDescription, editCategory, mutations, toast])
 
   const handleExportPrompts = useCallback(async () => {
-    if (assets.length === 0) {
+    const currentAssets = assetsRef.current
+    if (currentAssets.length === 0) {
       toast({ title: '没有可导出的内容', variant: 'destructive' })
       return
     }
@@ -180,11 +209,11 @@ export default function MediaAssetManage() {
       const lines: string[] = []
       lines.push(`========== 素材收集 - 提示词导出 ==========`)
       lines.push(`导出时间: ${new Date().toLocaleString()}`)
-      lines.push(`总数: ${assets.length} 个文件`)
+      lines.push(`总数: ${currentAssets.length} 个文件`)
       lines.push('')
 
-      const images = assets.filter(a => a.type === 'image')
-      const videos = assets.filter(a => a.type === 'video')
+      const images = currentAssets.filter(a => a.type === 'image')
+      const videos = currentAssets.filter(a => a.type === 'video')
 
       if (images.length > 0) {
         lines.push('========== 图片提示词 ==========')
@@ -224,10 +253,11 @@ export default function MediaAssetManage() {
     } finally {
       setExporting(null)
     }
-  }, [assets, toast])
+  }, [toast])
 
   const handleExportFiles = useCallback(async () => {
-    if (assets.length === 0) {
+    const currentAssets = assetsRef.current
+    if (currentAssets.length === 0) {
       toast({ title: '没有可导出的文件', variant: 'destructive' })
       return
     }
@@ -241,7 +271,7 @@ export default function MediaAssetManage() {
     setExporting('file')
     try {
       let copied = 0
-      for (const asset of assets) {
+      for (const asset of currentAssets) {
         if (!asset.file_path) continue
         const fileName = asset.name
         const destPath = await join(dir, fileName)
@@ -249,7 +279,6 @@ export default function MediaAssetManage() {
           await copyFile(asset.file_path, destPath)
           copied++
         } catch {
-          // 跳过失败的文件
         }
       }
       toast({ title: '导出成功', description: `已导出 ${copied} 个文件到 ${dir}` })
@@ -258,22 +287,24 @@ export default function MediaAssetManage() {
     } finally {
       setExporting(null)
     }
-  }, [assets, toast])
+  }, [toast])
 
   const handleExportJson = useCallback(async () => {
-    if (assets.length === 0) {
+    const currentAssets = assetsRef.current
+    if (currentAssets.length === 0) {
       toast({ title: '没有可导出的内容', variant: 'destructive' })
       return
     }
 
     setExporting('json')
     try {
-      const exportData = assets.map(asset => ({
+      const exportData = currentAssets.map(asset => ({
         name: asset.name,
         type: asset.type,
         prompt: asset.prompt || null,
         tags: asset.tags || [],
         description: asset.description || null,
+        category: asset.category || null,
         file_path: asset.file_path,
         width: asset.width || null,
         height: asset.height || null,
@@ -302,207 +333,494 @@ export default function MediaAssetManage() {
     } finally {
       setExporting(null)
     }
-  }, [assets, toast])
+  }, [toast])
+
+  const toggleSelectAll = useCallback(() => {
+    if (selectedIds.size === assets.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(assets.map(a => a.id)))
+    }
+  }, [selectedIds, assets])
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }, [])
+
+  const handleBatchDelete = useCallback(async () => {
+    if (selectedIds.size === 0) return
+    const confirmed = await confirm(`确定要删除选中的 ${selectedIds.size} 个素材吗？`, {
+      title: '批量删除确认',
+      kind: 'warning',
+      okLabel: '确定',
+      cancelLabel: '取消',
+    })
+    if (!confirmed) return
+
+    try {
+      await mutations.batchDelete.mutateAsync(Array.from(selectedIds))
+      toast({ title: '批量删除成功', description: `已删除 ${selectedIds.size} 个素材` })
+      setSelectedIds(new Set())
+      setBatchMode(false)
+    } catch (error) {
+      toast({ title: '批量删除失败', description: String(error), variant: 'destructive' })
+    }
+  }, [selectedIds, mutations, toast])
+
+  const handleBatchAddTags = useCallback(async () => {
+    if (selectedIds.size === 0) return
+    const tags = batchTagInput.split(',').map(t => t.trim()).filter(Boolean)
+    if (tags.length === 0) {
+      toast({ title: '请输入标签', variant: 'destructive' })
+      return
+    }
+
+    try {
+      await mutations.batchAddTags.mutateAsync({ ids: Array.from(selectedIds), tags })
+      toast({ title: '批量添加标签成功', description: `已添加 ${tags.length} 个标签` })
+      setShowBatchTagDialog(false)
+      setBatchTagInput('')
+    } catch (error) {
+      toast({ title: '批量添加标签失败', description: String(error), variant: 'destructive' })
+    }
+  }, [selectedIds, batchTagInput, mutations, toast])
+
+  const handleBatchUpdateCategory = useCallback(async () => {
+    if (selectedIds.size === 0) return
+    const category = batchCategoryInput.trim() || null
+
+    try {
+      await mutations.batchUpdateCategory.mutateAsync({ ids: Array.from(selectedIds), category })
+      toast({ title: '批量移动分类成功' })
+      setShowBatchCategoryDialog(false)
+      setBatchCategoryInput('')
+    } catch (error) {
+      toast({ title: '批量移动分类失败', description: String(error), variant: 'destructive' })
+    }
+  }, [selectedIds, batchCategoryInput, mutations, toast])
+
+  const handleCreateCategory = useCallback(async () => {
+    const name = newCategoryName.trim()
+    if (!name) {
+      toast({ title: '请输入分类名称', variant: 'destructive' })
+      return
+    }
+    if (categories.includes(name)) {
+      toast({ title: '分类已存在', variant: 'destructive' })
+      return
+    }
+    try {
+      await saveMediaCategory(name)
+      queryClient.invalidateQueries({ queryKey: mediaAssetKeys.categories() })
+      setShowNewCategoryDialog(false)
+      setNewCategoryName('')
+      toast({ title: '分类创建成功', description: `分类"${name}"已创建` })
+    } catch (error) {
+      toast({ title: '创建分类失败', description: String(error), variant: 'destructive' })
+    }
+  }, [newCategoryName, categories, toast, queryClient])
 
   const isExporting = exporting !== null
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between p-4 border-b shrink-0">
-        <div>
-          <h1 className="text-lg font-semibold">素材收集</h1>
-          <p className="text-sm text-muted-foreground">收集图片、视频及其提示词，用于复用和管理</p>
+    <div className="flex h-full">
+      {/* 左侧分类和标签面板 */}
+      <div className="w-56 border-r bg-card flex flex-col shrink-0">
+        <div className="p-3 border-b flex items-center justify-between">
+          <h3 className="font-semibold text-sm">分类</h3>
+          <button
+            onClick={() => setShowNewCategoryDialog(true)}
+            className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground"
+            title="新建分类"
+          >
+            <FolderPlus className="w-4 h-4" />
+          </button>
         </div>
-        <div className="flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" disabled={isExporting || assets.length === 0}>
-                {isExporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-                导出
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleExportPrompts} disabled={isExporting}>
-                <FileText className="h-4 w-4 mr-2" />
-                导出提示词 (TXT)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleExportFiles} disabled={isExporting}>
-                <Folder className="h-4 w-4 mr-2" />
-                导出文件到目录
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleExportJson} disabled={isExporting}>
-                <FileJson className="h-4 w-4 mr-2" />
-                导出元数据 (JSON)
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button variant="outline" onClick={handleImport} disabled={importing}>
-            {importing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-            导入文件
-          </Button>
+        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          <button
+            onClick={() => setFilterCategory(null)}
+            className={cn(
+              'w-full text-left px-2 py-1.5 rounded text-sm flex items-center justify-between',
+              !filterCategory ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'
+            )}
+          >
+            <span>全部</span>
+            <span className="text-xs opacity-70">{assets.length}</span>
+          </button>
+          {categories.map(cat => {
+            const count = assets.filter(a => a.category === cat).length
+            return (
+              <div
+                key={cat}
+                className={cn(
+                  'w-full flex items-center justify-between rounded text-sm group/cat',
+                  filterCategory === cat ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'
+                )}
+              >
+                <button
+                  onClick={() => setFilterCategory(filterCategory === cat ? null : cat)}
+                  className="flex-1 text-left px-2 py-1.5 truncate"
+                >
+                  {cat}
+                </button>
+                <div className="flex items-center gap-1 pr-1">
+                  <span className="text-xs opacity-70">{count}</span>
+                  <button
+                    onClick={async () => {
+                      const confirmed = await confirm(`确定要删除分类"${cat}"吗？素材不会被删除，只会移除分类标记。`, {
+                        title: '删除分类',
+                        kind: 'warning',
+                        okLabel: '确定',
+                        cancelLabel: '取消',
+                      })
+                      if (!confirmed) return
+                      await deleteMediaCategory(cat)
+                      queryClient.invalidateQueries({ queryKey: mediaAssetKeys.categories() })
+                      if (filterCategory === cat) setFilterCategory(null)
+                      toast({ title: '分类已删除' })
+                    }}
+                    className="p-0.5 rounded opacity-0 group-hover/cat:opacity-100 hover:bg-destructive/20 hover:text-destructive transition-opacity"
+                    title="删除分类"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            )
+          })}
         </div>
-      </div>
 
-      <div className="flex items-center gap-2 p-4 border-b shrink-0">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="搜索名称或提示词..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="pl-8"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
+        <div className="p-3 border-t border-b">
+          <h3 className="font-semibold text-sm mb-2">标签</h3>
         </div>
-        <div className="flex items-center gap-1 border rounded-lg p-0.5">
-          {(['all', 'image', 'video'] as const).map(type => (
-            <button
-              key={type}
-              onClick={() => setFilterType(type)}
-              className={cn(
-                'px-3 py-1.5 rounded-md text-sm transition-colors',
-                filterType === type
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              {type === 'all' ? '全部' : type === 'image' ? '图片' : '视频'}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-auto p-4">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-40 text-muted-foreground">
-            <Loader2 className="h-6 w-6 animate-spin mr-2" />
-            加载中...
-          </div>
-        ) : assets.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-40 text-muted-foreground gap-2">
-            {searchQuery || filterType !== 'all' ? (
-              <>
-                <Search className="h-10 w-10 opacity-30" />
-                <p>没有匹配的媒体文件</p>
-              </>
+        <div className="flex-1 overflow-y-auto p-2">
+          <div className="flex flex-wrap gap-1">
+            {allTags.length > 0 ? (
+              allTags.map(tag => (
+                <Badge
+                  key={tag}
+                  variant={filterTag === tag ? 'default' : 'outline'}
+                  className="cursor-pointer text-[10px]"
+                  onClick={() => setFilterTag(filterTag === tag ? null : tag)}
+                >
+                  {tag}
+                </Badge>
+              ))
             ) : (
-              <>
-                <FileImage className="h-10 w-10 opacity-30" />
-                <p>素材为空，点击右上角导入文件</p>
-              </>
+              <span className="text-xs text-muted-foreground">暂无标签</span>
             )}
           </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {assets.map(asset => {
-              const displayUrl = getImageUrl(asset.file_path) || getVideoUrl(asset.file_path)
-              return (
-                <div
-                  key={asset.id}
-                  className="group relative rounded-lg border bg-card overflow-hidden hover:shadow-md transition-shadow"
-                >
-                  <div className="aspect-[4/3] bg-muted flex items-center justify-center overflow-hidden">
-                    {asset.type === 'image' ? (
-                      displayUrl ? (
-                        <img
-                          src={displayUrl}
-                          alt={asset.name}
-                          className="w-full h-full object-cover cursor-pointer"
-                          onClick={() => setPreviewImage(displayUrl)}
-                        />
-                      ) : (
-                        <Image className="h-8 w-8 text-muted-foreground/50" />
-                      )
-                    ) : displayUrl ? (
-                      <div
-                        className="relative w-full h-full cursor-pointer group/video"
-                        onClick={() => setPreviewVideo(displayUrl)}
-                      >
-                        <video
-                          src={displayUrl}
-                          className="w-full h-full object-cover"
-                          muted
-                          onMouseEnter={e => (e.target as HTMLVideoElement).play()}
-                          onMouseLeave={e => {
-                            (e.target as HTMLVideoElement).pause()
-                            ;(e.target as HTMLVideoElement).currentTime = 0
-                          }}
-                        />
-                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/video:opacity-100 transition-opacity bg-black/30">
-                          <Film className="h-8 w-8 text-white" />
-                        </div>
-                      </div>
-                    ) : (
-                      <Video className="h-8 w-8 text-muted-foreground/50" />
-                    )}
-                    <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => openEditDialog(asset)}
-                        className="h-7 w-7 rounded-full bg-background/90 flex items-center justify-center hover:bg-background shadow-sm"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(asset.id)}
-                        className="h-7 w-7 rounded-full bg-background/90 flex items-center justify-center hover:bg-background hover:text-destructive shadow-sm"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                    <div className="absolute top-2 left-2">
-                      <div className={cn(
-                        'flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium shadow-sm',
-                        asset.type === 'image'
-                          ? 'bg-sky-500/90 text-white'
-                          : 'bg-violet-500/90 text-white'
-                      )}>
-                        {asset.type === 'image' ? (
-                          <Image className="h-3 w-3" />
-                        ) : (
-                          <Film className="h-3 w-3" />
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="p-2.5 space-y-1.5">
-                    <p className="text-xs font-medium truncate" title={asset.name}>
-                      {asset.name}
-                    </p>
-                    {asset.prompt ? (
-                      <p className="text-[10px] text-muted-foreground line-clamp-2 leading-relaxed">
-                        {asset.prompt}
-                      </p>
-                    ) : (
-                      <p className="text-[10px] text-muted-foreground/50 italic">无提示词</p>
-                    )}
-                    {asset.tags && asset.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 pt-0.5">
-                        {asset.tags.slice(0, 3).map(tag => (
-                          <Badge key={tag} variant="outline" className="text-[9px] px-1 py-0 h-4">
-                            {tag}
-                          </Badge>
-                        ))}
-                        {asset.tags.length > 3 && (
-                          <span className="text-[9px] text-muted-foreground">+{asset.tags.length - 3}</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
+        </div>
       </div>
 
+      {/* 右侧主内容区 */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex items-center justify-between p-4 border-b shrink-0">
+          <div>
+            <h1 className="text-lg font-semibold">素材收集</h1>
+            <p className="text-sm text-muted-foreground">收集图片、视频及其提示词，用于复用和管理</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {batchMode && selectedIds.size > 0 && (
+              <div className="flex items-center gap-1 mr-2">
+                <Button variant="outline" size="sm" onClick={() => setShowBatchTagDialog(true)}>
+                  <Tags className="h-3.5 w-3.5 mr-1" />
+                  添加标签
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setShowBatchCategoryDialog(true)}>
+                  <Folder className="h-3.5 w-3.5 mr-1" />
+                  移动分类
+                </Button>
+                <Button variant="destructive" size="sm" onClick={handleBatchDelete}>
+                  <Trash2 className="h-3.5 w-3.5 mr-1" />
+                  删除 ({selectedIds.size})
+                </Button>
+              </div>
+            )}
+            <Button
+              variant={batchMode ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => {
+                setBatchMode(!batchMode)
+                setSelectedIds(new Set())
+              }}
+            >
+              {batchMode ? (
+                <>
+                  <CheckSquare className="h-3.5 w-3.5 mr-1" />
+                  取消选择
+                </>
+              ) : (
+                <>
+                  <Square className="h-3.5 w-3.5 mr-1" />
+                  批量操作
+                </>
+              )}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" disabled={isExporting || assets.length === 0}>
+                  {isExporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                  导出
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleExportPrompts} disabled={isExporting}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  导出提示词 (TXT)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportFiles} disabled={isExporting}>
+                  <Folder className="h-4 w-4 mr-2" />
+                  导出文件到目录
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleExportJson} disabled={isExporting}>
+                  <FileJson className="h-4 w-4 mr-2" />
+                  导出元数据 (JSON)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button variant="outline" onClick={handleImport} disabled={importing}>
+              {importing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+              导入文件
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 p-4 border-b shrink-0">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="搜索名称或提示词..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="pl-8"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1 border rounded-lg p-0.5">
+            {(['all', 'image', 'video'] as const).map(type => (
+              <button
+                key={type}
+                onClick={() => setFilterType(type)}
+                className={cn(
+                  'px-3 py-1.5 rounded-md text-sm transition-colors',
+                  filterType === type
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {type === 'all' ? '全部' : type === 'image' ? '图片' : '视频'}
+              </button>
+            ))}
+          </div>
+          {(filterTag || filterCategory) && (
+            <div className="flex items-center gap-1">
+              {filterCategory && (
+                <Badge variant="secondary" className="gap-1">
+                  分类: {filterCategory}
+                  <button onClick={() => setFilterCategory(null)} className="ml-1 hover:text-destructive">
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              )}
+              {filterTag && (
+                <Badge variant="secondary" className="gap-1">
+                  标签: {filterTag}
+                  <button onClick={() => setFilterTag(null)} className="ml-1 hover:text-destructive">
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              )}
+              <Button variant="ghost" size="sm" onClick={() => { setFilterTag(null); setFilterCategory(null) }}>
+                清除筛选
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-auto p-4">
+          {isLoading ? (
+            <div className="flex items-center justify-center h-40 text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin mr-2" />
+              加载中...
+            </div>
+          ) : assets.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-40 text-muted-foreground gap-2">
+              {searchQuery || filterType !== 'all' || filterTag || filterCategory ? (
+                <>
+                  <Search className="h-10 w-10 opacity-30" />
+                  <p>没有匹配的媒体文件</p>
+                </>
+              ) : (
+                <>
+                  <FileImage className="h-10 w-10 opacity-30" />
+                  <p>素材为空，点击右上角导入文件</p>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              {batchMode && (
+                <div className="col-span-full mb-2 flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={toggleSelectAll}>
+                    {selectedIds.size === assets.length ? '取消全选' : '全选'}
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    已选择 {selectedIds.size} / {assets.length} 个
+                  </span>
+                </div>
+              )}
+              {assets.map(asset => {
+                const displayUrl = getImageUrl(asset.file_path) || getVideoUrl(asset.file_path)
+                const isSelected = selectedIds.has(asset.id)
+                return (
+                  <div
+                    key={asset.id}
+                    className={cn(
+                      'group relative rounded-lg border bg-card overflow-hidden hover:shadow-md transition-shadow',
+                      isSelected && 'ring-2 ring-primary'
+                    )}
+                  >
+                    {batchMode && (
+                      <div
+                        className="absolute top-2 left-2 z-10 cursor-pointer"
+                        onClick={() => toggleSelect(asset.id)}
+                      >
+                        <div className={cn(
+                          'w-5 h-5 rounded border-2 flex items-center justify-center',
+                          isSelected ? 'bg-primary border-primary text-primary-foreground' : 'bg-background border-border'
+                        )}>
+                          {isSelected && <CheckSquare className="w-3 h-3" />}
+                        </div>
+                      </div>
+                    )}
+                    <div className="aspect-[4/3] bg-muted flex items-center justify-center overflow-hidden">
+                      {asset.type === 'image' ? (
+                        displayUrl ? (
+                          <img
+                            src={displayUrl}
+                            alt={asset.name}
+                            className="w-full h-full object-cover cursor-pointer"
+                            onClick={() => !batchMode && setPreviewImage(displayUrl)}
+                          />
+                        ) : (
+                          <Image className="h-8 w-8 text-muted-foreground/50" />
+                        )
+                      ) : displayUrl ? (
+                        <div
+                          className="relative w-full h-full cursor-pointer group/video"
+                          onClick={() => !batchMode && setPreviewVideo(displayUrl)}
+                        >
+                          <video
+                            src={displayUrl}
+                            className="w-full h-full object-cover"
+                            muted
+                            onMouseEnter={e => (e.target as HTMLVideoElement).play()}
+                            onMouseLeave={e => {
+                              (e.target as HTMLVideoElement).pause()
+                              ;(e.target as HTMLVideoElement).currentTime = 0
+                            }}
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/video:opacity-100 transition-opacity bg-black/30">
+                            <Film className="h-8 w-8 text-white" />
+                          </div>
+                        </div>
+                      ) : (
+                        <Video className="h-8 w-8 text-muted-foreground/50" />
+                      )}
+                      {!batchMode && (
+                        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => openEditDialog(asset)}
+                            className="h-7 w-7 rounded-full bg-background/90 flex items-center justify-center hover:bg-background shadow-sm"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(asset.id)}
+                            className="h-7 w-7 rounded-full bg-background/90 flex items-center justify-center hover:bg-background hover:text-destructive shadow-sm"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
+                      <div className="absolute top-2 left-2">
+                        <div className={cn(
+                          'flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium shadow-sm',
+                          asset.type === 'image'
+                            ? 'bg-sky-500/90 text-white'
+                            : 'bg-violet-500/90 text-white'
+                        )}>
+                          {asset.type === 'image' ? (
+                            <Image className="h-3 w-3" />
+                          ) : (
+                            <Film className="h-3 w-3" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-2.5 space-y-1.5">
+                      <p className="text-xs font-medium truncate" title={asset.name}>
+                        {asset.name}
+                      </p>
+                      {asset.prompt ? (
+                        <p className="text-[10px] text-muted-foreground line-clamp-2 leading-relaxed">
+                          {asset.prompt}
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-muted-foreground/50 italic">无提示词</p>
+                      )}
+                      {asset.category && (
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-green-50 dark:bg-green-900/20">
+                          {asset.category}
+                        </Badge>
+                      )}
+                      {asset.tags && asset.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 pt-0.5">
+                          {asset.tags.slice(0, 3).map(tag => (
+                            <Badge
+                              key={tag}
+                              variant="outline"
+                              className={cn(
+                                'text-[9px] px-1 py-0 h-4 cursor-pointer',
+                                filterTag === tag && 'bg-primary text-primary-foreground'
+                              )}
+                              onClick={() => setFilterTag(filterTag === tag ? null : tag)}
+                            >
+                              {tag}
+                            </Badge>
+                          ))}
+                          {asset.tags.length > 3 && (
+                            <span className="text-[9px] text-muted-foreground">+{asset.tags.length - 3}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 编辑对话框 */}
       <Dialog open={!!editingAsset} onOpenChange={(open) => !open && setEditingAsset(null)}>
         <DialogContent>
           <DialogHeader>
@@ -522,6 +840,29 @@ export default function MediaAssetManage() {
                 placeholder="输入提示词..."
                 rows={3}
               />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">分类</label>
+              <div className="flex gap-2">
+                <Input
+                  value={editCategory}
+                  onChange={e => setEditCategory(e.target.value)}
+                  placeholder="输入或选择分类"
+                  className="flex-1"
+                />
+                {categories.length > 0 && (
+                  <select
+                    value={editCategory}
+                    onChange={e => setEditCategory(e.target.value)}
+                    className="px-2 border rounded-md text-sm"
+                  >
+                    <option value="">无分类</option>
+                    {categories.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">标签</label>
@@ -563,6 +904,101 @@ export default function MediaAssetManage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingAsset(null)}>取消</Button>
             <Button onClick={handleSaveEdit}>保存</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 批量添加标签对话框 */}
+      <Dialog open={showBatchTagDialog} onOpenChange={setShowBatchTagDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>批量添加标签</DialogTitle>
+            <DialogDescription>为选中的 {selectedIds.size} 个素材添加标签</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <Input
+              value={batchTagInput}
+              onChange={e => setBatchTagInput(e.target.value)}
+              placeholder="输入标签，用逗号分隔"
+            />
+            {allTags.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {allTags.map(tag => (
+                  <Badge
+                    key={tag}
+                    variant="outline"
+                    className="cursor-pointer hover:bg-accent text-[10px]"
+                    onClick={() => {
+                      const current = batchTagInput.split(',').map(t => t.trim()).filter(Boolean)
+                      if (!current.includes(tag)) {
+                        setBatchTagInput([...current, tag].join(', '))
+                      }
+                    }}
+                  >
+                    + {tag}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBatchTagDialog(false)}>取消</Button>
+            <Button onClick={handleBatchAddTags}>添加</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 批量移动分类对话框 */}
+      <Dialog open={showBatchCategoryDialog} onOpenChange={setShowBatchCategoryDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>移动到分类</DialogTitle>
+            <DialogDescription>为选中的 {selectedIds.size} 个素材设置分类</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <Input
+              value={batchCategoryInput}
+              onChange={e => setBatchCategoryInput(e.target.value)}
+              placeholder="输入分类名称（留空则移除分类）"
+            />
+            {categories.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {categories.map(c => (
+                  <Badge
+                    key={c}
+                    variant={batchCategoryInput === c ? 'default' : 'outline'}
+                    className="cursor-pointer hover:bg-accent text-[10px]"
+                    onClick={() => setBatchCategoryInput(c)}
+                  >
+                    {c}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBatchCategoryDialog(false)}>取消</Button>
+            <Button onClick={handleBatchUpdateCategory}>确定</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 新建分类对话框 */}
+      <Dialog open={showNewCategoryDialog} onOpenChange={setShowNewCategoryDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>新建分类</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <Input
+              value={newCategoryName}
+              onChange={e => setNewCategoryName(e.target.value)}
+              placeholder="输入分类名称"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNewCategoryDialog(false)}>取消</Button>
+            <Button onClick={handleCreateCategory}>创建</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

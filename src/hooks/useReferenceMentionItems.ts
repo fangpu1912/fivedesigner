@@ -40,6 +40,7 @@ export function useReferenceMentionItems(
           thumbnail: ref.url,
           description: ref.description ?? ref.prompt ?? undefined,
           prompt: ref.prompt ?? undefined,
+          aliases: ref.aliases,
         })
       } else if (mentionType === 'audio') {
         if (seenUrls.has(ref.url)) continue
@@ -52,6 +53,7 @@ export function useReferenceMentionItems(
           thumbnail: undefined,
           description: ref.description ?? ref.prompt ?? undefined,
           prompt: ref.prompt ?? undefined,
+          aliases: ref.aliases,
         })
       } else {
         const url = ref.url ? (getImageUrl(ref.url) ?? ref.url) : undefined
@@ -65,6 +67,7 @@ export function useReferenceMentionItems(
           thumbnail: url,
           description: ref.description ?? ref.prompt ?? undefined,
           prompt: ref.prompt ?? undefined,
+          aliases: ref.aliases,
         })
       }
     }
@@ -80,7 +83,8 @@ export function useReferenceMentionItems(
       return items.filter(item =>
         item.name.toLowerCase().includes(lower) ||
         item.description?.toLowerCase().includes(lower) ||
-        item.type.includes(lower)
+        item.type.includes(lower) ||
+        item.aliases?.some(a => a.toLowerCase().includes(lower))
       )
     }
   }, [items])

@@ -473,7 +473,7 @@ interface StoryboardDubbingPanelProps {
 
 export function StoryboardDubbingPanel({
   storyboards,
-  dubbings,
+  dubbings: _dubbings,
   localDubbings,
   characters,
   generatingIds,
@@ -495,10 +495,6 @@ export function StoryboardDubbingPanel({
   void onSaveDubbing
   void onBatchGenerate
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-
-  const getDubbingsByStoryboard = (storyboardId: string): Dubbing[] => {
-    return dubbings.filter(d => d.storyboard_id === storyboardId)
-  }
 
   const toggleSelect = (id: string) => {
     const newSet = new Set(selectedIds)

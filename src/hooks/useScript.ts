@@ -100,8 +100,6 @@ export function useDeleteScriptMutation() {
 // Hook: 保存脚本内容（自动保存用）
 export function useSaveScriptContentMutation() {
   const queryClient = useQueryClient()
-  const createMutation = useCreateScriptMutation()
-  const updateMutation = useUpdateScriptMutation()
 
   return useMutation({
     mutationFn: async ({

@@ -4,6 +4,7 @@
 
 import { vendorConfigService } from './configService'
 import { vendorSandbox } from './vendorSandbox'
+import { getVendorCode } from './codeLoader'
 import type {
   VendorConfig,
   AiType,
@@ -20,7 +21,9 @@ async function executeVendorCode(
   model: any,
   input?: any
 ): Promise<any> {
-  return vendorSandbox.execute(code, config, method, model, input)
+  const latestCode = getVendorCode(config.id)
+  const effectiveCode = latestCode || code
+  return vendorSandbox.execute(effectiveCode, config, method, model, input)
 }
 
 // 解析模型名称
@@ -521,7 +524,7 @@ export class AiVL {
 
     return withTaskRecord(
       'text',
-      `视觉分析: ${params.messages[0]?.content?.slice(0, 50)}...`,
+      `视觉分析: ${(params.messages[0] && params.messages[0].content && params.messages[0].content.slice(0, 50)) || ''}...`,
       modelName,
       projectId,
       async (_updateTask) => {

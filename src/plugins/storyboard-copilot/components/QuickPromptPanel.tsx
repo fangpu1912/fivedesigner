@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
-import { Bookmark, ChevronRight, Camera, Grid3X3, Users, Settings2, Eye, Plus, Pencil, Trash2, X, CheckCheck, RotateCcw, Copy, Check } from 'lucide-react'
+import { Bookmark, ChevronRight, Camera, Grid3X3, Users, Settings2, Eye, Plus, Pencil, Trash2, X, CheckCheck, RotateCcw, Copy, Check, Clapperboard } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -222,6 +222,46 @@ const PANEL_ITEMS: PanelItem[] = [
       if (value.flow === 'action') return 'storyboard layout, 5x5 grid composition, action sequence panels, dynamic movement progression, consistent character design, varied shot types, motion blur emphasis, impact frames, cinematic action choreography'
       if (value.flow === 'mood') return 'storyboard layout, 5x5 grid composition, emotional progression panels, mood transition from calm to intense, consistent character design, atmospheric lighting changes, color temperature shift, cinematic emotional storytelling'
       return 'storyboard layout, 5x5 grid composition, sequential narrative panels, consistent character design across frames, cinematic progression, varied shot types from wide to close-up'
+    },
+  },
+  {
+    id: 'cinematic', name: '影视镜头', icon: <Clapperboard className="h-3.5 w-3.5" />,
+    description: '组合景别、机位、构图、运镜、光影，生成完整影视镜头描述',
+    defaultValue: { shot: 'ws', angle: 'eye', composition: 'rule3', movement: 'static', lighting: 'natural' },
+    render: ({ value, onChange }) => {
+      const sections = [
+        { key: 'shot', label: '景别', options: TAG_CATEGORIES.find(c => c.id === 'shot')?.tags ?? [] },
+        { key: 'angle', label: '机位', options: TAG_CATEGORIES.find(c => c.id === 'angle')?.tags ?? [] },
+        { key: 'composition', label: '构图', options: TAG_CATEGORIES.find(c => c.id === 'composition')?.tags ?? [] },
+        { key: 'movement', label: '运镜', options: TAG_CATEGORIES.find(c => c.id === 'movement')?.tags ?? [] },
+        { key: 'lighting', label: '光影', options: TAG_CATEGORIES.find(c => c.id === 'lighting')?.tags ?? [] },
+      ]
+      return (
+        <div className="space-y-2">
+          {sections.map(section => (
+            <div key={section.key} className="space-y-1">
+              <label className="text-xs text-muted-foreground font-medium">{section.label}</label>
+              <div className="flex flex-wrap gap-1">
+                {section.options.map(opt => (
+                  <button key={opt.id} onClick={() => onChange({ ...value, [section.key]: opt.id })}
+                    className={cn("px-1.5 py-0.5 rounded text-[10px] transition-colors",
+                      value[section.key] === opt.id ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80')}>
+                    {opt.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )
+    },
+    buildPrompt: (value) => {
+      const parts: string[] = []
+      for (const cat of TAG_CATEGORIES) {
+        const tag = cat.tags.find(t => t.id === value[cat.id])
+        if (tag) parts.push(tag.prompt)
+      }
+      return parts.join(', ')
     },
   },
 ]

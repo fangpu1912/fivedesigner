@@ -37,7 +37,6 @@ export function ClickableImage({
 
   // 如果没有传入 images，使用 src 作为单张图片
   const imageList = images.length > 0 ? images : src ? [src] : []
-  const hasMultipleImages = imageList.length > 1
 
   const handleIndexChange = (index: number) => {
     setLocalIndex(index)

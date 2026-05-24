@@ -68,8 +68,14 @@ export class VendorSandbox {
 
       worker.onerror = (e: ErrorEvent) => {
         cleanup()
-        reject(new Error('Worker 执行错误: ' + e.message))
+        reject(new Error('Worker 执行错误: ' + (e.message || '未知错误')))
       }
+
+      // 处理 Worker 异常终止
+      worker.addEventListener('messageerror', (e) => {
+        cleanup()
+        reject(new Error('Worker 消息错误: ' + (e instanceof Error ? e.message : '无法序列化的消息')))
+      })
 
       worker.postMessage({
         type: 'execute',
@@ -155,12 +161,12 @@ export class VendorSandbox {
         method: options.method || 'GET',
         headers: options.headers || {},
         body: options.body,
-        timeout: options.timeout || 60000,
+        timeout: options.timeout || 600000,
       }
     })
 
     if (!result.success) {
-      throw new Error(result.error || 'HTTP 请求失败')
+      throw new Error('HTTP 请求失败: ' + (result.error || `status=${result.status} body=${result.body}`) + ` url=${url}`)
     }
 
     // 尝试解析 JSON 响应

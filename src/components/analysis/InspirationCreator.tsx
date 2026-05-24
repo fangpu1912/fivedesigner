@@ -4,9 +4,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { Sparkles, Loader2, Wand2, Save, AlertCircle, CheckCircle2, History, Trash2, ChevronRight, Clock, FileText, Video, Play } from 'lucide-react'
-import { save } from '@tauri-apps/plugin-dialog'
-import { writeFile } from '@tauri-apps/plugin-fs'
+import { Sparkles, Loader2, Wand2, Save, AlertCircle, CheckCircle2, History, Trash2, ChevronRight, Clock, Play } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -28,36 +26,11 @@ import { useStoryboardMutations, useStoryboards } from '@/hooks/useStoryboards'
 import { useDubbingMutations, useDubbingByEpisode } from '@/hooks/useDubbing'
 import { cn } from '@/lib/utils'
 import logger from '@/utils/logger'
+import { matchAssetsByName } from '@/utils/storyboardReferences'
+import { ContentResultDisplay, ContentResultEmpty } from '@/components/analysis/ContentResultDisplay'
+import type { ContentData } from '@/components/analysis/ContentResultDisplay'
 
-interface GeneratedContent {
-  characters: Array<{
-    name: string
-    description: string
-    prompt: string
-    wardrobeVariants?: string
-  }>
-  scenes: Array<{
-    name: string
-    description: string
-    prompt: string
-  }>
-  props: Array<{
-    name: string
-    description: string
-    prompt: string
-  }>
-  storyboards: Array<{
-    description: string
-    prompt: string
-    videoPrompt: string
-    scene?: string
-    characters?: string[]
-    props?: string[]
-    camera?: string
-    shotType?: string
-    duration?: string
-  }>
-}
+type GeneratedContent = ContentData
 
 interface HistoryItem {
   id: string
@@ -123,10 +96,9 @@ function normalizeGeneratedContent(raw: Record<string, unknown>): GeneratedConte
             description: String(obj.description || ''),
             prompt: String(obj.prompt || obj.image_prompt || ''),
             videoPrompt: String(obj.videoPrompt || obj.video_prompt || ''),
-            scene: obj.scene ? String(obj.scene) : undefined,
+            scene_id: obj.scene_id ? String(obj.scene_id) : undefined,
             characters: normalizeStringArray(obj.characters),
             props: normalizeStringArray(obj.props),
-            camera: obj.camera ? String(obj.camera) : undefined,
             shotType: obj.shotType || obj.shot_type ? String(obj.shotType || obj.shot_type) : undefined,
             duration: obj.duration ? String(obj.duration) : undefined,
           }
@@ -250,7 +222,7 @@ export function InspirationCreator() {
         // 尝试修复常见的JSON格式问题
         let fixedJson = jsonStr
           // 修复未转义的引号（在字符串值内部）
-          .replace(/"([^"]*)"(?=\s*:)/g, (match, key) => `"${key}"`) // 保留键名的引号
+          .replace(/"([^"]*)"(?=\s*:)/g, (_match, key) => `"${key}"`) // 保留键名的引号
           .replace(/:(\s*)"([^"]*)"([^":,}\]]*)"([^"]*)"([^"]*)"/g, ': "$2$3\\"$4$5"') // 修复值中的引号
           // 修复多余的逗号
           .replace(/,\s*([\]}])/g, '$1')
@@ -449,8 +421,16 @@ export function InspirationCreator() {
         await characterMutations.remove.mutateAsync(char.id)
       }
 
-      const characterIdMap = new Map<string, string>()
+      const existingMatch = await matchAssetsByName(
+        currentEpisodeId,
+        generatedContent.characters.map(c => c.name),
+        generatedContent.scenes.map(s => s.name),
+        generatedContent.props.map(p => p.name),
+      )
+
+      const characterIdMap = new Map<string, string>(existingMatch.characterMap)
       for (const char of generatedContent.characters) {
+        if (characterIdMap.has(char.name)) continue
         const created = await characterMutations.create.mutateAsync({
           project_id: currentProjectId,
           episode_id: currentEpisodeId,
@@ -461,8 +441,9 @@ export function InspirationCreator() {
         characterIdMap.set(char.name, created.id)
       }
 
-      const sceneIdMap = new Map<string, string>()
+      const sceneIdMap = new Map<string, string>(existingMatch.sceneMap)
       for (const scene of generatedContent.scenes) {
+        if (sceneIdMap.has(scene.name)) continue
         const created = await sceneMutations.create.mutateAsync({
           project_id: currentProjectId,
           episode_id: currentEpisodeId,
@@ -473,8 +454,9 @@ export function InspirationCreator() {
         sceneIdMap.set(scene.name, created.id)
       }
 
-      const propIdMap = new Map<string, string>()
+      const propIdMap = new Map<string, string>(existingMatch.propMap)
       for (const prop of generatedContent.props) {
+        if (propIdMap.has(prop.name)) continue
         const created = await propMutations.create.mutateAsync({
           project_id: currentProjectId,
           episode_id: currentEpisodeId,
@@ -496,8 +478,6 @@ export function InspirationCreator() {
           .map(name => propIdMap.get(name))
           .filter((id): id is string => !!id)
 
-        const sceneId = sb.scene ? sceneIdMap.get(sb.scene) : undefined
-
         await storyboardMutations.createStoryboard.mutateAsync({
           project_id: currentProjectId,
           episode_id: currentEpisodeId,
@@ -508,7 +488,6 @@ export function InspirationCreator() {
           sort_order: i,
           status: 'pending',
           character_ids: characterIds,
-          scene_id: sceneId,
           prop_ids: propIds,
           reference_images: [],
           video_reference_images: [],
@@ -533,104 +512,6 @@ export function InspirationCreator() {
     } finally {
       setSaving(false)
     }
-  }
-
-  // 导出生图提示词
-  const handleExportImagePrompts = async () => {
-    if (!generatedContent) {
-      toast({ title: '请先生成内容', variant: 'destructive' })
-      return
-    }
-
-    const lines: string[] = []
-    lines.push('========== 角色提示词 ==========')
-    generatedContent.characters.forEach((char, index) => {
-      lines.push(`【角色 ${index + 1}】${char.name}`)
-      lines.push(`${char.prompt}`)
-      if (char.wardrobeVariants) {
-        lines.push(`${char.wardrobeVariants}`)
-      }
-    })
-
-    lines.push('========== 场景提示词 ==========')
-    generatedContent.scenes.forEach((scene, index) => {
-      lines.push(`【场景 ${index + 1}】${scene.name}`)
-      lines.push(`${scene.prompt}`)
-    })
-
-    lines.push('========== 道具提示词 ==========')
-    generatedContent.props.forEach((prop, index) => {
-      lines.push(`【道具 ${index + 1}】${prop.name}`)
-      lines.push(`${prop.prompt}`)
-    })
-
-    lines.push('========== 分镜图片提示词 ==========')
-    generatedContent.storyboards.forEach((sb, index) => {
-      lines.push(`【分镜 ${index + 1}】`)
-      lines.push(`${sb.prompt}`)
-    })
-
-    const content = lines.join('\n')
-    const defaultName = `生图提示词_${topic.slice(0, 20)}_${new Date().toISOString().slice(0, 10)}.txt`
-
-    const savePath = await save({
-      defaultPath: defaultName,
-      filters: [{ name: '文本文件', extensions: ['txt'] }],
-      title: '保存生图提示词',
-    })
-
-    if (!savePath) return
-
-    const encoder = new TextEncoder()
-    await writeFile(savePath, encoder.encode(content))
-    toast({ title: '导出成功', description: `已保存到 ${savePath}` })
-  }
-
-  // 导出生视频提示词
-  const handleExportVideoPrompts = async () => {
-    if (!generatedContent) {
-      toast({ title: '请先生成内容', variant: 'destructive' })
-      return
-    }
-
-    const lines: string[] = []
-    lines.push('========== 分镜视频提示词 ==========')
-    
-    generatedContent.storyboards.forEach((sb, index) => {
-      lines.push(`【分镜 ${index + 1}】`)
-      if (sb.characters && sb.characters.length > 0) {
-        lines.push(`角色：${sb.characters.join('、')}`)
-      }
-      if (sb.props && sb.props.length > 0) {
-        lines.push(`道具：${sb.props.join('、')}`)
-      }
-      if (sb.shotType) {
-        lines.push(`镜头类型：${sb.shotType}`)
-      }
-      if (sb.camera) {
-        lines.push(`机位：${sb.camera}`)
-      }
-      if (sb.duration) {
-        lines.push(`时长：${sb.duration}`)
-      }
-      lines.push(`${sb.videoPrompt}`)
-      lines.push('---')
-    })
-
-    const content = lines.join('\n')
-    const defaultName = `视频提示词_${topic.slice(0, 20)}_${new Date().toISOString().slice(0, 10)}.txt`
-
-    const savePath = await save({
-      defaultPath: defaultName,
-      filters: [{ name: '文本文件', extensions: ['txt'] }],
-      title: '保存视频提示词',
-    })
-
-    if (!savePath) return
-
-    const encoder = new TextEncoder()
-    await writeFile(savePath, encoder.encode(content))
-    toast({ title: '导出成功', description: `已保存到 ${savePath}` })
   }
 
   return (
@@ -780,56 +661,30 @@ export function InspirationCreator() {
         {/* 右侧：生成结果 */}
         <div className="lg:col-span-2">
           {generatedContent ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>创作结果</span>
-                  <Badge variant="secondary">
-                    {generatedContent.characters.length}角色 · {generatedContent.scenes.length}场景 · {generatedContent.props.length}道具 · {generatedContent.storyboards.length}分镜
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* 操作按钮组 */}
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    onClick={handleSaveToEpisode}
-                    disabled={saving || !hasSelectedProjectAndEpisode}
-                    className="flex-1"
-                  >
-                    {saving ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        保存中...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4 mr-2" />
-                        保存到剧集
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleExportImagePrompts}
-                    disabled={!generatedContent}
-                    title="导出所有生图提示词（角色、场景、道具、分镜首帧）"
-                  >
-                    <FileText className="w-4 h-4 mr-2" />
-                    导出生图提示词
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleExportVideoPrompts}
-                    disabled={!generatedContent}
-                    title="导出所有视频提示词（分镜动态）"
-                  >
-                    <Video className="w-4 h-4 mr-2" />
-                    导出视频提示词
-                  </Button>
-                </div>
-
-                {/* 延伸剧情 */}
+            <ContentResultDisplay
+              content={generatedContent}
+              title="创作结果"
+              showExport
+              actions={
+                <Button
+                  onClick={handleSaveToEpisode}
+                  disabled={saving || !hasSelectedProjectAndEpisode}
+                  className="w-full"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      保存中...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      保存到剧集
+                    </>
+                  )}
+                </Button>
+              }
+              extraSections={
                 <div className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-100 space-y-3">
                   <div className="flex items-center gap-2">
                     <Play className="w-4 h-4 text-indigo-600" />
@@ -863,130 +718,13 @@ export function InspirationCreator() {
                     </Button>
                   </div>
                 </div>
-
-                {/* 角色 */}
-                {generatedContent.characters.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-semibold flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-blue-500" />
-                      角色设定
-                    </h3>
-                    {generatedContent.characters.map((char, index) => (
-                      <div key={index} className="p-4 bg-muted/30 rounded-lg space-y-3">
-                        <div className="font-medium text-base">{char.name}</div>
-                        <div className="text-sm text-muted-foreground">{char.description}</div>
-                        
-                        {/* 当前状态剧照 */}
-                        <div className="space-y-1">
-                          <div className="text-xs font-medium text-muted-foreground">当前状态剧照</div>
-                          <div className="text-xs text-muted-foreground/70 bg-muted p-2 rounded">{char.prompt}</div>
-                        </div>
-                        
-                        {/* 衍生状态四视图 */}
-                        {char.wardrobeVariants && (
-                          <div className="space-y-1">
-                            <div className="text-xs font-medium text-purple-600">衍生衣橱（场景服装转变）</div>
-                            <div className="text-xs text-muted-foreground/70 bg-purple-50 p-2 rounded border border-purple-100">{char.wardrobeVariants}</div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* 场景 */}
-                {generatedContent.scenes.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-semibold flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-green-500" />
-                      场景设定
-                    </h3>
-                    {generatedContent.scenes.map((scene, index) => (
-                      <div key={index} className="p-4 bg-muted/30 rounded-lg space-y-2">
-                        <div className="font-medium text-base">{scene.name}</div>
-                        <div className="text-sm text-muted-foreground">{scene.description}</div>
-                        <div className="text-xs text-muted-foreground/70 bg-muted p-2 rounded">
-                          <span className="font-medium">生图提示词：</span>{scene.prompt}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* 道具 */}
-                {generatedContent.props.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-semibold flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-orange-500" />
-                      道具设定
-                    </h3>
-                    {generatedContent.props.map((prop, index) => (
-                      <div key={index} className="p-4 bg-muted/30 rounded-lg space-y-2">
-                        <div className="font-medium text-base">{prop.name}</div>
-                        <div className="text-sm text-muted-foreground">{prop.description}</div>
-                        <div className="text-xs text-muted-foreground/70 bg-muted p-2 rounded">
-                          <span className="font-medium">生图提示词：</span>{prop.prompt}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* 分镜 */}
-                {generatedContent.storyboards.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-semibold flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-purple-500" />
-                      分镜脚本
-                    </h3>
-                    {generatedContent.storyboards.map((sb, index) => (
-                      <div key={index} className="p-4 bg-muted/30 rounded-lg space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="font-medium text-base">分镜 {index + 1}</div>
-                          <div className="flex gap-1">
-                            {sb.duration && (
-                              <Badge variant="secondary" className="text-[10px]">{sb.duration}</Badge>
-                            )}
-                            {sb.shotType && (
-                              <Badge variant="outline" className="text-[10px]">{sb.shotType}</Badge>
-                            )}
-                            {sb.camera && (
-                              <Badge variant="outline" className="text-[10px]">{sb.camera}</Badge>
-                            )}
-                          </div>
-                        </div>
-                        <div className="text-sm text-muted-foreground">{sb.description}</div>
-                        
-                        {sb.characters && sb.characters.length > 0 && (
-                          <div className="flex flex-wrap gap-1">
-                            {sb.characters.map((c, i) => (
-                              <Badge key={i} variant="outline" className="text-xs">{c}</Badge>
-                            ))}
-                          </div>
-                        )}
-                        
-                        <div className="space-y-1">
-                          <div className="text-xs font-medium text-muted-foreground">首帧画面提示词</div>
-                          <div className="text-xs text-muted-foreground/70 bg-muted p-2 rounded">{sb.prompt}</div>
-                        </div>
-                        <div className="space-y-1">
-                          <div className="text-xs font-medium text-muted-foreground">视频动态提示词</div>
-                          <div className="text-xs text-muted-foreground/70 bg-muted p-2 rounded">{sb.videoPrompt}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+              }
+            />
           ) : (
-            <Card>
-              <CardContent className="py-12 text-center text-muted-foreground">
-                <Sparkles className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>输入主题开始创作</p>
-                <p className="text-sm mt-2">或从历史记录中选择查看</p>
-              </CardContent>
-            </Card>
+            <ContentResultEmpty
+              text="输入主题开始创作"
+              subText="或从历史记录中选择查看"
+            />
           )}
         </div>
       </div>

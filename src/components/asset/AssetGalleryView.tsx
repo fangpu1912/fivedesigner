@@ -31,6 +31,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { cn } from "@/lib/utils"
 import { useToast } from '@/hooks/useToast'
+import { getAssetUrl } from '@/utils/asset'
 import type { AssetItem, AssetCategory } from './AssetManagerPanel'
 
 interface AssetGalleryViewProps {
@@ -43,7 +44,7 @@ interface AssetGalleryViewProps {
   onImageUpload?: (asset: AssetItem, imagePath: string) => void
   onImageRemove?: (asset: AssetItem) => void
   onSave?: (asset: AssetItem) => Promise<void>
-  getFileUrl: (path?: string) => string | null
+  getFileUrl?: (path?: string) => string | null
   projectId?: string
   episodeId?: string
 }
@@ -99,7 +100,6 @@ export function AssetGalleryView({
   onImageUpload: _onImageUpload,
   onImageRemove: _onImageRemove,
   onSave,
-  getFileUrl,
 }: AssetGalleryViewProps) {
   const { toast } = useToast()
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -120,6 +120,8 @@ export function AssetGalleryView({
   const currentAsset = assets[currentIndex]
   const config = currentAsset ? CATEGORY_CONFIG[currentAsset.category] : CATEGORY_CONFIG[activeCategory]
 
+  const assetIdList = assets.map(a => a.id).join(',')
+
   // 同步外部选中状态
   useEffect(() => {
     if (selectedAssetId) {
@@ -128,13 +130,12 @@ export function AssetGalleryView({
         setCurrentIndex(index)
       }
     }
-  }, [selectedAssetId, assets])
+  }, [selectedAssetId, assetIdList])
 
   // 切换资产时通知外部
   useEffect(() => {
     if (currentAsset) {
       onSelect(currentAsset.id)
-      // 重置编辑状态
       setEditingAsset(null)
       setEditForm({
         name: currentAsset.name,
@@ -143,7 +144,7 @@ export function AssetGalleryView({
         videoPrompt: currentAsset.videoPrompt || '',
       })
     }
-  }, [currentIndex, currentAsset, onSelect])
+  }, [currentIndex, assetIdList])
 
   // 键盘导航
   useEffect(() => {
@@ -239,9 +240,7 @@ export function AssetGalleryView({
 
   if (!currentAsset) return null
 
-  const thumbnail = currentAsset.thumbnail ? getFileUrl(currentAsset.thumbnail) : null
-  const _hasPrompt = !!currentAsset.prompt
-  const _hasVideoPrompt = !!currentAsset.videoPrompt
+  const thumbnail = currentAsset.thumbnail ? getAssetUrl(currentAsset.thumbnail) : null
 
   return (
     <div className="h-full flex flex-col bg-background">
@@ -372,7 +371,7 @@ export function AssetGalleryView({
             <ScrollArea className="h-full w-full whitespace-nowrap overflow-hidden">
               <div className="flex gap-2 px-2">
                 {assets.map((asset, index) => {
-                  const thumb = asset.thumbnail ? getFileUrl(asset.thumbnail) : null
+                  const thumb = asset.thumbnail ? getAssetUrl(asset.thumbnail) : null
                   const isActive = index === currentIndex
                   return (
                     <button
@@ -432,7 +431,7 @@ export function AssetGalleryView({
                 {currentAsset.tags && currentAsset.tags.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {currentAsset.tags.map((tag, i) => (
-                      <Badge key={i} variant="secondary" className="text-xs">
+                      <Badge key={tag + '-' + i} variant="secondary" className="text-xs">
                         <Tag className="h-3 w-3 mr-1" />
                         {tag}
                       </Badge>
@@ -529,7 +528,7 @@ export function AssetGalleryView({
                     {currentAsset.prop_names && currentAsset.prop_names.length > 0 && (
                       <div className="flex flex-wrap gap-2">
                         {currentAsset.prop_names.map((name, i) => (
-                          <div key={i} className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-orange-50 text-sm">
+                          <div key={name + '-' + i} className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-orange-50 text-sm">
                             <Box className="h-3.5 w-3.5 text-orange-600" />
                             {name}
                           </div>

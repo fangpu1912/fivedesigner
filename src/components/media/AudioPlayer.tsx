@@ -81,18 +81,6 @@ export function AudioPlayer({ src, autoPlay = false, onEnded, onTimeUpdate }: Au
     setIsLoading(false)
   }, [])
 
-  const handleError = useCallback((e: React.SyntheticEvent<HTMLAudioElement>) => {
-    console.error('[AudioPlayer] Audio error:', e)
-    const audio = e.currentTarget
-    console.error(
-      '[AudioPlayer] Audio error code:',
-      audio.error?.code,
-      'message:',
-      audio.error?.message
-    )
-    setIsLoading(false)
-  }, [])
-
   const handleSeek = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       if (!audioRef.current) return

@@ -8,6 +8,7 @@ export interface CanvasEventPayload {
   sourceHandleId?: string
   nodeId?: string
   data?: Record<string, unknown>
+  noConnect?: boolean
 }
 
 class CanvasEventEmitter {

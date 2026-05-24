@@ -21,11 +21,29 @@ import { deleteMediaFile } from '@/utils/mediaStorage'
 import { CREATE_TABLES_SQL } from '@/db/schema'
 
 let dbInstance: Database | null = null
+let dbInitPromise: Promise<Database> | null = null
 
 async function getDb(): Promise<Database> {
   if (dbInstance) return dbInstance
-  dbInstance = await Database.load('sqlite:fivedesigner.db')
-  return dbInstance
+  if (dbInitPromise) return dbInitPromise
+
+  dbInitPromise = Database.load('sqlite:fivedesigner.db').then(db => {
+    dbInstance = db
+    return db
+  }).catch(err => {
+    dbInitPromise = null
+    throw err
+  })
+
+  return dbInitPromise
+}
+
+export async function closeDb(): Promise<void> {
+  if (dbInstance) {
+    await dbInstance.close()
+    dbInstance = null
+    dbInitPromise = null
+  }
 }
 
 function parseJsonField<T>(value: unknown): T | undefined {
@@ -68,6 +86,7 @@ function rowToCharacter(row: Record<string, unknown>): Character {
   return {
     ...row,
     tags: parseJsonField<string[]>(row.tags) || [],
+    aliases: parseJsonField<string[]>(row.aliases) || [],
     minimax_file_id: row.minimax_file_id as number | undefined,
   } as unknown as Character
 }
@@ -77,6 +96,7 @@ function rowToScene(row: Record<string, unknown>): Scene {
     ...row,
     tags: parseJsonField<string[]>(row.tags) || [],
     metadata: parseJsonField<Record<string, unknown>>(row.metadata),
+    aliases: parseJsonField<string[]>(row.aliases) || [],
   } as unknown as Scene
 }
 
@@ -85,6 +105,7 @@ function rowToProp(row: Record<string, unknown>): Prop {
     ...row,
     tags: parseJsonField<string[]>(row.tags) || [],
     metadata: parseJsonField<Record<string, unknown>>(row.metadata),
+    aliases: parseJsonField<string[]>(row.aliases) || [],
   } as unknown as Prop
 }
 
@@ -152,18 +173,24 @@ function rowToTaskLogEntry(row: Record<string, unknown>): TaskLogEntry {
 
 class SQLiteDatabase {
   private initialized = false
+  private initPromise: Promise<void> | null = null
 
   async initialize(): Promise<void> {
     if (this.initialized) return
-    const db = await getDb()
-    await db.execute(CREATE_TABLES_SQL)
-    await db.execute('PRAGMA journal_mode=WAL')
-    await db.execute('PRAGMA foreign_keys=ON')
+    if (this.initPromise) return this.initPromise
 
-    // Run migrations
-    await this.runMigrations()
+    this.initPromise = (async () => {
+      const db = await getDb()
+      await db.execute(CREATE_TABLES_SQL)
+      await db.execute('PRAGMA journal_mode=WAL')
+      await db.execute('PRAGMA foreign_keys=ON')
 
-    this.initialized = true
+      await this.runMigrations()
+
+      this.initialized = true
+    })()
+
+    return this.initPromise
   }
 
   // 通用 SQL 执行方法
@@ -184,6 +211,8 @@ class SQLiteDatabase {
     const db = await getDb()
     
     try {
+      console.log('[DB Migration] Starting migrations...')
+      
       const storyboardsTableInfo = await db.select<{ name: string; type: string }[]>("PRAGMA table_info(storyboards)")
       const hasVideoReferenceImages = storyboardsTableInfo.some(col => col.name === 'video_reference_images')
       
@@ -202,12 +231,51 @@ class SQLiteDatabase {
         } catch (_alterError) {}
       }
 
+      const hasCharacterAliases = charactersTableInfo.some(col => col.name === 'aliases')
+      if (!hasCharacterAliases) {
+        try {
+          await db.execute('ALTER TABLE characters ADD COLUMN aliases TEXT')
+        } catch (_alterError) {}
+      }
+
+      const scenesTableInfo = await db.select<{ name: string; type: string }[]>("PRAGMA table_info(scenes)")
+      const hasSceneAliases = scenesTableInfo.some(col => col.name === 'aliases')
+      if (!hasSceneAliases) {
+        try {
+          await db.execute('ALTER TABLE scenes ADD COLUMN aliases TEXT')
+        } catch (_alterError) {}
+      }
+
+      const propsTableInfo = await db.select<{ name: string; type: string }[]>("PRAGMA table_info(props)")
+      const hasPropAliases = propsTableInfo.some(col => col.name === 'aliases')
+      if (!hasPropAliases) {
+        try {
+          await db.execute('ALTER TABLE props ADD COLUMN aliases TEXT')
+        } catch (_alterError) {}
+      }
+
+      const mediaAssetsTableInfo = await db.select<{ name: string; type: string }[]>("PRAGMA table_info(media_assets)")
+      const hasCategory = mediaAssetsTableInfo.some(col => col.name === 'category')
+      if (!hasCategory) {
+        try {
+          await db.execute('ALTER TABLE media_assets ADD COLUMN category TEXT')
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_media_assets_category ON media_assets(category)')
+          console.log('[DB Migration] Added category column to media_assets')
+        } catch (alterError) {
+          console.error('[DB Migration] Failed to add category column:', alterError)
+        }
+      }
+
       try {
         await db.execute('CREATE INDEX IF NOT EXISTS idx_dubbings_character_id ON dubbings(character_id)')
         await db.execute('CREATE INDEX IF NOT EXISTS idx_analysis_tasks_file_path ON analysis_tasks(file_path)')
         await db.execute('CREATE INDEX IF NOT EXISTS idx_canvas_data_episode_id ON canvas_data(episode_id)')
       } catch (_indexError) {}
-    } catch (_error) {}
+      
+      console.log('[DB Migration] All migrations completed successfully')
+    } catch (error) {
+      console.error('[DB Migration] Migration failed:', error)
+    }
   }
 
   // ==================== Projects ====================
@@ -563,10 +631,10 @@ class SQLiteDatabase {
     const now = new Date().toISOString()
     const id = uuidv4()
     await db.execute(
-      `INSERT INTO characters (id, project_id, episode_id, name, image, default_voice_id, minimax_voice_id, minimax_file_id, description, prompt, voice_description, tag, tags, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+      `INSERT INTO characters (id, project_id, episode_id, name, image, default_voice_id, minimax_voice_id, minimax_file_id, description, prompt, voice_description, tag, tags, aliases, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
       [id, character.project_id, character.episode_id ?? null, character.name, character.image ?? null,
        character.default_voice_id ?? null, character.minimax_voice_id ?? null, character.minimax_file_id ?? null,
-       character.description ?? null, character.prompt ?? null, character.voice_description ?? null, character.tag ?? null, toJsonField(character.tags), now, now]
+       character.description ?? null, character.prompt ?? null, character.voice_description ?? null, character.tag ?? null, toJsonField(character.tags), toJsonField(character.aliases), now, now]
     )
     return { ...character, id, created_at: now, updated_at: now }
   }
@@ -579,10 +647,10 @@ class SQLiteDatabase {
 
     const updated = { ...existing, ...data, updated_at: new Date().toISOString() }
     await db.execute(
-      `UPDATE characters SET name = $1, image = $2, default_voice_id = $3, minimax_voice_id = $4, minimax_file_id = $5, description = $6, prompt = $7, voice_description = $8, tag = $9, tags = $10, updated_at = $11 WHERE id = $12`,
+      `UPDATE characters SET name = $1, image = $2, default_voice_id = $3, minimax_voice_id = $4, minimax_file_id = $5, description = $6, prompt = $7, voice_description = $8, tag = $9, tags = $10, aliases = $11, updated_at = $12 WHERE id = $13`,
       [updated.name, updated.image ?? null, updated.default_voice_id ?? null, updated.minimax_voice_id ?? null,
        updated.minimax_file_id ?? null, updated.description ?? null, updated.prompt ?? null, updated.voice_description ?? null,
-       updated.tag ?? null, toJsonField(updated.tags), updated.updated_at, id]
+       updated.tag ?? null, toJsonField(updated.tags), toJsonField(updated.aliases), updated.updated_at, id]
     )
     return updated
   }
@@ -722,9 +790,9 @@ class SQLiteDatabase {
     const now = new Date().toISOString()
     const id = uuidv4()
     await db.execute(
-      `INSERT INTO scenes (id, project_id, episode_id, name, description, prompt, tags, image, metadata, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      `INSERT INTO scenes (id, project_id, episode_id, name, description, prompt, tags, image, metadata, aliases, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [id, scene.project_id, scene.episode_id ?? null, scene.name, scene.description ?? null,
-       scene.prompt ?? null, toJsonField(scene.tags), scene.image ?? null, toJsonField(scene.metadata), now, now]
+       scene.prompt ?? null, toJsonField(scene.tags), scene.image ?? null, toJsonField(scene.metadata), toJsonField(scene.aliases), now, now]
     )
     return { ...scene, id, created_at: now, updated_at: now }
   }
@@ -737,9 +805,9 @@ class SQLiteDatabase {
 
     const updated = { ...existing, ...data, updated_at: new Date().toISOString() }
     await db.execute(
-      `UPDATE scenes SET name = $1, description = $2, prompt = $3, tags = $4, image = $5, metadata = $6, updated_at = $7 WHERE id = $8`,
+      `UPDATE scenes SET name = $1, description = $2, prompt = $3, tags = $4, image = $5, metadata = $6, aliases = $7, updated_at = $8 WHERE id = $9`,
       [updated.name, updated.description ?? null, updated.prompt ?? null, toJsonField(updated.tags),
-       updated.image ?? null, toJsonField(updated.metadata), updated.updated_at, id]
+       updated.image ?? null, toJsonField(updated.metadata), toJsonField(updated.aliases), updated.updated_at, id]
     )
     return updated
   }
@@ -790,9 +858,9 @@ class SQLiteDatabase {
     const now = new Date().toISOString()
     const id = uuidv4()
     await db.execute(
-      `INSERT INTO props (id, project_id, episode_id, name, description, prompt, tags, image, metadata, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      `INSERT INTO props (id, project_id, episode_id, name, description, prompt, tags, image, metadata, aliases, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [id, prop.project_id, prop.episode_id ?? null, prop.name, prop.description ?? null,
-       prop.prompt ?? null, toJsonField(prop.tags), prop.image ?? null, toJsonField(prop.metadata), now, now]
+       prop.prompt ?? null, toJsonField(prop.tags), prop.image ?? null, toJsonField(prop.metadata), toJsonField(prop.aliases), now, now]
     )
     return { ...prop, id, created_at: now, updated_at: now }
   }
@@ -805,9 +873,9 @@ class SQLiteDatabase {
 
     const updated = { ...existing, ...data, updated_at: new Date().toISOString() }
     await db.execute(
-      `UPDATE props SET name = $1, description = $2, prompt = $3, tags = $4, image = $5, metadata = $6, updated_at = $7 WHERE id = $8`,
+      `UPDATE props SET name = $1, description = $2, prompt = $3, tags = $4, image = $5, metadata = $6, aliases = $7, updated_at = $8 WHERE id = $9`,
       [updated.name, updated.description ?? null, updated.prompt ?? null, toJsonField(updated.tags),
-       updated.image ?? null, toJsonField(updated.metadata), updated.updated_at, id]
+       updated.image ?? null, toJsonField(updated.metadata), toJsonField(updated.aliases), updated.updated_at, id]
     )
     return updated
   }
@@ -1066,7 +1134,7 @@ class SQLiteDatabase {
 
   // ==================== Media Assets ====================
 
-  async getMediaAssets(filters?: { type?: string; tag?: string; search?: string }): Promise<MediaAsset[]> {
+  async getMediaAssets(filters?: { type?: string; tag?: string; category?: string; search?: string }): Promise<MediaAsset[]> {
     await this.initialize()
     const db = await getDb()
     let sql = 'SELECT * FROM media_assets'
@@ -1081,6 +1149,10 @@ class SQLiteDatabase {
       conditions.push(`tags LIKE $${params.length + 1}`)
       params.push(`%"${filters.tag}"%`)
     }
+    if (filters?.category) {
+      conditions.push(`category = $${params.length + 1}`)
+      params.push(filters.category)
+    }
     if (filters?.search) {
       conditions.push(`(name LIKE $${params.length + 1} OR prompt LIKE $${params.length + 1})`)
       params.push(`%${filters.search}%`)
@@ -1089,8 +1161,24 @@ class SQLiteDatabase {
       sql += ' WHERE ' + conditions.join(' AND ')
     }
     sql += ' ORDER BY created_at DESC'
-    const rows = await db.select<Record<string, unknown>[]>(sql, params)
-    return rows.map(rowToMediaAsset)
+    try {
+      const rows = await db.select<Record<string, unknown>[]>(sql, params)
+      return rows.map(rowToMediaAsset)
+    } catch (error) {
+      if (String(error).includes('no such column: category')) {
+        console.warn('[DB] category column not found, retrying without category filter...')
+        const newConditions = conditions.filter(c => !c.includes('category'))
+        const newParams = params.filter(p => filters?.category !== p)
+        let newSql = 'SELECT * FROM media_assets'
+        if (newConditions.length > 0) {
+          newSql += ' WHERE ' + newConditions.join(' AND ')
+        }
+        newSql += ' ORDER BY created_at DESC'
+        const rows = await db.select<Record<string, unknown>[]>(newSql, newParams)
+        return rows.map(rowToMediaAsset)
+      }
+      throw error
+    }
   }
 
   async getMediaAssetById(id: string): Promise<MediaAsset | null> {
@@ -1108,9 +1196,9 @@ class SQLiteDatabase {
     const now = new Date().toISOString()
     const id = uuidv4()
     await db.execute(
-      `INSERT INTO media_assets (id, name, type, file_path, prompt, tags, description, width, height, file_size, source, project_id, episode_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+      `INSERT INTO media_assets (id, name, type, file_path, prompt, tags, description, category, width, height, file_size, source, project_id, episode_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
       [id, asset.name, asset.type, asset.file_path, asset.prompt ?? null, toJsonField(asset.tags),
-       asset.description ?? null, asset.width ?? null, asset.height ?? null, asset.file_size ?? null,
+       asset.description ?? null, asset.category ?? null, asset.width ?? null, asset.height ?? null, asset.file_size ?? null,
        asset.source ?? null, asset.project_id ?? null, asset.episode_id ?? null, now, now]
     )
     return { ...asset, id, created_at: now, updated_at: now }
@@ -1123,9 +1211,9 @@ class SQLiteDatabase {
     if (!existing) throw new Error('MediaAsset not found')
     const updated = { ...existing, ...data, updated_at: new Date().toISOString() }
     await db.execute(
-      `UPDATE media_assets SET name = $1, type = $2, file_path = $3, prompt = $4, tags = $5, description = $6, width = $7, height = $8, file_size = $9, source = $10, project_id = $11, episode_id = $12, updated_at = $13 WHERE id = $14`,
+      `UPDATE media_assets SET name = $1, type = $2, file_path = $3, prompt = $4, tags = $5, description = $6, category = $7, width = $8, height = $9, file_size = $10, source = $11, project_id = $12, episode_id = $13, updated_at = $14 WHERE id = $15`,
       [updated.name, updated.type, updated.file_path, updated.prompt ?? null, toJsonField(updated.tags),
-       updated.description ?? null, updated.width ?? null, updated.height ?? null, updated.file_size ?? null,
+       updated.description ?? null, updated.category ?? null, updated.width ?? null, updated.height ?? null, updated.file_size ?? null,
        updated.source ?? null, updated.project_id ?? null, updated.episode_id ?? null, updated.updated_at, id]
     )
     return updated
@@ -1137,6 +1225,57 @@ class SQLiteDatabase {
     const asset = await this.getMediaAssetById(id)
     if (asset?.file_path && !asset.file_path.startsWith('http')) await deleteMediaFile(asset.file_path).catch(() => {})
     await db.execute('DELETE FROM media_assets WHERE id = $1', [id])
+  }
+
+  async batchDeleteMediaAssets(ids: string[]): Promise<void> {
+    await this.initialize()
+    const db = await getDb()
+    for (const id of ids) {
+      const asset = await this.getMediaAssetById(id)
+      if (asset?.file_path && !asset.file_path.startsWith('http')) await deleteMediaFile(asset.file_path).catch(() => {})
+    }
+    const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ')
+    await db.execute(`DELETE FROM media_assets WHERE id IN (${placeholders})`, ids)
+  }
+
+  async batchUpdateMediaAssetCategory(ids: string[], category: string | null): Promise<void> {
+    await this.initialize()
+    const db = await getDb()
+    const now = new Date().toISOString()
+    for (const id of ids) {
+      await db.execute(
+        'UPDATE media_assets SET category = $1, updated_at = $2 WHERE id = $3',
+        [category, now, id]
+      )
+    }
+  }
+
+  async batchAddMediaAssetTags(ids: string[], tags: string[]): Promise<void> {
+    await this.initialize()
+    const db = await getDb()
+    const now = new Date().toISOString()
+    for (const id of ids) {
+      const asset = await this.getMediaAssetById(id)
+      if (!asset) continue
+      const existingTags = asset.tags || []
+      const newTags = [...new Set([...existingTags, ...tags])]
+      await db.execute(
+        'UPDATE media_assets SET tags = $1, updated_at = $2 WHERE id = $3',
+        [toJsonField(newTags), now, id]
+      )
+    }
+  }
+
+  async getAllMediaCategories(): Promise<string[]> {
+    await this.initialize()
+    const db = await getDb()
+    try {
+      const rows = await db.select<{ category: string | null }[]>('SELECT DISTINCT category FROM media_assets WHERE category IS NOT NULL')
+      return rows.map(r => r.category!).filter(Boolean)
+    } catch (error) {
+      console.error('[DB] Failed to get media categories, column may not exist yet:', error)
+      return []
+    }
   }
 
   // ==================== Generation Tasks ====================
@@ -1470,7 +1609,7 @@ export const canvasDB = {
 }
 
 export const mediaAssetDB = {
-  getAll: (filters?: { type?: string; tag?: string; search?: string }) =>
+  getAll: (filters?: { type?: string; tag?: string; category?: string; search?: string }) =>
     db.getMediaAssets(filters),
   getById: (id: string) => db.getMediaAssetById(id),
   create: (asset: Omit<MediaAsset, 'id' | 'created_at' | 'updated_at'>) =>
@@ -1478,6 +1617,12 @@ export const mediaAssetDB = {
   update: (id: string, data: Partial<MediaAsset>) =>
     db.updateMediaAsset(id, data),
   delete: (id: string) => db.deleteMediaAsset(id),
+  batchDelete: (ids: string[]) => db.batchDeleteMediaAssets(ids),
+  batchUpdateCategory: (ids: string[], category: string | null) =>
+    db.batchUpdateMediaAssetCategory(ids, category),
+  batchAddTags: (ids: string[], tags: string[]) =>
+    db.batchAddMediaAssetTags(ids, tags),
+  getCategories: () => db.getAllMediaCategories(),
 }
 
 export const taskDB = {

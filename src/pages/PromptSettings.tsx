@@ -640,14 +640,12 @@ export function PromptSettings() {
 
   // 处理删除模板
   const handleDelete = async (templateId: string) => {
-    const confirmed = hasTauriInvoke()
-      ? await confirm('确定要删除这个模板吗？', {
-          title: '删除确认',
-          kind: 'warning',
-          okLabel: '确定',
-          cancelLabel: '取消',
-        })
-      : window.confirm('确定要删除这个模板吗？')
+    const confirmed = await confirm('确定要删除这个模板吗？', {
+      title: '删除确认',
+      kind: 'warning',
+      okLabel: '确定',
+      cancelLabel: '取消',
+    })
     if (confirmed) {
       deleteTemplate(templateId)
       loadTemplates()
@@ -723,14 +721,12 @@ export function PromptSettings() {
 
   // 处理重置
   const handleReset = async () => {
-    const confirmed = hasTauriInvoke()
-      ? await confirm('确定要重置为默认配置吗？所有自定义模板将被删除。', {
-          title: '重置确认',
-          kind: 'warning',
-          okLabel: '确定',
-          cancelLabel: '取消',
-        })
-      : window.confirm('确定要重置为默认配置吗？所有自定义模板将被删除。')
+    const confirmed = await confirm('确定要重置为默认配置吗？所有自定义模板将被删除。', {
+      title: '重置确认',
+      kind: 'warning',
+      okLabel: '确定',
+      cancelLabel: '取消',
+    })
     if (confirmed) {
       resetToDefault()
       loadTemplates()

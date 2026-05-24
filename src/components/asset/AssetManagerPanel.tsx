@@ -1,9 +1,9 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 
-import { convertFileSrc } from '@tauri-apps/api/core'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import { writeFile, readFile } from '@tauri-apps/plugin-fs'
 import { saveMediaFile } from '@/utils/mediaStorage'
+import { getAssetUrl } from '@/utils/asset'
 import {
   Plus,
   Trash2,
@@ -851,13 +851,6 @@ export function AssetManagerPanel({ projectId, episodeId }: AssetManagerPanelPro
 
 
 
-  // 获取文件URL
-  const getFileUrl = (path?: string) => {
-    if (!path) return null
-    if (path.startsWith('http') || path.startsWith('data:')) return path
-    return convertFileSrc(path)
-  }
-
   return (
     <div className="h-full flex flex-col bg-background">
       {/* 顶部工具栏 */}
@@ -1027,7 +1020,6 @@ export function AssetManagerPanel({ projectId, episodeId }: AssetManagerPanelPro
                 throw error
               }
             }}
-            getFileUrl={getFileUrl}
             projectId={projectId}
             episodeId={episodeId}
           />
@@ -1086,7 +1078,7 @@ export function AssetManagerPanel({ projectId, episodeId }: AssetManagerPanelPro
                         setDetailPanelOpen(true)
                         setDetailPanelMode('preview')
                       }}
-                      getFileUrl={getFileUrl}
+                      getAssetUrl={getAssetUrl}
                     />
                   ))}
                 </div>
@@ -1130,7 +1122,7 @@ export function AssetManagerPanel({ projectId, episodeId }: AssetManagerPanelPro
                     }}
                     onImageUpload={handleAssetImageUpload}
                     onImageRemove={handleAssetImageRemove}
-                    getFileUrl={getFileUrl}
+                    getAssetUrl={getAssetUrl}
                     projectId={projectId}
                     episodeId={episodeId}
                   />
@@ -1167,7 +1159,7 @@ export function AssetManagerPanel({ projectId, episodeId }: AssetManagerPanelPro
                   {editImage ? (
                     <>
                       <img
-                        src={getFileUrl(editImage) || ''}
+                        src={getAssetUrl(editImage) || ''}
                         alt="资产图片"
                         className="w-full h-full object-cover rounded-lg border"
                       />
@@ -1463,12 +1455,12 @@ export function AssetManagerPanel({ projectId, episodeId }: AssetManagerPanelPro
 
       {/* 预览对话框 - 使用ImagePreviewDialog组件 */}
       <ImagePreviewDialog
-        src={filteredAssets[previewIndex]?.thumbnail ? getFileUrl(filteredAssets[previewIndex].thumbnail) || '' : ''}
+        src={filteredAssets[previewIndex]?.thumbnail ? getAssetUrl(filteredAssets[previewIndex].thumbnail) || '' : ''}
         alt={filteredAssets[previewIndex]?.name || '预览'}
         title={filteredAssets[previewIndex]?.name}
         isOpen={previewDialogOpen}
         onClose={() => setPreviewDialogOpen(false)}
-        images={filteredAssets.map(a => getFileUrl(a.thumbnail) || '').filter(Boolean)}
+        images={filteredAssets.map(a => getAssetUrl(a.thumbnail) || '').filter(Boolean)}
         currentIndex={previewIndex}
         onIndexChange={setPreviewIndex}
       />
@@ -1486,7 +1478,7 @@ interface AssetCardProps {
   onDelete: () => void
   onPreview: () => void
   onOpenDetail: () => void
-  getFileUrl: (path?: string) => string | null
+  getAssetUrl: (path?: string) => string | null
 }
 
 function AssetCard({
@@ -1498,10 +1490,10 @@ function AssetCard({
   onDelete,
   onPreview,
   onOpenDetail,
-  getFileUrl,
+  getAssetUrl,
 }: AssetCardProps) {
   const config = CATEGORY_CONFIG[asset.category]
-  const thumbnail = asset.thumbnail ? getFileUrl(asset.thumbnail) : null
+  const thumbnail = asset.thumbnail ? getAssetUrl(asset.thumbnail) : null
 
   return (
     <div
@@ -1614,7 +1606,7 @@ function AssetCard({
                 </Badge>
               )}
               {asset.character_names?.slice(0, 2).map((name, i) => (
-                <Badge key={i} variant="outline" className="text-[9px] px-1 py-0 h-4 gap-0.5">
+                <Badge key={name + '-' + i} variant="outline" className="text-[9px] px-1 py-0 h-4 gap-0.5">
                   <User className="h-2.5 w-2.5" />
                   {name}
                 </Badge>
@@ -1638,7 +1630,7 @@ interface AssetDetailPanelProps {
   onDelete: () => void
   onImageUpload?: (asset: AssetItem, imagePath: string) => void
   onImageRemove?: (asset: AssetItem) => void
-  getFileUrl: (path?: string) => string | null
+  getAssetUrl: (path?: string) => string | null
   projectId?: string
   episodeId?: string
 }
@@ -1654,7 +1646,7 @@ function AssetDetailPanel({
   onDelete,
   onImageUpload,
   onImageRemove,
-  getFileUrl,
+  getAssetUrl,
   projectId,
   episodeId,
 }: AssetDetailPanelProps) {
@@ -1682,8 +1674,8 @@ function AssetDetailPanel({
   }, [asset.id, asset.name, asset.description, asset.prompt, asset.videoPrompt, asset.tags])
 
   const config = CATEGORY_CONFIG[asset.category]
-  const thumbnail = asset.thumbnail ? getFileUrl(asset.thumbnail) : null
-  const image = asset.image ? getFileUrl(asset.image) : null
+  const thumbnail = asset.thumbnail ? getAssetUrl(asset.thumbnail) : null
+  const image = asset.image ? getAssetUrl(asset.image) : null
   const displayImage = image || thumbnail
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1963,13 +1955,13 @@ function AssetDetailPanel({
                         </Badge>
                       )}
                       {asset.character_names?.map((name, i) => (
-                        <Badge key={i} variant="secondary" className="gap-1">
+                        <Badge key={name + '-' + i} variant="secondary" className="gap-1">
                           <User className="h-3 w-3" />
                           {name}
                         </Badge>
                       ))}
                       {asset.prop_names?.map((name, i) => (
-                        <Badge key={i} variant="secondary" className="gap-1">
+                        <Badge key={name + '-' + i} variant="secondary" className="gap-1">
                           <Box className="h-3 w-3" />
                           {name}
                         </Badge>
@@ -1978,13 +1970,12 @@ function AssetDetailPanel({
                   </div>
                 )}
 
-              {/* 标签 */}
               {asset.tags && asset.tags.length > 0 && (
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">标签</label>
                   <div className="flex flex-wrap gap-1">
                     {asset.tags.map((tag, i) => (
-                      <Badge key={i} variant="outline" className="text-xs">{tag}</Badge>
+                      <Badge key={tag + '-' + i} variant="outline" className="text-xs">{tag}</Badge>
                     ))}
                   </div>
                 </div>
@@ -2148,13 +2139,13 @@ function AssetDetailPanel({
                         </Badge>
                       )}
                       {asset.character_names?.map((name, i) => (
-                        <Badge key={i} variant="secondary" className="gap-1">
+                        <Badge key={name + '-' + i} variant="secondary" className="gap-1">
                           <User className="h-3 w-3" />
                           {name}
                         </Badge>
                       ))}
                       {asset.prop_names?.map((name, i) => (
-                        <Badge key={i} variant="secondary" className="gap-1">
+                        <Badge key={name + '-' + i} variant="secondary" className="gap-1">
                           <Box className="h-3 w-3" />
                           {name}
                         </Badge>

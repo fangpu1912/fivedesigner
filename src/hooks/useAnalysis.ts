@@ -45,8 +45,15 @@ export function useUploadAndAnalyze() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ filePath, filename }: { filePath: string; filename: string }) =>
-      analysisService.uploadAndAnalyze(filePath, filename),
+    mutationFn: ({
+      filePath,
+      filename,
+      mode,
+    }: {
+      filePath: string
+      filename: string
+      mode?: 'frames' | 'video'
+    }) => analysisService.uploadAndAnalyze(filePath, filename, { mode }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ANALYSIS_KEYS.lists() })
     },

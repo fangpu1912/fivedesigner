@@ -12,6 +12,7 @@ use image::GenericImageView;
 
 mod modelscope;
 mod video_scene_detection;
+mod browser_manager;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct HttpRequest {
@@ -485,7 +486,7 @@ async fn read_file(path: String) -> Result<String, String> {
 async fn read_file_base64(path: String) -> Result<String, String> {
     let bytes = fs::read(&path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
-    Ok(base64::encode(&bytes))
+    Ok(base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes))
 }
 
 #[tauri::command]
@@ -2305,6 +2306,15 @@ pub fn run() {
             video_scene_detection::export_scene_video,
             video_scene_detection::export_scenes,
             video_scene_detection::capture_frame,
+            video_scene_detection::get_video_info,
+            browser_manager::detect_browser,
+            browser_manager::create_browser_window,
+            browser_manager::close_browser_window,
+            browser_manager::check_browser_running,
+            browser_manager::list_browser_extensions,
+            browser_manager::install_browser_extension,
+            browser_manager::uninstall_browser_extension,
+            browser_manager::clear_browser_data,
             generate_jianying_draft,
             restart_capcut,
             download_image_to_base64

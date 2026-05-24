@@ -1,8 +1,3 @@
-/**
- * 供应商配置面板
- * 简化设计：突出主要配置，隐藏高级选项
- */
-
 import { useState, useEffect } from 'react'
 
 import {
@@ -20,9 +15,6 @@ import {
   Pencil,
   X,
   Power,
-  Code,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
@@ -38,7 +30,6 @@ import { cn, generateId } from '@/lib/utils'
 import { vendorConfigService, defaultVendors } from '@/services/vendor'
 import type { VendorConfig, AgentDeploy } from '@/services/vendor'
 
-// 服务类型图标
 const SERVICE_ICONS = {
   text: MessageSquare,
   image: Image,
@@ -53,12 +44,9 @@ const SERVICE_COLORS = {
   tts: 'text-orange-500',
 }
 
-// 供应商编辑表单 - 提前定义避免渲染时未定义
 interface VendorEditFormProps {
   vendor: VendorConfig
   isEditing: boolean
-  showAdvanced: boolean
-  onToggleAdvanced: () => void
   onEdit: () => void
   onCancel: () => void
   onSave: (vendor: VendorConfig) => void
@@ -68,21 +56,17 @@ interface VendorEditFormProps {
 function VendorEditForm({
   vendor,
   isEditing,
-  showAdvanced,
-  onToggleAdvanced,
   onEdit,
   onCancel,
   onSave,
   onDelete,
 }: VendorEditFormProps) {
-  const { toast } = useToast()
   const [formData, setFormData] = useState<VendorConfig>(vendor)
 
   useEffect(() => {
     setFormData(vendor)
   }, [vendor])
 
-  // 查看模式
   if (!isEditing) {
     return (
       <Card className="h-full flex flex-col">
@@ -107,7 +91,12 @@ function VendorEditForm({
           </div>
         </CardHeader>
         <CardContent className="flex-1 overflow-y-auto space-y-6">
-          {/* API密钥等配置值 */}
+          {vendor.description && (
+            <div className="p-3 rounded border bg-muted/50 text-sm whitespace-pre-line">
+              {vendor.description}
+            </div>
+          )}
+
           {vendor.inputs.length > 0 && (
             <div className="space-y-3">
               <Label className="flex items-center gap-2">
@@ -119,7 +108,7 @@ function VendorEditForm({
                   <div key={input.key} className="p-3 rounded border bg-muted/50">
                     <div className="text-sm font-medium">{input.label}</div>
                     <div className="text-xs text-muted-foreground mt-1">
-                      {vendor.inputValues[input.key] 
+                      {vendor.inputValues[input.key]
                         ? (input.type === 'password' ? '••••••••' : vendor.inputValues[input.key])
                         : '未配置'
                       }
@@ -130,7 +119,6 @@ function VendorEditForm({
             </div>
           )}
 
-          {/* 模型列表 */}
           <div className="space-y-2">
             <Label>模型列表</Label>
             <div className="grid grid-cols-2 gap-2">
@@ -149,22 +137,11 @@ function VendorEditForm({
               })}
             </div>
           </div>
-
-          {/* 描述 */}
-          {vendor.description && (
-            <div className="space-y-2">
-              <Label>描述</Label>
-              <div className="p-3 rounded border bg-muted/50 text-sm">
-                {vendor.description}
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
     )
   }
 
-  // 编辑模式
   return (
     <Card className="h-full flex flex-col">
       <CardHeader className="pb-3">
@@ -183,9 +160,7 @@ function VendorEditForm({
         </div>
       </CardHeader>
       <CardContent className="flex-1 overflow-y-auto space-y-6">
-        {/* 主要配置 */}
         <div className="space-y-4">
-          {/* 名称 */}
           <div className="space-y-2">
             <Label>供应商名称</Label>
             <Input
@@ -195,7 +170,16 @@ function VendorEditForm({
             />
           </div>
 
-          {/* 启用状态 */}
+          <div className="space-y-2">
+            <Label>描述</Label>
+            <Textarea
+              value={formData.description || ''}
+              onChange={e => setFormData({ ...formData, description: e.target.value })}
+              placeholder="输入供应商描述..."
+              rows={3}
+            />
+          </div>
+
           <div className="flex items-center justify-between p-3 rounded border">
             <div className="flex items-center gap-2">
               <Power className="w-4 h-4" />
@@ -208,7 +192,6 @@ function VendorEditForm({
           </div>
         </div>
 
-        {/* API配置值 */}
         {formData.inputs.length > 0 && (
           <div className="space-y-3">
             <Label className="flex items-center gap-2">
@@ -239,7 +222,6 @@ function VendorEditForm({
           </div>
         )}
 
-        {/* 模型管理 */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <Label className="flex items-center gap-2">
@@ -325,80 +307,6 @@ function VendorEditForm({
             ))}
           </div>
         </div>
-
-        {/* 高级选项 */}
-        <div className="border rounded-lg">
-          <button
-            className="w-full flex items-center justify-between p-3 hover:bg-muted/50 transition-colors"
-            onClick={onToggleAdvanced}
-          >
-            <span className="font-medium">高级选项</span>
-            {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
-          {showAdvanced && (
-            <div className="p-3 pt-0 space-y-4 border-t">
-              {/* 描述 */}
-              <div className="space-y-2 pt-3">
-                <Label>描述</Label>
-                <Textarea
-                  value={formData.description || ''}
-                  onChange={e => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="输入供应商描述..."
-                  rows={3}
-                />
-              </div>
-
-              {/* 作者 */}
-              <div className="space-y-2">
-                <Label>作者</Label>
-                <Input
-                  value={formData.author}
-                  onChange={e => setFormData({ ...formData, author: e.target.value })}
-                />
-              </div>
-
-              {/* 执行代码 */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="flex items-center gap-2">
-                    <Code className="w-4 h-4" />
-                    执行代码
-                  </Label>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      // 先尝试通过 id 匹配，再通过 author 匹配
-                      let defaultVendor = defaultVendors.find(v => v.id === formData.id)
-                      if (!defaultVendor && formData.author) {
-                        defaultVendor = defaultVendors.find(v => v.author === formData.author)
-                      }
-                      if (!defaultVendor && formData.name?.toLowerCase().includes('toonflow')) {
-                        defaultVendor = defaultVendors.find(v => v.id === 'toonflow')
-                      }
-                      if (defaultVendor?.code) {
-                        setFormData({ ...formData, code: defaultVendor.code })
-                        toast({ title: '已恢复默认代码' })
-                      } else {
-                        toast({ title: '未找到默认代码', variant: 'destructive' })
-                      }
-                    }}
-                  >
-                    <RefreshCw className="w-3 h-3 mr-1" />
-                    恢复默认
-                  </Button>
-                </div>
-                <Textarea
-                  value={formData.code}
-                  onChange={e => setFormData({ ...formData, code: e.target.value })}
-                  rows={10}
-                  className="font-mono text-xs"
-                  placeholder="输入供应商执行代码..."
-                />
-              </div>
-            </div>
-          )}
-        </div>
       </CardContent>
     </Card>
   )
@@ -411,13 +319,10 @@ export function VendorConfigPanel() {
   const [originalAgents, setOriginalAgents] = useState<AgentDeploy[]>([])
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
-  const [showAdvanced, setShowAdvanced] = useState(false)
   const [activeTab, setActiveTab] = useState('vendors')
 
-  // 检查Agent配置是否有变更
   const hasAgentChanges = JSON.stringify(agents) !== JSON.stringify(originalAgents)
 
-  // 加载配置
   useEffect(() => {
     loadConfigs()
   }, [])
@@ -427,8 +332,6 @@ export function VendorConfigPanel() {
       vendorConfigService.getAllVendors(),
       vendorConfigService.getAllAgents(),
     ])
-    console.log('Loaded vendors:', vendorList.length)
-    console.log('Loaded agents:', agentList.length, agentList)
     setVendors(vendorList)
     setAgents(agentList)
     setOriginalAgents(agentList)
@@ -436,30 +339,25 @@ export function VendorConfigPanel() {
 
   const selectedVendor = vendors.find(v => v.id === selectedVendorId)
 
-  // 保存供应商配置（不刷新列表）
   const handleSaveVendor = async (vendor: VendorConfig) => {
     await vendorConfigService.saveVendor(vendor)
-    // 更新本地状态，不调用loadConfigs避免刷新
     setVendors(prev => prev.map(v => v.id === vendor.id ? vendor : v))
     setIsEditing(false)
     toast({ title: '配置已保存' })
   }
 
-  // 删除供应商
   const handleDeleteVendor = async (id: string) => {
     await vendorConfigService.deleteVendor(id)
-    // 更新本地状态
     setVendors(prev => prev.filter(v => v.id !== id))
     setSelectedVendorId(null)
     toast({ title: '配置已删除' })
   }
 
-  // 添加新供应商
   const handleAddVendor = async () => {
     const newVendor: VendorConfig = {
       id: generateId(),
-      author: 'Custom',
       name: '新供应商',
+      description: '',
       inputs: [{ key: 'apiKey', label: 'API密钥', type: 'password', required: true }],
       inputValues: { apiKey: '' },
       models: [],
@@ -468,70 +366,59 @@ export function VendorConfigPanel() {
       createTime: Date.now(),
     }
     await vendorConfigService.saveVendor(newVendor)
-    // 添加到本地状态
     setVendors(prev => [...prev, newVendor])
     setSelectedVendorId(newVendor.id)
     setIsEditing(true)
     toast({ title: '新供应商已创建' })
   }
 
-  // 处理Agent配置变更
   const handleAgentChange = (agentId: string, updatedAgent: AgentDeploy) => {
-    console.log('Agent change:', agentId, updatedAgent)
     setAgents(prev => prev.map(a => a.id === agentId ? updatedAgent : a))
   }
 
-  // 保存所有Agent配置
   const handleSaveAllAgents = async () => {
-    console.log('Saving agents:', agents)
     for (const agent of agents) {
-      console.log('Saving agent:', agent.id, 'vendorId:', agent.vendorId, 'modelName:', agent.modelName)
       await vendorConfigService.saveAgent(agent)
     }
     setOriginalAgents(agents)
     toast({ title: '所有配置已保存' })
   }
 
-  // 刷新默认配置（保留用户已配置的API密钥等）
   const handleRefreshDefaults = async () => {
     let addedCount = 0
     let updatedCount = 0
-    
+
     for (const defaultVendor of defaultVendors) {
-      // 检查是否已存在该供应商（通过author或id匹配）
-      const existingVendor = vendors.find(v => 
-        v.author === defaultVendor.author || 
+      const existingVendor = vendors.find(v =>
         v.id === defaultVendor.id ||
         v.name === defaultVendor.name
       )
-      
+
       if (existingVendor) {
-        // 已存在，保留用户的inputValues，更新其他配置
         const updatedVendor = {
           ...defaultVendor,
           id: existingVendor.id,
-          inputValues: existingVendor.inputValues, // 保留用户配置的API密钥等
-          enable: existingVendor.enable, // 保留启用状态
+          inputValues: existingVendor.inputValues,
+          enable: existingVendor.enable,
         }
         await vendorConfigService.saveVendor(updatedVendor)
         updatedCount++
       } else {
-        // 不存在，添加新的默认供应商
         await vendorConfigService.saveVendor({ ...defaultVendor, id: generateId() })
         addedCount++
       }
     }
-    
+
     await loadConfigs()
     setSelectedVendorId(null)
-    
+
     const message = []
     if (addedCount > 0) message.push(`新增${addedCount}个供应商`)
     if (updatedCount > 0) message.push(`更新${updatedCount}个供应商`)
-    
-    toast({ 
-      title: '刷新完成', 
-      description: message.join('，') || '所有供应商已是最新' 
+
+    toast({
+      title: '刷新完成',
+      description: message.join('，') || '所有供应商已是最新'
     })
   }
 
@@ -548,9 +435,7 @@ export function VendorConfigPanel() {
         </TabsTrigger>
       </TabsList>
 
-      {/* 供应商标签页 */}
       <TabsContent value="vendors" className="flex-1 mt-4 flex flex-col">
-        {/* 工具栏 */}
         <div className="flex justify-end gap-2 mb-4">
           <Button variant="outline" size="sm" onClick={handleAddVendor}>
             <Plus className="w-4 h-4 mr-1" />
@@ -561,7 +446,6 @@ export function VendorConfigPanel() {
           </Button>
         </div>
 
-        {/* 供应商卡片网格 */}
         <div className="flex-1 overflow-auto">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {vendors.map(vendor => (
@@ -588,7 +472,7 @@ export function VendorConfigPanel() {
                       <div>
                         <CardTitle className="text-base">{vendor.name}</CardTitle>
                         <CardDescription className="text-xs">
-                          {vendor.author} · {vendor.models.length}个模型
+                          {vendor.models.length}个模型
                         </CardDescription>
                       </div>
                     </div>
@@ -598,6 +482,11 @@ export function VendorConfigPanel() {
                   </div>
                 </CardHeader>
                 <CardContent className="pt-0">
+                  {vendor.description && (
+                    <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
+                      {vendor.description.split('\n')[0]}
+                    </p>
+                  )}
                   <div className="flex flex-wrap gap-1">
                     {vendor.models.slice(0, 4).map(model => {
                       const Icon = SERVICE_ICONS[model.type as keyof typeof SERVICE_ICONS] || MessageSquare
@@ -625,14 +514,11 @@ export function VendorConfigPanel() {
           </div>
         </div>
 
-        {/* 编辑面板 - 选中时显示在下方 */}
         {selectedVendor && (
           <div className="mt-4 border-t pt-4">
             <VendorEditForm
               vendor={selectedVendor}
               isEditing={isEditing}
-              showAdvanced={showAdvanced}
-              onToggleAdvanced={() => setShowAdvanced(!showAdvanced)}
               onEdit={() => setIsEditing(true)}
               onCancel={() => {
                 setIsEditing(false)
@@ -645,7 +531,6 @@ export function VendorConfigPanel() {
         )}
       </TabsContent>
 
-      {/* Agent配置标签页 */}
       <TabsContent value="agents" className="flex-1 mt-4 flex flex-col">
         <div className="flex-1 overflow-auto">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -659,7 +544,6 @@ export function VendorConfigPanel() {
             ))}
           </div>
         </div>
-        {/* 全局保存按钮 */}
         {hasAgentChanges && (
           <div className="flex justify-end pt-4 border-t mt-4">
             <Button onClick={handleSaveAllAgents}>
@@ -673,7 +557,6 @@ export function VendorConfigPanel() {
   )
 }
 
-// Agent配置卡片组件
 interface AgentConfigCardProps {
   agent: AgentDeploy
   vendors: VendorConfig[]
@@ -684,29 +567,18 @@ function AgentConfigCard({ agent, vendors, onChange }: AgentConfigCardProps) {
   const Icon = SERVICE_ICONS[agent.key === 'ttsDubbing' ? 'tts' : 'text']
   const colorClass = agent.key === 'ttsDubbing' ? 'text-orange-500' : 'text-blue-500'
 
-  // 处理开关变化
   const handleToggle = (checked: boolean) => {
     onChange({ ...agent, disabled: !checked })
   }
 
-  // 处理模型选择变化
   const handleModelChange = (value: string) => {
     if (!value) {
-      onChange({
-        ...agent,
-        vendorId: '',
-        modelName: '',
-      })
+      onChange({ ...agent, vendorId: '', modelName: '' })
       return
     }
     const [vendorId, ...modelNameParts] = value.split(':')
-    const modelName = modelNameParts.join(':') // 处理modelName中可能包含:的情况
-    console.log('Model change:', value, '-> vendorId:', vendorId, 'modelName:', modelName)
-    onChange({
-      ...agent,
-      vendorId: vendorId || '',
-      modelName: modelName || '',
-    })
+    const modelName = modelNameParts.join(':')
+    onChange({ ...agent, vendorId: vendorId || '', modelName: modelName || '' })
   }
 
   return (
@@ -722,10 +594,7 @@ function AgentConfigCard({ agent, vendors, onChange }: AgentConfigCardProps) {
               <CardDescription className="text-xs mt-0.5">{agent.desc}</CardDescription>
             </div>
           </div>
-          <Switch
-            checked={!agent.disabled}
-            onCheckedChange={handleToggle}
-          />
+          <Switch checked={!agent.disabled} onCheckedChange={handleToggle} />
         </div>
       </CardHeader>
       <CardContent className="pt-0">
@@ -768,5 +637,3 @@ function AgentConfigCard({ agent, vendors, onChange }: AgentConfigCardProps) {
     </Card>
   )
 }
-
-

@@ -1,16 +1,13 @@
 import { AI } from '@/services/vendor/aiService'
-import { getActivePrompt } from '@/services/promptConfigService'
 import { characterDB, sceneDB, propDB, storyboardDB, dubbingDB } from '@/db'
 import { createProductionScheduler, type ProductionTask, type ProductionProgress } from '@/services/productionAgentService'
 import { saveGeneratedImage, saveGeneratedVideo, saveGeneratedAudio } from '@/utils/mediaStorage'
-import { getImageUrl, getVideoUrl, getAudioUrl } from '@/utils/asset'
+import { getImageUrl } from '@/utils/asset'
 import { imagePathToBase64 } from '@/utils/imageUtils'
 import logger from '@/utils/logger'
 import {
   runPipeline,
-  parseJSON,
   type PipelineProgress,
-  type PipelineProgressCallback,
 } from './novelPipelineService'
 
 export type AutoPhase =
@@ -241,7 +238,7 @@ export class AutoPipelineService {
     scheduler.registerExecutor('image_gen', async (task: ProductionTask) => {
       if (this.abortController.signal.aborted) throw new Error('已取消')
 
-      const { storyboardId, prompt } = task.metadata as { storyboardId: string; prompt: string }
+      const { storyboardId } = task.metadata as { storyboardId: string; prompt: string }
       const sb = await storyboardDB.getById(storyboardId)
       if (!sb) throw new Error('分镜不存在')
 
@@ -250,8 +247,7 @@ export class AutoPipelineService {
       const imageUrl = await AI.Image.generate(
         {
           prompt: fullPrompt,
-          width: 1024,
-          height: 576,
+          aspectRatio: '16:9',
         },
         config.imageModel,
         0
@@ -371,8 +367,6 @@ export class AutoPipelineService {
         {
           prompt: sb.video_prompt || sb.prompt || sb.description || '',
           firstImageBase64,
-          width: 1280,
-          height: 720,
           duration: 5,
           generateAudio: false,
         },
@@ -483,7 +477,7 @@ export class AutoPipelineService {
 
       await dubbingDB.update(dubbingId, {
         audio_url: localPath || audioUrl,
-        status: 'done',
+        status: 'completed',
       })
 
       completed++

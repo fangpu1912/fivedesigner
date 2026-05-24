@@ -14,7 +14,7 @@ type Step = 'model-select' | 'input' | 'executing'
 export function AgentPanel() {
   const [step, setStep] = useState<Step>('model-select')
   const [input, setInput] = useState('')
-  const [parsedIntent, setParsedIntent] = useState<ParsedIntent | null>(null)
+  const [, setParsedIntent] = useState<ParsedIntent | null>(null)
   const [vendors, setVendors] = useState<VendorConfig[]>([])
   const [selectedImageModel, setSelectedImageModel] = useState('')
   const [selectedVideoModel, setSelectedVideoModel] = useState('')
@@ -358,7 +358,7 @@ export function AgentPanel() {
           <div className="grid grid-cols-2 gap-2">
             {results.map((url, index) => (
               <div
-                key={index}
+                key={url + '-' + index}
                 className="aspect-video bg-muted rounded-lg overflow-hidden relative group"
               >
                 <img
@@ -397,37 +397,6 @@ export function AgentPanel() {
         {step === 'executing' && renderExecutingStep()}
       </CardContent>
     </Card>
-  )
-}
-
-/**
- * 解析结果展示
- */
-function IntentDisplay({ intent }: { intent: ParsedIntent }) {
-  const typeIcons = {
-    image: Image,
-    video: Video,
-    audio: Music,
-    mixed: Wand2,
-  }
-  
-  const Icon = typeIcons[intent.type]
-
-  return (
-    <div className="p-3 bg-muted rounded-lg space-y-2">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <Icon className="h-4 w-4" />
-        <span>已识别创作需求</span>
-      </div>
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <div><span className="text-muted-foreground">类型：</span>{intent.type === 'image' ? '图片' : intent.type === 'video' ? '视频' : '音频'}</div>
-        <div><span className="text-muted-foreground">风格：</span>{intent.style}</div>
-        <div><span className="text-muted-foreground">比例：</span>{intent.aspectRatio}</div>
-        <div><span className="text-muted-foreground">数量：</span>{intent.outputCount} 张</div>
-        {intent.subject && <div className="col-span-2"><span className="text-muted-foreground">主体：</span>{intent.subject}</div>}
-        {intent.scene && <div className="col-span-2"><span className="text-muted-foreground">场景：</span>{intent.scene}</div>}
-      </div>
-    </div>
   )
 }
 

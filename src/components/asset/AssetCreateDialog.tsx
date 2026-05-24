@@ -49,6 +49,11 @@ export interface AssetCreateData {
   image?: string
   insertPosition: 'end' | 'start' | number
   jsonItems?: AssetCreateData[]
+  characters?: string[]
+  props?: string[]
+  scene_id?: string
+  shot_type?: string
+  duration?: number
 }
 
 interface AssetCreateDialogProps {
@@ -91,25 +96,36 @@ const CATEGORY_CONFIG: Record<
 const getDefaultJsonTemplate = (cat: AssetCreateCategory): string => {
   const config = CATEGORY_CONFIG[cat]
   const label = config?.label || '资产'
-  const template: Record<string, unknown> = {
+
+  if (cat === 'storyboard') {
+    return JSON.stringify([{
+      name: `${label}名称`,
+      description: '分镜描述',
+      prompt: '首帧画面提示词',
+      videoPrompt: '视频提示词',
+      characters: ['角色名'],
+      props: ['道具名'],
+      scene_id: '场景名',
+      shot_type: '全景·固定',
+      duration: 10,
+    }], null, 2)
+  }
+
+  return JSON.stringify([{
     name: `${label}名称`,
     description: '描述',
     prompt: '提示词',
     tags: ['标签1'],
-  }
-  if (cat === 'storyboard') {
-    template.videoPrompt = '视频提示词'
-  }
-  return JSON.stringify([template], null, 2)
+  }], null, 2)
 }
 
 export function AssetCreateDialog({
   open,
   onOpenChange,
   defaultCategory = 'character',
-  projectId,
-  episodeId,
-  existingCount = 0,
+  projectId: _projectId,
+  episodeId: _episodeId,
+  existingCount: _existingCount = 0,
   existingItems = [],
   onSubmit,
 }: AssetCreateDialogProps) {
@@ -201,7 +217,39 @@ export function AssetCreateDialog({
     if (useJsonMode) {
       try {
         const jsonData = JSON.parse(jsonInput)
-        const items = Array.isArray(jsonData) ? jsonData : [jsonData]
+
+        // 支持两种格式：
+        // 1. 对象格式：{"characters": [...], "scenes": [...], "props": [...], "storyboards": [...]}
+        // 2. 数组格式：[{"name": "...", ...}]
+        let items: any[] = []
+
+        if (Array.isArray(jsonData)) {
+          // 格式2：直接是数组
+          items = jsonData
+        } else if (typeof jsonData === 'object' && jsonData !== null) {
+          // 格式1：包含分类的对象
+          const data = jsonData as Record<string, any>
+          const categoryMap: Record<string, AssetCreateCategory> = {
+            characters: 'character',
+            scenes: 'scene',
+            props: 'prop',
+            storyboards: 'storyboard',
+          }
+
+          for (const [key, value] of Object.entries(data)) {
+            const cat = categoryMap[key]
+            if (cat && Array.isArray(value)) {
+              for (const item of value) {
+                items.push({ ...item, category: cat })
+              }
+            }
+          }
+        }
+
+        if (items.length === 0) {
+          toast({ title: 'JSON 中没有找到可导入的数据', variant: 'destructive' })
+          return
+        }
 
         const jsonItems: AssetCreateData[] = items.map(item => ({
           category: item.category || category,
@@ -210,6 +258,11 @@ export function AssetCreateDialog({
           prompt: item.prompt || '',
           videoPrompt: item.videoPrompt || '',
           tags: item.tags || [],
+          characters: item.characters || [],
+          props: item.props || [],
+          scene_id: item.scene_id || '',
+          shot_type: item.shot_type || '',
+          duration: item.duration || 10,
           insertPosition: insertPosition,
         }))
 
@@ -276,13 +329,13 @@ export function AssetCreateDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>新建资产</DialogTitle>
           <DialogDescription>创建新的资产，支持普通模式和 JSON 批量模式</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 overflow-y-auto flex-1">
           <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
             <div className="flex items-center gap-2">
               <FileJson className="h-4 w-4" />
@@ -328,8 +381,10 @@ export function AssetCreateDialog({
                   className="font-mono text-xs min-h-[200px]"
                 />
                 <p className="text-xs text-muted-foreground">
-                  支持单条对象或对象数组格式，可包含 name、description、prompt
-                  {category === 'storyboard' ? '、videoPrompt' : ''}、tags 字段
+                  支持单条对象或对象数组格式
+                  {category === 'storyboard'
+                    ? '，可包含 name、description、prompt、videoPrompt、characters、props、duration 字段'
+                    : '，可包含 name、description、prompt、tags 字段'}
                 </p>
               </div>
 

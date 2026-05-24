@@ -9,7 +9,6 @@ import { getVendorCode } from './codeLoader'
 export const defaultVendors: VendorConfig[] = [
   {
     id: 'toonflow',
-    author: 'Toonflow',
     description:
       '## Toonflow官方中转平台\n\nToonflow官方中转平台，提供**文本、图像、视频、音频**等多模态生成能力的中转服务，支持接入多个大模型供应商，方便用户统一管理和调用不同供应商的生成能力。\n\n🔗 [前往中转平台](https://api.toonflow.net/)\n\n如果这个项目对你有帮助，可以考虑支持一下我们的开发工作 ☕',
     name: 'Toonflow官方中转平台',
@@ -82,7 +81,6 @@ export const defaultVendors: VendorConfig[] = [
   // GeekAI 聚合平台配置
   {
     id: 'geekai',
-    author: 'GeekAI',
     description:
       '## GeekAI 聚合平台\n\nGeekAI是一个开源的AI助手解决方案，聚合了多个大模型API供应商，提供统一的API接口。\n\n**支持的供应商**：\n- OpenAI (GPT-4, GPT-3.5)\n- Azure OpenAI\n- ChatGLM\n- 讯飞星火\n- 文心一言\n- MidJourney\n- Stable Diffusion\n- Suno音乐创作\n- Grok Video\n\n🔗 [官网注册邀请](https://www.geeknow.top/register?aff=cj7k)\n\n⚠️ **注意**：GeekAI是第三方中转服务，请确保API密钥的安全性。',
     name: 'GeekAI 聚合平台',
@@ -302,7 +300,6 @@ export const defaultVendors: VendorConfig[] = [
   // 火山引擎配置
   {
     id: "volcengine",
-    author: "leeqi",
     description:
       "火山引擎方舟官方直连模板，接入 Ark 的文本、图片、视频生成 API，支持 Doubao、DeepSeek、GLM 等模型。\n[](https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey)",
     name: "火山引擎",
@@ -357,7 +354,6 @@ export const defaultVendors: VendorConfig[] = [
   // MiniMax标准接口 - 支持文本、图片、视频生成和TTS
   {
     id: "minimax",
-    author: "MiniMax",
     description: "MiniMax标准格式接口，支持文本生成、图片生成、视频生成和语音合成(TTS)。\n\n官网: https://platform.minimaxi.com/",
     name: "MiniMax",
     icon: "",
@@ -420,7 +416,6 @@ export const defaultVendors: VendorConfig[] = [
   // OpenAI标准接口
   {
     id: "openai",
-    author: "OpenAI",
     description: "OpenAI标准格式接口，如果没有你想要的模型请手动添加。",
     name: "OpenAI标准接口",
     icon: "",
@@ -439,7 +434,6 @@ export const defaultVendors: VendorConfig[] = [
   // DeepSeek 官方接口
   {
     id: "deepseek",
-    author: "DeepSeek",
     description: "DeepSeek 官方 API 接口，支持 DeepSeek-V3、DeepSeek-R1 等模型。\n\n官网: https://platform.deepseek.com/",
     name: "DeepSeek",
     icon: "",
@@ -459,7 +453,6 @@ export const defaultVendors: VendorConfig[] = [
   // 可灵AI
   {
     id: "klingai",
-    author: "klingai",
     description:
       "可灵AI新一代AI创意生产力工具，基于快手大模型团队自研的 图像生成@可图大模型 和 视频生成@可灵大模型 技术，提供丰富的AI图片、AI视频及相关可控编辑能力。https://app.klingai.com/cn/",
     name: "可灵AI",
@@ -510,7 +503,6 @@ export const defaultVendors: VendorConfig[] = [
   // Vidu开放平台
   {
     id: "vidu",
-    author: "搬砖的Coder",
     description:
       "Vidu 是由生数科技联合清华大学正式发布的中国首个长时长、高一致性、高动态性视频大模型。Vidu 在语义理解、推理速度、动态幅度等方面具备领先优势，并上线了全球首个「多主体参考」功能，突破视频模型一致性生成难题，开启了视觉上下文时代",
     name: "Vidu 开放平台",
@@ -562,7 +554,6 @@ export const defaultVendors: VendorConfig[] = [
   // Google Gemini
   {
     id: "google",
-    author: "Google",
     description: "Google Gemini API，支持文本生成和图片生成。\n\n官网: https://ai.google.dev/\n\n获取API密钥: https://aistudio.google.com/app/apikey",
     name: "Google Gemini",
     icon: "",
@@ -614,7 +605,6 @@ export const defaultVendors: VendorConfig[] = [
   // 魔搭 (ModelScope) 供应商
   {
     id: 'modelscope',
-    author: '魔搭',
     description:
       '## 魔搭 (ModelScope) 供应商\n\n魔搭是阿里云的模型服务平台，提供多种开源 AI 模型，包括通义万相、Qwen 图像系列、FLUX 等。\n\n🔗 [魔搭官网](https://modelscope.cn/)\n\n📖 [API 文档](https://modelscope.cn/docs)',
     name: '魔搭',
@@ -658,6 +648,54 @@ export const defaultVendors: VendorConfig[] = [
       },
     ],
     code: getVendorCode('modelscope') || '',
+    enable: false,
+    createTime: Date.now(),
+  },
+  // Kimi (Moonshot) 供应商
+  {
+    id: 'kimi',
+    name: 'Kimi (Moonshot)',
+    description: '月之暗面 Kimi AI，支持长文本和多模态，原生支持视频分析。\n\n官网: https://platform.moonshot.cn/',
+    icon: '',
+    inputs: [
+      { key: 'apiKey', label: 'API密钥', type: 'password', required: true },
+      { key: 'baseUrl', label: '请求地址', type: 'url', required: false, placeholder: 'https://api.moonshot.cn/v1' },
+    ],
+    inputValues: {
+      apiKey: '',
+      baseUrl: 'https://api.moonshot.cn/v1',
+    },
+    models: [
+      { name: 'Kimi K2.6', modelName: 'kimi-k2.6', type: 'text', think: false },
+    ],
+    code: getVendorCode('kimi') || '',
+    enable: false,
+    createTime: Date.now(),
+  },
+  {
+    id: 'runninghub',
+    name: 'RunningHub',
+    description: '## RunningHub ComfyUI 云端执行平台\n\nRunningHub 提供云端 ComfyUI 工作流执行能力，无需本地部署 ComfyUI 即可运行各种 AI 工作流。\n\n🔗 [前往 RunningHub](https://www.runninghub.cn/)\n\n### 功能特点\n- 云端执行 ComfyUI 工作流\n- 支持图片/视频/音频生成\n- 支持自定义工作流参数\n- 支持钱包模式（企业级共享 API Key）\n\n### 使用方式\n1. 在 RunningHub 平台创建或选择 AI 应用\n2. 获取应用的 `webappId`\n3. 在分镜助手中使用 RunningHub 节点输入 webappId\n4. 配置参数并提交任务',
+    icon: '',
+    inputs: [
+      { key: 'apiKey', label: 'API密钥', type: 'password', required: true },
+      { key: 'walletApiKey', label: '钱包API密钥', type: 'password', required: false },
+      { key: 'baseUrl', label: '请求地址', type: 'url', required: false, placeholder: 'https://www.runninghub.cn' },
+    ],
+    inputValues: {
+      apiKey: '',
+      walletApiKey: '',
+      baseUrl: 'https://www.runninghub.cn',
+    },
+    models: [
+      {
+        name: 'ComfyUI 工作流',
+        type: 'image',
+        modelName: 'runninghub-comfyui',
+        mode: ['text'],
+      },
+    ],
+    code: getVendorCode('runninghub') || '',
     enable: false,
     createTime: Date.now(),
   },

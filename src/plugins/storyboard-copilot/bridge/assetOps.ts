@@ -21,6 +21,7 @@ import {
 } from '@/hooks/useAssetManager'
 
 import { bridgeEvents, type AssetType } from './bridgeEvents'
+import { updateStoryboardRefImages } from '@/utils/storyboardReferences'
 
 function invalidateAssetQueries(
   assetType: AssetType,
@@ -113,6 +114,14 @@ export const assetOps = {
       field: 'image',
       value: imagePath,
     })
+    if (episodeId) {
+      try {
+        const count = await updateStoryboardRefImages('character', id, imagePath, episodeId)
+        if (count > 0) {
+          queryClient.invalidateQueries({ queryKey: storyboardKeys.list(episodeId) })
+        }
+      } catch {}
+    }
   },
 
   async updateSceneImage(
@@ -129,6 +138,14 @@ export const assetOps = {
       field: 'image',
       value: imagePath,
     })
+    if (episodeId) {
+      try {
+        const count = await updateStoryboardRefImages('scene', id, imagePath, episodeId)
+        if (count > 0) {
+          queryClient.invalidateQueries({ queryKey: storyboardKeys.list(episodeId) })
+        }
+      } catch {}
+    }
   },
 
   async updatePropImage(
@@ -145,6 +162,14 @@ export const assetOps = {
       field: 'image',
       value: imagePath,
     })
+    if (episodeId) {
+      try {
+        const count = await updateStoryboardRefImages('prop', id, imagePath, episodeId)
+        if (count > 0) {
+          queryClient.invalidateQueries({ queryKey: storyboardKeys.list(episodeId) })
+        }
+      } catch {}
+    }
   },
 
   async updateAssetImage(

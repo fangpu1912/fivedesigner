@@ -9,15 +9,12 @@ import {
   Camera,
   ZoomIn,
   Sparkles,
-  LayoutGrid,
   Mic,
   Video,
-  Pen,
   Lightbulb,
-  View,
-  Box,
   SplitSquareHorizontal,
-  Clapperboard,
+  Workflow,
+  Wallet,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -46,15 +43,8 @@ const nodeIcons: Record<CanvasNodeType, React.ReactNode> = {
   [CANVAS_NODE_TYPES.audioUpload]: <Mic className="h-3.5 w-3.5" />,
   [CANVAS_NODE_TYPES.imageToPrompt]: <Lightbulb className="h-3.5 w-3.5" />,
   [CANVAS_NODE_TYPES.imageCompare]: <SplitSquareHorizontal className="h-3.5 w-3.5" />,
-  [CANVAS_NODE_TYPES.videoReverse]: <Clapperboard className="h-3.5 w-3.5" />,
-}
-
-const _categoryIcons: Record<string, React.ReactNode> = {
-  input: <Upload className="h-3 w-3" />,
-  generate: <ImageIcon className="h-3 w-3" />,
-  video: <Video className="h-3 w-3" />,
-  storyboard: <Grid3X3 className="h-3 w-3" />,
-  layout: <LayoutGrid className="h-3 w-3" />,
+  [CANVAS_NODE_TYPES.runninghub]: <Workflow className="h-3.5 w-3.5" />,
+  [CANVAS_NODE_TYPES.runninghubWallet]: <Wallet className="h-3.5 w-3.5" />,
 }
 
 export function NodeLibraryPanel({ onAddNode }: NodeLibraryPanelProps) {

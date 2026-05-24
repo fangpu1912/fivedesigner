@@ -33,7 +33,7 @@ export function VoiceTrimEditor({
 }: VoiceTrimEditorProps) {
   const [trimStart, setTrimStart] = useState(initialTrimStart)
   const [trimEnd, setTrimEnd] = useState(initialTrimEnd || duration)
-  const [_isDragging, setIsDragging] = useState<'start' | 'end' | null>(null)
+  const [_isDragging, _setIsDragging] = useState<'start' | 'end' | null>(null)
   const waveformRef = useRef<HTMLDivElement>(null)
 
   // 确保裁剪范围有效
@@ -146,7 +146,7 @@ export function VoiceTrimEditor({
         <div className="h-24 flex items-center gap-0.5 px-2 rounded-lg bg-muted/30">
           {waveformData.map((bar, index) => (
             <div
-              key={index}
+              key={'bar-' + index}
               className={cn(
                 'flex-1 rounded-full transition-all duration-200',
                 bar.isInRange ? 'bg-primary' : 'bg-muted'

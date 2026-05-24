@@ -1,7 +1,7 @@
 import logger from '@/utils/logger'
 
 export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'retrying'
-export type TaskType = 'scene_segmentation' | 'asset_extraction' | 'storyboard_breakdown' | 'dubbing_generation'
+export type TaskType = 'scene_segmentation' | 'asset_extraction' | 'storyboard_breakdown' | 'dubbing_generation' | 'image_gen' | 'video_gen' | 'tts_gen'
 
 export interface ProductionTask {
   id: string

@@ -4,6 +4,7 @@ export interface MentionItem {
   id: string
   type: MentionElementType
   name: string
+  aliases?: string[]
   imageUrl?: string
   thumbnail?: string
   description?: string

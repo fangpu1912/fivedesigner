@@ -15,7 +15,7 @@ interface AppErrorBoundaryState {
 }
 
 export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorBoundaryState> {
-  state: AppErrorBoundaryState = {
+  override state: AppErrorBoundaryState = {
     hasError: false,
     errorMessage: '',
   }
@@ -27,7 +27,7 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
     }
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[AppErrorBoundary] Unhandled render error:', error, errorInfo)
   }
 
@@ -44,7 +44,7 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
     }, 100)
   }
 
-  render() {
+  override render() {
     if (!this.state.hasError) {
       return this.props.children
     }

@@ -2,6 +2,7 @@ import { AI } from '@/services/vendor/aiService'
 import { getActivePrompt } from '@/services/promptConfigService'
 import { characterDB, sceneDB, propDB, storyboardDB, dubbingDB } from '@/db'
 import logger from '@/utils/logger'
+import { matchAssetsByName } from '@/utils/storyboardReferences'
 import { createProductionScheduler, ProductionTask, ProductionProgress } from '@/services/productionAgentService'
 
 export interface PipelineScene {
@@ -40,17 +41,10 @@ export interface PipelineShot {
   prompt: string
   videoPrompt: string
   characters: string[]
-  scene: string
+  scene_id: string
   props: string[]
-  cameraAngle: string
+  shot_type: string
   duration: number
-  dialogues: PipelineDialogue[]
-}
-
-export interface PipelineDialogue {
-  character: string
-  line: string
-  emotion: string
 }
 
 export interface PipelineDubbingResult {
@@ -191,8 +185,19 @@ export async function runPipeline(
   }>(assetResult)
   logger.info(`[Pipeline] 提取了 ${assets.characters.length} 角色, ${assets.scenes.length} 场景, ${assets.props.length} 道具`)
 
-  const characterIdMap = new Map<string, string>()
+  const existingMatch = await matchAssetsByName(
+    episodeId,
+    assets.characters.map(c => c.name),
+    assets.scenes.map(s => s.name),
+    assets.props.map(p => p.name),
+  )
+
+  const characterIdMap = new Map<string, string>(existingMatch.characterMap)
   for (const char of assets.characters) {
+    if (characterIdMap.has(char.name)) {
+      logger.info(`[Pipeline] 复用已有角色: ${char.name}`)
+      continue
+    }
     try {
       const created = await characterDB.create({
         project_id: projectId,
@@ -208,8 +213,12 @@ export async function runPipeline(
     }
   }
 
-  const sceneIdMap = new Map<string, string>()
+  const sceneIdMap = new Map<string, string>(existingMatch.sceneMap)
   for (const scene of assets.scenes) {
+    if (sceneIdMap.has(scene.name)) {
+      logger.info(`[Pipeline] 复用已有场景: ${scene.name}`)
+      continue
+    }
     try {
       const created = await sceneDB.create({
         project_id: projectId,
@@ -224,8 +233,12 @@ export async function runPipeline(
     }
   }
 
-  const propIdMap = new Map<string, string>()
+  const propIdMap = new Map<string, string>(existingMatch.propMap)
   for (const prop of assets.props) {
+    if (propIdMap.has(prop.name)) {
+      logger.info(`[Pipeline] 复用已有道具: ${prop.name}`)
+      continue
+    }
     try {
       const created = await propDB.create({
         project_id: projectId,
@@ -338,7 +351,7 @@ export async function runPipeline(
 
     const prevSegIdx = segIdx - 1
     const previousShot = prevSegIdx >= 0 && segmentResults[prevSegIdx]
-      ? `镜号：${segmentResults[prevSegIdx]!.shots.slice(-1)[0]?.cameraAngle || '固定'}，${segmentResults[prevSegIdx]!.shots.slice(-1)[0]?.description || ''}`
+      ? `镜号：${segmentResults[prevSegIdx]!.shots.slice(-1)[0]?.shot_type || '固定'}，${segmentResults[prevSegIdx]!.shots.slice(-1)[0]?.description || ''}`
       : '（这是第一个场景，没有上一场景）'
 
     const breakdownPrompt = getActivePrompt('pipeline_storyboard_breakdown', {
@@ -355,52 +368,32 @@ export async function runPipeline(
     const shots: PipelineShot[] = parseJSON<PipelineShot[]>(breakdownResult)
     logger.info(`[Pipeline] 片段${segIdx + 1} 拆解了 ${shots.length} 个镜头`)
 
-    const allDialogues: Array<{ shotIdx: number; dialogue: PipelineDialogue }> = []
-    for (let shotIdx = 0; shotIdx < shots.length; shotIdx++) {
-      for (const d of shots[shotIdx]!.dialogues) {
-        allDialogues.push({ shotIdx, dialogue: d })
-      }
-    }
-
     let dubbingResults: PipelineDubbingResult[] = []
-    if (allDialogues.length > 0) {
-      const shotsDescription = shots.map((shot, i) => {
-        const parts = [
-          `镜头${i + 1}:`,
-          `  画面: ${shot.description}`,
-          `  场景: ${shot.scene}`,
-          `  景别运镜: ${shot.cameraAngle}`,
-          `  时长: ${shot.duration}秒`,
-          `  出场角色: ${shot.characters.join(', ')}`,
-          `  出场道具: ${shot.props.join(', ') || '无'}`,
-        ]
-        if (shot.dialogues.length > 0) {
-          parts.push(`  台词: ${shot.dialogues.map(d => `${d.character}（${d.emotion}）："${d.line}"`).join('；')}`)
-        }
-        return parts.join('\n')
-      }).join('\n\n')
 
-      const dialoguesStr = allDialogues
-        .map(d => `镜头${d.shotIdx + 1} - ${d.dialogue.character}（${d.dialogue.emotion}）："${d.dialogue.line}"`)
-        .join('\n')
+    // 构建shots描述用于配音生成
+    const shotsDescription = shots.map((shot, i) => {
+      const parts = [
+        `镜头${i + 1}:`,
+        `  画面: ${shot.description}`,
+        `  场景: ${shot.scene_id}`,
+        `  景别运镜: ${shot.shot_type}`,
+        `  时长: ${shot.duration}秒`,
+        `  出场角色: ${shot.characters.join(', ')}`,
+        `  出场道具: ${shot.props.join(', ') || '无'}`,
+      ]
+      return parts.join('\n')
+    }).join('\n\n')
 
+    // 配音生成（如果需要）
+    try {
       const dubbingPrompt = getActivePrompt('pipeline_dubbing_generation', {
-        dialogues: dialoguesStr,
         shotsDescription,
       })
-
-      try {
-        const dubbingResult = await callAI(dubbingPrompt)
-        dubbingResults = parseJSON<PipelineDubbingResult[]>(dubbingResult)
-      } catch (e) {
-        logger.error(`[Pipeline] 配音生成失败，片段${segIdx + 1}`, e)
-        dubbingResults = allDialogues.map(d => ({
-          character: d.dialogue.character,
-          line: d.dialogue.line,
-          emotion: d.dialogue.emotion,
-          audio_prompt: `${d.dialogue.character}，${d.dialogue.emotion}语气`,
-        }))
-      }
+      const dubbingResult = await callAI(dubbingPrompt)
+      dubbingResults = parseJSON<PipelineDubbingResult[]>(dubbingResult)
+    } catch (e) {
+      logger.error(`[Pipeline] 配音生成失败，片段${segIdx + 1}`, e)
+      dubbingResults = []
     }
 
     segmentResults[segIdx] = { segIdx, shots, dubbingResults }
@@ -429,7 +422,7 @@ export async function runPipeline(
       const characterIds = shot.characters
         .map(name => characterIdMap.get(name))
         .filter((id): id is string => !!id)
-      const sceneId = sceneIdMap.get(shot.scene) || undefined
+      const sceneId = sceneIdMap.get(shot.scene_id) || undefined
       const propIds = shot.props
         .map(name => propIdMap.get(name))
         .filter((id): id is string => !!id)
@@ -456,11 +449,10 @@ export async function runPipeline(
         continue
       }
 
-      if (shot.dialogues.length > 0) {
-        for (const _d of shot.dialogues) {
-          const item = dubbingResults[dubbingIdx]
+      // 保存配音结果（如果有）
+      if (dubbingResults.length > 0) {
+        for (const item of dubbingResults) {
           dubbingIdx++
-          if (!item) continue
           const characterId = characterIdMap.get(item.character)
           try {
             await dubbingDB.create({

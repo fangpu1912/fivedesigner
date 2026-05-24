@@ -1,5 +1,5 @@
 import { join } from '@tauri-apps/api/path'
-import { writeFile, writeTextFile, mkdir, exists, open, BaseDirectory } from '@tauri-apps/plugin-fs'
+import { writeFile, mkdir, exists, open } from '@tauri-apps/plugin-fs'
 import { fetch } from '@tauri-apps/plugin-http'
 
 import { workspaceService } from '@/services/workspace/WorkspaceService'
@@ -20,6 +20,8 @@ export interface SaveMediaOptions {
   type: MediaType
   fileName?: string
   extension?: string
+  projectName?: string
+  episodeName?: string
 }
 
 /**
@@ -99,6 +101,8 @@ export async function saveMediaFile(
 ): Promise<string> {
   let projectId: string | undefined
   let episodeId: string | undefined
+  let projectName: string | undefined
+  let episodeName: string | undefined
   let type: MediaType
   let fileName: string
 
@@ -106,6 +110,8 @@ export async function saveMediaFile(
     const options = arg2
     projectId = options.projectId
     episodeId = options.episodeId
+    projectName = options.projectName
+    episodeName = options.episodeName
     type = options.type
     fileName = options.fileName || `${type}_${Date.now()}.${options.extension || 'bin'}`
   } else {
@@ -130,10 +136,34 @@ export async function saveMediaFile(
 
   let dirPath: string
   if (projectId && episodeId) {
-    dirPath = await join(baseDir, 'projects', projectId, episodeId, typeDir)
+    if (!projectName || !episodeName) {
+      try {
+        const { projectDB, episodeDB } = await import('@/db')
+        if (!projectName) {
+          const proj = await projectDB.getById(projectId)
+          if (proj) projectName = proj.name
+        }
+        if (!episodeName) {
+          const ep = await episodeDB.getById(episodeId)
+          if (ep) episodeName = ep.name
+        }
+      } catch {}
+    }
+
+    const toSegment = (id: string, name: string | undefined): string => {
+      if (name) {
+        const shortId = id.length > 8 ? id.slice(0, 8) : id
+        return name.replace(/[\\/:*?"<>|]/g, '_').trim().substring(0, 40) + '_' + shortId
+      }
+      return id
+    }
+    const safeProject = toSegment(projectId, projectName)
+    const safeEpisode = toSegment(episodeId, episodeName)
+    dirPath = await join(baseDir, 'projects', safeProject, safeEpisode, typeDir)
   } else {
     dirPath = await join(baseDir, 'temp', typeDir)
   }
+
   const filePath = await join(dirPath, fileName)
 
   // 确保目录存在

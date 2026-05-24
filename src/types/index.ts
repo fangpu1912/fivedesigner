@@ -422,10 +422,10 @@ export interface ExtractedDubbing {
 // 提取的分镜类型
 export interface ExtractedShot {
   id: string
-  scene: string
+  scene_id: string
   description: string
   duration?: string
-  cameraAngle?: string
+  shot_type?: string
   characters?: string[]
   props?: string[]
   prompt?: string
@@ -495,6 +495,7 @@ export interface Scene {
   tags?: string[] // 标签数组
   image?: string
   metadata?: Record<string, unknown>
+  aliases?: string[]
   created_at: string
   updated_at: string
 }
@@ -510,6 +511,7 @@ export interface Prop {
   tags?: string[] // 标签数组
   image?: string
   metadata?: Record<string, unknown>
+  aliases?: string[]
   created_at: string
   updated_at: string
 }
@@ -543,6 +545,7 @@ export interface Character {
   voice_description?: string
   tag?: CharacterTag
   tags?: string[]
+  aliases?: string[]
   created_at: string
   updated_at: string
 }
@@ -696,6 +699,7 @@ export interface MediaAsset {
   prompt?: string
   tags?: string[]
   description?: string
+  category?: string
   width?: number
   height?: number
   file_size?: number

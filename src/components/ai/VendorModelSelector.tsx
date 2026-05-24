@@ -84,10 +84,7 @@ export function VendorModelSelector({
   const groupedOptions = useMemo(() => {
     const groups: Record<string, ModelOption[]> = {}
     for (const opt of modelOptions) {
-      if (!groups[opt.vendorName]) {
-        groups[opt.vendorName] = []
-      }
-      groups[opt.vendorName].push(opt)
+      ;(groups[opt.vendorName] ??= []).push(opt)
     }
     return groups
   }, [modelOptions])

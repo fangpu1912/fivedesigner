@@ -1,6 +1,5 @@
 import { useState } from 'react'
 
-import { convertFileSrc } from '@tauri-apps/api/core'
 import { save } from '@tauri-apps/plugin-dialog'
 import { writeFile } from '@tauri-apps/plugin-fs'
 import { Download, Check, Image as ImageIcon, Loader2 } from 'lucide-react'
@@ -10,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
 import { useToast } from '@/hooks/useToast'
 import { cn } from '@/lib/utils'
+import { getAssetUrl } from '@/utils/asset'
 
 type ExportFormat = 'png' | 'jpg' | 'webp'
 type ExportMode = 'individual' | 'combined'
@@ -23,10 +23,6 @@ interface ExportItem {
 interface BatchExportProps {
   items: ExportItem[]
   onClose?: () => void
-}
-
-function getImageSrc(src: string) {
-  return src.startsWith('http') || src.startsWith('data:') ? src : convertFileSrc(src)
 }
 
 export function BatchExport({ items, onClose }: BatchExportProps) {
@@ -61,13 +57,13 @@ export function BatchExport({ items, onClose }: BatchExportProps) {
   const loadImage = (src: string): Promise<HTMLImageElement> =>
     new Promise((resolve, reject) => {
       const image = new Image()
-      const resolvedSrc = getImageSrc(src)
+      const resolvedSrc = getAssetUrl(src)
       if (resolvedSrc && !resolvedSrc.startsWith('asset://') && !resolvedSrc.startsWith('data:')) {
         image.crossOrigin = 'anonymous'
       }
       image.onload = () => resolve(image)
       image.onerror = reject
-      image.src = resolvedSrc
+      image.src = resolvedSrc || ''
     })
 
   const writeDataUrlToFile = async (dataUrl: string, filePath: string) => {
@@ -212,7 +208,7 @@ export function BatchExport({ items, onClose }: BatchExportProps) {
               <div className="aspect-square bg-muted">
                 {item.image ? (
                   <img
-                    src={getImageSrc(item.image)}
+                    src={getAssetUrl(item.image) || ''}
                     alt={item.name}
                     className="h-full w-full object-cover"
                   />

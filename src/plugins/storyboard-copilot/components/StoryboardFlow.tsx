@@ -76,7 +76,7 @@ import { QuickNodeMenu } from './QuickNodeMenu'
 import { SelectionDragOut } from './SelectionDragOut'
 
 import type { CanvasNodeType, CanvasNode, CanvasNodeData } from '../types'
-import { CANVAS_NODE_TYPES } from '../types'
+import { CANVAS_NODE_TYPES, type UploadImageNodeData } from '../types'
 import {
   getDefaultNodeProperties,
   getDefaultNodeDimensions,
@@ -887,18 +887,21 @@ export function StoryboardFlow({ className }: StoryboardFlowProps) {
 
         setNodes(nds => [...nds, newResultNode])
 
-        requestAnimationFrame(() => {
-          const newEdge = {
-            id: generateEdgeId(sourceId, resultNodeId),
-            source: sourceId,
-            target: resultNodeId,
-            sourceHandle: sourceHandleId,
-            targetHandle,
-            type: 'custom' as const,
-            animated: true,
-          }
-          setEdges(eds => [...eds, newEdge])
-        })
+        // 如果指定了 noConnect，不创建连接
+        if (!payload.noConnect) {
+          requestAnimationFrame(() => {
+            const newEdge = {
+              id: generateEdgeId(sourceId, resultNodeId),
+              source: sourceId,
+              target: resultNodeId,
+              sourceHandle: sourceHandleId,
+              targetHandle,
+              type: 'custom' as const,
+              animated: true,
+            }
+            setEdges(eds => [...eds, newEdge])
+          })
+        }
       }
     })
 
@@ -974,6 +977,35 @@ export function StoryboardFlow({ className }: StoryboardFlowProps) {
     })
     return off
   }, [setNodes])
+
+  // 监听 AI 生成的媒体发送到画布
+  useEffect(() => {
+    const off = bridgeEvents.on<{ type: string; data: { url: string; label?: string } }>('canvas:node-added', (payload) => {
+      if (!payload.data?.url) return
+
+      const typeMap: Record<string, string> = {
+        image: 'AI 生成图片',
+        video: 'AI 生成视频',
+        audio: 'AI 生成音频',
+      }
+
+      const newNode = {
+        id: `ai-${payload.type}-${Date.now()}`,
+        type: CANVAS_NODE_TYPES.upload,
+        position: { x: Math.random() * 200 + 50, y: Math.random() * 200 + 50 },
+        data: {
+          imageUrl: payload.data.url,
+          previewImageUrl: payload.data.url,
+          displayName: payload.data.label || typeMap[payload.type] || 'AI 生成内容',
+          source: 'ai',
+          aspectRatio: '16:9',
+        } as UploadImageNodeData,
+      } as CanvasNode
+      setNodes((nds) => [...nds, newNode])
+      toast({ title: `${typeMap[payload.type] || '内容'}已添加到画布` })
+    })
+    return off
+  }, [setNodes, toast])
 
   // 删除选中节点（支持多选）
   const handleDeleteSelected = useCallback(() => {

@@ -145,8 +145,18 @@ export function StoryboardDraw() {
       } else if (type === 'prop') {
         await propMutations.update.mutateAsync({ id, data })
       }
+
+      if (data.image && currentEpisodeId) {
+        try {
+          const { updateStoryboardRefImages } = await import('@/utils/storyboardReferences')
+          const count = await updateStoryboardRefImages(type, id, data.image as string, currentEpisodeId)
+          if (count > 0) {
+            await queryClient.invalidateQueries({ queryKey: storyboardKeys.list(currentEpisodeId) })
+          }
+        } catch {}
+      }
     },
-    [characterMutations, sceneMutations, propMutations]
+    [characterMutations, sceneMutations, propMutations, currentEpisodeId, queryClient]
   )
 
   const createLinkedAsset = useCallback(
@@ -207,6 +217,9 @@ export function StoryboardDraw() {
     name: string
     image?: string
     color: string
+    prompt?: string
+    description?: string
+    aliases?: string[]
   }>>([])
   const [localEditPrompt, setLocalEditPrompt] = useState('')
   const [isNegativePromptExpanded, setIsNegativePromptExpanded] = useState(false)
@@ -215,6 +228,7 @@ export function StoryboardDraw() {
   const editPromptInputRef = useRef<MentionInputRef>(null)
   const [promptMentions, setPromptMentions] = useState<MentionData[]>([])
   const [editPromptMentions, setEditPromptMentions] = useState<MentionData[]>([])
+  const autoMentionInjectedRef = useRef<string | null>(null)
 
   // AI generation states
   const [selectedModelId, setSelectedModelId] = usePersistentUIState<string>(
@@ -567,6 +581,9 @@ export function StoryboardDraw() {
           name: string
           image?: string
           color: string
+          prompt?: string
+          description?: string
+          aliases?: string[]
         }> = []
 
         // 获取角色（从 character_ids）
@@ -580,6 +597,9 @@ export function StoryboardDraw() {
               name: char.name,
               image: char.image,
               color: 'bg-blue-500',
+              prompt: char.prompt,
+              description: char.description,
+              aliases: char.aliases,
             })
           }
         }
@@ -595,6 +615,9 @@ export function StoryboardDraw() {
               name: scene.name,
               image: scene.image,
               color: 'bg-green-500',
+              prompt: scene.prompt,
+              description: scene.description,
+              aliases: scene.aliases,
             })
           }
         }
@@ -610,6 +633,9 @@ export function StoryboardDraw() {
               name: prop.name,
               image: prop.image,
               color: 'bg-orange-500',
+              prompt: prop.prompt,
+              description: prop.description,
+              aliases: prop.aliases,
             })
           }
         }
@@ -636,7 +662,38 @@ export function StoryboardDraw() {
         setLocalReferenceImages(mergedImages)
       }
     }
-  }, [activeItem?.id, generationType, activeTab, characters, scenes, props])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeItem?.id, generationType, activeTab])
+
+  // 自动注入 @mention 到提示词
+  useEffect(() => {
+    const itemId = activeItem?.id
+    if (!itemId || linkedAssets.length === 0) return
+    if (autoMentionInjectedRef.current === itemId) return
+
+    const currentText = generationType === 'video' ? localVideoPrompt : localPrompt
+    if (!currentText) return
+
+    autoMentionInjectedRef.current = itemId
+    const timer = setTimeout(() => {
+      const item = activeItem as any
+      const savedJSON = generationType === 'video' ? null : (item?.metadata?.promptJSON)
+      if (savedJSON && promptInputRef.current) {
+        promptInputRef.current.setContentFromJSON(savedJSON)
+        return
+      }
+      if (promptInputRef.current) {
+        promptInputRef.current.setMentionValue(currentText, linkedAssets.map(a => ({
+          id: a.id,
+          name: a.name,
+          type: a.type,
+          imageUrl: a.image,
+          aliases: a.aliases,
+        })))
+      }
+    }, 50)
+    return () => clearTimeout(timer)
+  }, [activeItem?.id, linkedAssets.length, generationType])
 
   // 简化：移除自动保存逻辑，改为手动保存
 
@@ -746,6 +803,16 @@ export function StoryboardDraw() {
 
     const mentionedImages = getMentionImageUrls(promptMentions)
 
+    // 自动收集分镜关联资产的参考图
+    let autoCollectedRefs: string[] = []
+    if (activeTab === 'storyboard' && activeItem) {
+      try {
+        const { collectStoryboardReferences, getReferenceImageUrls } = await import('@/utils/storyboardReferences')
+        const refs = await collectStoryboardReferences(activeItem as any)
+        autoCollectedRefs = getReferenceImageUrls(refs)
+      } catch {}
+    }
+
     try {
       let result: string
 
@@ -759,16 +826,16 @@ export function StoryboardDraw() {
         const storyboardImage = (activeItem as any)?.image
         const hasReferenceImages = localReferenceImages?.length > 0
         
+        // 合并参考图：手动选择 + 自动收集的资产参考图（去重）
+        const manualRefs = hasReferenceImages ? localReferenceImages : []
+        const allRefImages = [...new Set([...manualRefs, ...autoCollectedRefs, ...mentionedImages])]
+        
         // 确定首帧：分镜图 > 参考图第一张
-        const firstFrame = storyboardImage || (hasReferenceImages ? localReferenceImages[0] : undefined)
+        const firstFrame = storyboardImage || (allRefImages.length > 0 ? allRefImages[0] : undefined)
         // 尾帧
         const lastFrame = localLastFrame || undefined
-        // 其他参考图（除首帧外的）+ @提及的图片（去重）
-        const otherLocalRefs = hasReferenceImages 
-          ? localReferenceImages.filter((img: string) => img !== firstFrame)
-          : []
-        const uniqueMentionedImages = mentionedImages.filter(url => !otherLocalRefs.includes(url) && url !== firstFrame)
-        const otherReferenceImages = [...otherLocalRefs, ...uniqueMentionedImages]
+        // 其他参考图（除首帧外的）
+        const otherReferenceImages = allRefImages.filter((img: string) => img !== firstFrame)
 
         result = await videoGeneration.mutateAsync({
           projectId: currentProjectId,
@@ -808,14 +875,14 @@ export function StoryboardDraw() {
         const storyboardImage = (activeItem as any)?.image
         const hasReferenceImages = localReferenceImages?.length > 0
         
+        // 合并参考图：手动选择 + 自动收集的资产参考图（去重）
+        const manualRefs = hasReferenceImages ? localReferenceImages : []
+        const allRefImages = [...new Set([...manualRefs, ...autoCollectedRefs, ...mentionedImages])]
+        
         // 确定主图：分镜图 > 参考图第一张
-        const firstImage = storyboardImage || (hasReferenceImages ? localReferenceImages[0] : undefined)
-        // 其他参考图（除主图外的）+ @提及的图片（去重）
-        const otherLocalRefs = hasReferenceImages 
-          ? localReferenceImages.filter((img: string) => img !== firstImage)
-          : []
-        const uniqueMentionedImages = mentionedImages.filter(url => !otherLocalRefs.includes(url) && url !== firstImage)
-        const otherReferenceImages = [...otherLocalRefs, ...uniqueMentionedImages]
+        const firstImage = storyboardImage || (allRefImages.length > 0 ? allRefImages[0] : undefined)
+        // 其他参考图（除主图外的）
+        const otherReferenceImages = allRefImages.filter((img: string) => img !== firstImage)
 
         const imageUrl = await imageGeneration.mutateAsync({
           projectId: currentProjectId,
@@ -1873,6 +1940,11 @@ export function StoryboardDraw() {
     try {
       // 🔑 保存参考图和提示词到数据库
       if (activeTab === 'storyboard') {
+        const savedMentions = promptMentions.length > 0 ? promptMentions : undefined
+        const savedEditMentions = editPromptMentions.length > 0 ? editPromptMentions : undefined
+        const promptJSON = promptMentions.length > 0 ? promptInputRef.current?.getJSON() : undefined
+        const editJSON = editPromptMentions.length > 0 ? editPromptInputRef.current?.getJSON() : undefined
+
         await updateStoryboardAsync({
           id: activeItem.id,
           data: {
@@ -1884,6 +1956,13 @@ export function StoryboardDraw() {
               ? { video_reference_images: localReferenceImages }
               : { reference_images: localReferenceImages }
             ),
+            metadata: {
+              ...((activeItem as any).metadata || {}),
+              promptMentions: savedMentions,
+              editPromptMentions: savedEditMentions,
+              promptJSON: promptJSON,
+              editJSON: editJSON,
+            },
           },
         })
       } else {
@@ -1905,6 +1984,64 @@ export function StoryboardDraw() {
       toast({ title: '保存失败', variant: 'destructive' })
     }
   }
+
+  const handleAddAssetMapping = useCallback(async (
+    assetType: 'character' | 'scene' | 'prop',
+    assetId: string,
+  ) => {
+    if (!activeItem || activeTab !== 'storyboard') return
+    const storyboard = activeItem as any
+
+    if (assetType === 'character') {
+      const currentIds: string[] = storyboard.character_ids || []
+      if (currentIds.includes(assetId)) return
+      await updateStoryboardAsync({
+        id: storyboard.id,
+        data: { character_ids: [...currentIds, assetId] },
+      })
+    } else if (assetType === 'scene') {
+      await updateStoryboardAsync({
+        id: storyboard.id,
+        data: { scene_id: assetId },
+      })
+    } else if (assetType === 'prop') {
+      const currentIds: string[] = storyboard.prop_ids || []
+      if (currentIds.includes(assetId)) return
+      await updateStoryboardAsync({
+        id: storyboard.id,
+        data: { prop_ids: [...currentIds, assetId] },
+      })
+    }
+    toast({ title: '已关联资产' })
+  }, [activeItem, activeTab, updateStoryboardAsync, toast])
+
+  const handleRemoveAssetMapping = useCallback(async (
+    assetType: 'character' | 'scene' | 'prop',
+    assetId: string,
+  ) => {
+    if (!activeItem || activeTab !== 'storyboard') return
+    const storyboard = activeItem as any
+
+    if (assetType === 'character') {
+      const currentIds: string[] = storyboard.character_ids || []
+      await updateStoryboardAsync({
+        id: storyboard.id,
+        data: { character_ids: currentIds.filter(id => id !== assetId) },
+      })
+    } else if (assetType === 'scene') {
+      await updateStoryboardAsync({
+        id: storyboard.id,
+        data: { scene_id: undefined },
+      })
+    } else if (assetType === 'prop') {
+      const currentIds: string[] = storyboard.prop_ids || []
+      await updateStoryboardAsync({
+        id: storyboard.id,
+        data: { prop_ids: currentIds.filter(id => id !== assetId) },
+      })
+    }
+    toast({ title: '已取消关联' })
+  }, [activeItem, activeTab, updateStoryboardAsync, toast])
 
   // Auto-save effect - 自动保存参考图和提示词
   useEffect(() => {
@@ -2453,6 +2590,176 @@ export function StoryboardDraw() {
                   {/* 参考图 Tab */}
                   <TabsContent value="reference" className="flex-1 m-0 p-4 overflow-hidden">
                     <div className="h-full flex flex-col gap-4 overflow-y-auto">
+                      {/* 关联资产区域 - 仅分镜模式显示 */}
+                      {activeTab === 'storyboard' && activeItem && (
+                        <div className="space-y-2 pb-2 border-b">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">关联资产</span>
+                            <span className="text-[10px] text-muted-foreground">生成时自动作为参考图</span>
+                          </div>
+                          <div className="space-y-2">
+                            {/* 场景 */}
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground w-8 shrink-0">场景</span>
+                              {(() => {
+                                const sb = activeItem as any
+                                const linkedScene = sb.scene_id ? scenes.find((s: any) => s.id === sb.scene_id) : null
+                                if (linkedScene) {
+                                  return (
+                                    <div className="flex items-center gap-1 flex-1 min-w-0">
+                                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-xs min-w-0 flex-1">
+                                        {linkedScene.image ? (
+                                          <img src={getImageUrl(linkedScene.image) || ''} alt="" className="w-5 h-5 rounded object-cover shrink-0" />
+                                        ) : (
+                                          <div className="w-5 h-5 rounded bg-green-200 dark:bg-green-800 flex items-center justify-center text-[8px] text-green-700 dark:text-green-300 shrink-0">
+                                            {linkedScene.name.charAt(0)}
+                                          </div>
+                                        )}
+                                        <span className="truncate">{linkedScene.name}</span>
+                                        {!linkedScene.image && (
+                                          <span className="text-[9px] text-amber-500 shrink-0">待生成</span>
+                                        )}
+                                      </div>
+                                      <button
+                                        onClick={() => handleRemoveAssetMapping('scene', linkedScene.id)}
+                                        className="shrink-0 p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  )
+                                }
+                                return (
+                                  <select
+                                    className="flex-1 text-xs h-7 rounded-md border border-input bg-background px-2"
+                                    value=""
+                                    onChange={e => {
+                                      if (e.target.value) handleAddAssetMapping('scene', e.target.value)
+                                    }}
+                                  >
+                                    <option value="">选择场景...</option>
+                                    {scenes
+                                      .filter((s: any) => s.id !== sb.scene_id)
+                                      .map((s: any) => (
+                                        <option key={s.id} value={s.id}>{s.name}</option>
+                                      ))
+                                    }
+                                  </select>
+                                )
+                              })()}
+                            </div>
+                            {/* 角色 */}
+                            <div className="flex items-start gap-2">
+                              <span className="text-xs text-muted-foreground w-8 shrink-0 pt-1">角色</span>
+                              <div className="flex-1 flex flex-wrap gap-1">
+                                {(() => {
+                                  const sb = activeItem as any
+                                  const charIds: string[] = sb.character_ids || []
+                                  return (
+                                    <>
+                                      {charIds.map(charId => {
+                                        const char = characters.find((c: any) => c.id === charId)
+                                        if (!char) return null
+                                        return (
+                                          <div key={charId} className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-xs">
+                                            {char.image ? (
+                                              <img src={getImageUrl(char.image) || ''} alt="" className="w-4 h-4 rounded object-cover" />
+                                            ) : (
+                                              <div className="w-4 h-4 rounded bg-blue-200 dark:bg-blue-800 flex items-center justify-center text-[7px] text-blue-700 dark:text-blue-300">
+                                                {char.name.charAt(0)}
+                                              </div>
+                                            )}
+                                            <span className="max-w-[60px] truncate">{char.name}</span>
+                                            {!char.image && (
+                                              <span className="text-[8px] text-amber-500">待生成</span>
+                                            )}
+                                            <button
+                                              onClick={() => handleRemoveAssetMapping('character', charId)}
+                                              className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                                            >
+                                              <X className="w-2.5 h-2.5" />
+                                            </button>
+                                          </div>
+                                        )
+                                      })}
+                                      <select
+                                        className="text-xs h-6 rounded-md border border-dashed border-input bg-background px-1.5"
+                                        value=""
+                                        onChange={e => {
+                                          if (e.target.value) handleAddAssetMapping('character', e.target.value)
+                                        }}
+                                      >
+                                        <option value="">+</option>
+                                        {characters
+                                          .filter((c: any) => !charIds.includes(c.id))
+                                          .map((c: any) => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                          ))
+                                        }
+                                      </select>
+                                    </>
+                                  )
+                                })()}
+                              </div>
+                            </div>
+                            {/* 道具 */}
+                            <div className="flex items-start gap-2">
+                              <span className="text-xs text-muted-foreground w-8 shrink-0 pt-1">道具</span>
+                              <div className="flex-1 flex flex-wrap gap-1">
+                                {(() => {
+                                  const sb = activeItem as any
+                                  const pIds: string[] = sb.prop_ids || []
+                                  return (
+                                    <>
+                                      {pIds.map(propId => {
+                                        const prop = props.find((p: any) => p.id === propId)
+                                        if (!prop) return null
+                                        return (
+                                          <div key={propId} className="flex items-center gap-1 px-2 py-1 rounded-md bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 text-xs">
+                                            {prop.image ? (
+                                              <img src={getImageUrl(prop.image) || ''} alt="" className="w-4 h-4 rounded object-cover" />
+                                            ) : (
+                                              <div className="w-4 h-4 rounded bg-orange-200 dark:bg-orange-800 flex items-center justify-center text-[7px] text-orange-700 dark:text-orange-300">
+                                                {prop.name.charAt(0)}
+                                              </div>
+                                            )}
+                                            <span className="max-w-[60px] truncate">{prop.name}</span>
+                                            {!prop.image && (
+                                              <span className="text-[8px] text-amber-500">待生成</span>
+                                            )}
+                                            <button
+                                              onClick={() => handleRemoveAssetMapping('prop', propId)}
+                                              className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                                            >
+                                              <X className="w-2.5 h-2.5" />
+                                            </button>
+                                          </div>
+                                        )
+                                      })}
+                                      <select
+                                        className="text-xs h-6 rounded-md border border-dashed border-input bg-background px-1.5"
+                                        value=""
+                                        onChange={e => {
+                                          if (e.target.value) handleAddAssetMapping('prop', e.target.value)
+                                        }}
+                                      >
+                                        <option value="">+</option>
+                                        {props
+                                          .filter((p: any) => !pIds.includes(p.id))
+                                          .map((p: any) => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                          ))
+                                        }
+                                      </select>
+                                    </>
+                                  )
+                                })()}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       {/* 模式标签 */}
                       <div className="flex items-center gap-2 pb-2 border-b">
                         <span className="text-sm font-medium">当前模式:</span>
@@ -2636,6 +2943,7 @@ export function StoryboardDraw() {
                             <span className="text-xs text-primary">已输入</span>
                           )}
                         </div>
+
                         <MentionInput
                           ref={editPromptInputRef}
                           value={localEditPrompt || ''}
@@ -2762,6 +3070,7 @@ export function StoryboardDraw() {
                         {generationType === 'video' ? '视频提示词' : '图片提示词'}
                         <span className="text-[10px] text-muted-foreground ml-2">(输入 @ 引用参考图)</span>
                       </label>
+
                       <MentionInput
                         ref={promptInputRef}
                         value={generationType === 'video' ? localVideoPrompt : localPrompt}

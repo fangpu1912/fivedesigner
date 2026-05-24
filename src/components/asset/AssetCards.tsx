@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 
-import { convertFileSrc } from '@tauri-apps/api/core'
 import { Box, Mountain, Trash2, User } from 'lucide-react'
 
 import { ClickableImage } from '@/components/media/ClickableImage'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { getAssetUrl } from '@/utils/asset'
 import type { Character, Prop, Scene } from '@/types'
 
 interface SceneCardProps {
@@ -27,17 +27,12 @@ interface CharacterCardProps {
   allCharacters?: Character[]
 }
 
-function resolveMediaUrl(path?: string | null) {
-  if (!path) return null
-  if (path.startsWith('http') || path.startsWith('data:')) return path
-  return convertFileSrc(path)
-}
 
 export function SceneCard({ scene, onDelete, onClick }: SceneCardProps) {
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
 
   useEffect(() => {
-    setMediaUrl(resolveMediaUrl(scene.image))
+    setMediaUrl(getAssetUrl(scene.image))
   }, [scene])
 
   return (
@@ -85,7 +80,7 @@ export function PropCard({ prop, onDelete, onClick }: PropCardProps) {
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
 
   useEffect(() => {
-    setMediaUrl(resolveMediaUrl(prop.image))
+    setMediaUrl(getAssetUrl(prop.image))
   }, [prop])
 
   return (
@@ -143,13 +138,13 @@ export function CharacterCard({ character, onDelete, onClick, allCharacters }: C
   }
 
   useEffect(() => {
-    setMediaUrl(resolveMediaUrl(character.image))
+    setMediaUrl(getAssetUrl(character.image))
   }, [character])
 
   const getAllImages = () => {
     if (!allCharacters || allCharacters.length === 0) return mediaUrl ? [mediaUrl] : []
 
-    return allCharacters.map(item => resolveMediaUrl(item.image)).filter(Boolean) as string[]
+    return allCharacters.map(item => getAssetUrl(item.image)).filter(Boolean) as string[]
   }
 
   const getCurrentIndex = () => {

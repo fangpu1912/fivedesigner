@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect } from 'react'
 
-import { EditorContent } from '@tiptap/react'
+import { EditorContent, type Editor } from '@tiptap/react'
 import {
   Bold,
   Italic,
@@ -39,6 +39,7 @@ export interface RichTextEditorProps {
   className?: string
   showCharacterCount?: boolean
   maxLength?: number
+  onEditorReady?: (editor: Editor) => void
 }
 
 const ToolbarButton: React.FC<{
@@ -68,12 +69,13 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   onChange,
   placeholder = '开始输入...',
   editable = true,
-  minHeight = 150,
-  maxHeight = 500,
+  minHeight: _minHeight = 150,
+  maxHeight: _maxHeight = 500,
   toolbar = true,
   className,
   showCharacterCount = true,
   maxLength,
+  onEditorReady,
 }) => {
   const { editor, actions, isActive, characterCount, wordCount } = useRichText({
     initialContent: content,
@@ -82,6 +84,13 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     onUpdate: onChange,
     maxLength,
   })
+
+  // 通知父组件 editor 已就绪
+  useEffect(() => {
+    if (editor && onEditorReady) {
+      onEditorReady(editor)
+    }
+  }, [editor, onEditorReady])
 
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {

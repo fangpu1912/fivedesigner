@@ -179,7 +179,7 @@ export function PromptEditor({
         const isValidVar = variables.includes(varName)
         return (
           <span
-            key={index}
+            key={'part-' + index}
             className={cn(
               'rounded px-1',
               isValidVar
@@ -191,7 +191,7 @@ export function PromptEditor({
           </span>
         )
       }
-      return <span key={index}>{part}</span>
+      return <span key={'part-' + index}>{part}</span>
     })
   }, [value, variables])
 
@@ -285,7 +285,7 @@ export function PromptEditor({
               </div>
               <div className="flex flex-wrap gap-1">
                 {analysis.keywords.slice(0, 10).map((keyword, index) => (
-                  <Badge key={index} variant="secondary" className="text-xs">
+                  <Badge key={keyword + '-' + index} variant="secondary" className="text-xs">
                     {keyword}
                   </Badge>
                 ))}
@@ -302,7 +302,7 @@ export function PromptEditor({
           {analysis.structure.warnings.length > 0 && (
             <div className="space-y-1">
               {analysis.structure.warnings.map((warning, index) => (
-                <div key={index} className="flex items-start gap-1 text-xs text-yellow-600">
+                <div key={'warning-' + index} className="flex items-start gap-1 text-xs text-yellow-600">
                   <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
                   {warning}
                 </div>

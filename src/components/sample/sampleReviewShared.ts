@@ -1,5 +1,3 @@
-import { convertFileSrc } from '@tauri-apps/api/core'
-
 import type { Dubbing, Storyboard } from '@/types'
 
 export interface SampleReviewClip {
@@ -12,8 +10,4 @@ export interface SampleReviewClip {
   imageUrl?: string
 }
 
-export function getSampleMediaUrl(path?: string | null): string | null {
-  if (!path) return null
-  if (path.startsWith('http') || path.startsWith('data:')) return path
-  return convertFileSrc(path)
-}
+export { getAssetUrl as getSampleMediaUrl } from '@/utils/asset'

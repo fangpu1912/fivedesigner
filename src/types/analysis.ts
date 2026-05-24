@@ -30,6 +30,7 @@ export interface AnalysisStoryboard {
   description: string
   prompt: string
   videoPrompt: string
+  scene_id?: string
   characters?: string[]
   props?: string[]
   transition?: string

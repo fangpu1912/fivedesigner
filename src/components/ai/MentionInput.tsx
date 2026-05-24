@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { type MentionData, type MentionItem } from '@/types/mention'
 import { resolvePromptToAIFormat, extractMentionsFromJSON } from '@/utils/promptResolver'
 import type { ResolvedPrompt } from '@/types/mention'
+import { buildMentionDoc, type AssetInfo } from '@/utils/buildMentionDoc'
 import { MentionDropdown } from './MentionDropdown'
 import type { SlashPreset } from '@/plugins/storyboard-copilot/utils/slashPresets'
 import { searchSlashPresets } from '@/plugins/storyboard-copilot/utils/slashPresets'
@@ -22,6 +23,8 @@ export interface MentionInputRef {
   getResolvedPrompt: () => ResolvedPrompt
   focus: () => void
   clear: () => void
+  setMentionValue: (text: string, assets: AssetInfo[]) => void
+  setContentFromJSON: (json: Record<string, unknown>) => void
 }
 
 export interface MentionInputProps {
@@ -356,6 +359,24 @@ export const MentionInput = forwardRef<MentionInputRef, MentionInputProps>(
         clear: () => {
           editor?.commands.clearContent(true)
           lastExternalValue.current = ''
+        },
+        setMentionValue: (text, assets) => {
+          if (!editor) return
+          const doc = buildMentionDoc(text, assets)
+          isInternalUpdate.current = true
+          editor.commands.setContent(doc)
+          lastExternalValue.current = text
+          isInternalUpdate.current = false
+          notifyMentions(editor)
+        },
+        setContentFromJSON: (json) => {
+          if (!editor) return
+          isInternalUpdate.current = true
+          editor.commands.setContent(json)
+          const text = editor.getText()
+          lastExternalValue.current = text
+          isInternalUpdate.current = false
+          notifyMentions(editor)
         },
       }),
       [editor],

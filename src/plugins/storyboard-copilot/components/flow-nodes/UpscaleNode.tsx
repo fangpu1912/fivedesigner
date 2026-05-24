@@ -1,6 +1,6 @@
 import { memo, useState, useCallback, useRef, useEffect } from 'react'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
-import { Maximize, Loader2, ImageIcon, AlertCircle, Play, X, Cloud, ZoomIn, ZoomOut } from 'lucide-react'
+import { Maximize, Loader2, ImageIcon, AlertCircle, Play, X, ZoomIn, ZoomOut } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -48,7 +48,7 @@ export const UpscaleNode = memo(({ id, data, selected }: UpscaleNodeProps) => {
   const [resultUrl, setResultUrl] = useState<string | null>(data.imageUrl || null)
   const [workflows, setWorkflows] = useState<WorkflowConfig[]>([])
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>(data.workflowId || '')
-  const [scale, setScale] = useState<number>(data.scale || 1)
+  const [_scale, setScale] = useState<number>(data.scale || 1)
   const abortControllerRef = useRef<AbortController | null>(null)
 
   // 加载工作流列表（从 localStorage，与分镜绘制页面保持一致）
@@ -226,12 +226,7 @@ export const UpscaleNode = memo(({ id, data, selected }: UpscaleNodeProps) => {
 
       // 保存到项目目录
       const { saveMediaFile } = await import('@/utils/mediaStorage')
-      const savedPath = await saveMediaFile(uint8Array, {
-        projectId: currentProjectId ?? undefined,
-        episodeId: currentEpisodeId ?? undefined,
-        type: 'image',
-        fileName: `upscale_${newScale}x_${Date.now()}.png`,
-      })
+      const savedPath = await saveMediaFile(uint8Array, `upscale_${newScale}x_${Date.now()}.png`, currentProjectId || undefined, currentEpisodeId || undefined, 'image')
 
       setResultUrl(savedPath)
       setScale(newScale)

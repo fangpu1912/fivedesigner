@@ -1,11 +1,11 @@
 {
-  "version": "1.0.1",
-  "notes": "🎉 v1.0.1 更新\n\n## 修复内容\n- 分镜拆分节点多图替换显示修复\n- 视频生成节点添加分辨率选项和动态时长\n- 模型选择器按供应商分组显示\n- GeekAI 供应商添加新模型支持（Veo 3.1、Wan2.6、Vidu、Kling、Hailuo、豆包）\n- 图片/视频生成参考图去重处理\n- Grok 4.2 Image 图片URL提取修复\n- 参考图面板支持显示无图片资产（场景、角色等）\n- 分镜关联场景修复\n- 上传文件去重处理\n\n## 安装说明\n- 下载安装包后双击运行即可\n- 首次启动需配置 AI 供应商 API Key",
-  "pub_date": "2026-05-17T12:00:00+08:00",
+  "version": "1.0.4",
+  "notes": "🎉 v1.0.4 更新\n\n## 新增功能\n- RunningHub 云端 ComfyUI 工作流节点（支持钱包模式）\n- 影视镜头专业模板（景别/机位/构图/运镜/光影组合）\n- 分镜助手节点库新增 RunningHub 分类\n\n## 修复内容\n- 文本标注节点内容无法传递到下游节点\n- RunningHub 节点输出自动衍生结果节点\n- 节点输入输出端口统一为单连接点\n\n## 安装说明\n- 下载安装包后双击运行即可\n- 首次启动需配置 AI 供应商 API Key",
+  "pub_date": "2026-05-25T12:00:00+08:00",
   "platforms": {
     "windows-x86_64": {
       "signature": "",
-      "url": "https://github.com/fangpu1912/fivedesigner/releases/download/v1.0.1/FiveDesigner_1.0.1_x64-setup.exe"
+      "url": "https://github.com/fangpu1912/fivedesigner/releases/download/v1.0.4/FiveDesigner_1.0.4_x64-setup.exe"
     }
   }
 }

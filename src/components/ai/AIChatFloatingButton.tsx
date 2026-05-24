@@ -1,11 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { MessageCircle, X, Send, Minimize2, GripHorizontal, Wrench, Loader2, CheckCircle, XCircle } from 'lucide-react'
+import { MessageCircle, X, Send, Minimize2, GripHorizontal, Wrench, Loader2, CheckCircle, XCircle, Trash2, ImagePlus } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { AgentOrchestrator } from '@/services/agent/agentOrchestrator'
 import { builtInTools } from '@/services/agent/builtInTools'
+import { bridgeEvents } from '@/plugins/storyboard-copilot/bridge/bridgeEvents'
 import type { AgentMessage, AgentToolResult } from '@/services/agent/agentTools'
 
 interface ChatMessage {
@@ -18,10 +21,83 @@ interface ChatMessage {
   isExecuting?: boolean
 }
 
+const CHAT_HISTORY_KEY = 'ai_chat_history'
+const MAX_HISTORY_MESSAGES = 200
+
+function loadChatHistory(): ChatMessage[] {
+  try {
+    const stored = localStorage.getItem(CHAT_HISTORY_KEY)
+    if (stored) {
+      return JSON.parse(stored)
+    }
+  } catch {
+    // 忽略解析错误
+  }
+  return []
+}
+
+function saveChatHistory(messages: ChatMessage[]) {
+  try {
+    // 只保留最近的消息，避免 localStorage 溢出
+    const trimmed = messages.slice(-MAX_HISTORY_MESSAGES)
+    localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(trimmed))
+  } catch {
+    // 忽略保存错误（可能是存储空间不足）
+  }
+}
+
+/**
+ * 从 Markdown 内容中提取媒体 URL（图片、视频、音频）
+ */
+function extractMediaUrls(content: string): Array<{ url: string; type: 'image' | 'video' | 'audio' }> {
+  const results: Array<{ url: string; type: 'image' | 'video' | 'audio' }> = []
+
+  // 提取图片 ![alt](url)
+  const imageRegex = /!\[.*?\]\((.*?)\)/g
+  let match
+  while ((match = imageRegex.exec(content)) !== null) {
+    if (match[1]) {
+      results.push({ url: match[1], type: 'image' })
+    }
+  }
+
+  // 提取视频链接 [视频](url)
+  const videoRegex = /\[.*?视频.*?\]\((.*?)\)/gi
+  while ((match = videoRegex.exec(content)) !== null) {
+    if (match[1]) {
+      results.push({ url: match[1], type: 'video' })
+    }
+  }
+
+  // 提取音频链接 [音频](url) 或 [配音](url)
+  const audioRegex = /\[.*?(音频|配音|语音).*?\]\((.*?)\)/gi
+  while ((match = audioRegex.exec(content)) !== null) {
+    if (match[2]) {
+      results.push({ url: match[2], type: 'audio' })
+    }
+  }
+
+  return results
+}
+
+/**
+ * 发送媒体到画布
+ */
+function sendMediaToCanvas(url: string, type: 'image' | 'video' | 'audio') {
+  const labelMap = { image: 'AI 生成图片', video: 'AI 生成视频', audio: 'AI 生成音频' }
+  bridgeEvents.emit('canvas:node-added', {
+    type,
+    data: {
+      url,
+      label: labelMap[type],
+    },
+  })
+}
+
 export function AIChatFloatingButton() {
   const [isOpen, setIsOpen] = useState(false)
   const [isMinimized, setIsMinimized] = useState(false)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>(loadChatHistory)
   const [input, setInput] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -30,13 +106,34 @@ export function AIChatFloatingButton() {
   const chatRef = useRef<HTMLDivElement>(null)
   const orchestratorRef = useRef<AgentOrchestrator | null>(null)
   const agentMessagesRef = useRef<AgentMessage[]>([])
+  const messagesRef = useRef<ChatMessage[]>([])
 
+  // 同步 messages 到 ref，用于持久化
   useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
+
+  // 组件卸载时保存聊天记录
+  useEffect(() => {
+    return () => {
+      saveChatHistory(messagesRef.current)
+    }
+  }, [])
+
+  // 定期保存聊天记录（每 10 秒）
+  useEffect(() => {
+    const interval = setInterval(() => {
+      saveChatHistory(messagesRef.current)
+    }, 10000)
+    return () => clearInterval(interval)
+  }, [])
+
+    useEffect(() => {
     const orchestrator = new AgentOrchestrator(builtInTools, {
       onMessage: (msg: AgentMessage) => {
         const chatMsg: ChatMessage = {
           id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-          role: msg.role === 'tool_result' ? 'tool_result' : msg.toolCall ? 'tool_call' : msg.role,
+          role: msg.role === 'tool_result' ? 'tool_result' : msg.toolCall ? 'tool_call' : msg.role === 'system' ? 'assistant' : msg.role,
           content: msg.content,
           timestamp: msg.timestamp,
           toolName: msg.toolName,
@@ -53,7 +150,7 @@ export function AIChatFloatingButton() {
           )
         )
       },
-      onToolResult: (toolName: string, result: AgentToolResult) => {
+      onToolResult: (toolName: string, _result: AgentToolResult) => {
         setMessages(prev =>
           prev.map(msg =>
             msg.role === 'tool_call' && msg.toolName === toolName
@@ -221,6 +318,20 @@ export function AIChatFloatingButton() {
             variant="ghost"
             size="icon"
             className="h-7 w-7"
+            onClick={() => {
+              if (confirm('确定要清空聊天记录吗？')) {
+                setMessages([])
+                localStorage.removeItem(CHAT_HISTORY_KEY)
+              }
+            }}
+            title="清空聊天记录"
+          >
+            <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
             onClick={() => setIsMinimized(true)}
           >
             <Minimize2 className="h-3.5 w-3.5" />
@@ -295,7 +406,48 @@ export function AIChatFloatingButton() {
                       </span>
                     </div>
                   )}
-                  <div className="whitespace-pre-wrap">{message.content}</div>
+                  <div className="prose prose-sm dark:prose-invert max-w-none">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        img: ({ node, ...props }) => (
+                          <img
+                            {...props}
+                            className="rounded-lg max-w-full h-auto mt-2"
+                            style={{ maxHeight: '300px' }}
+                            alt={props.alt || '图片'}
+                          />
+                        ),
+                        a: ({ node, ...props }) => (
+                          <a
+                            {...props}
+                            className="text-primary hover:underline"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          />
+                        ),
+                      }}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
+                  </div>
+                  {/* 发送到画布按钮 */}
+                  {message.role === 'assistant' && extractMediaUrls(message.content).length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {extractMediaUrls(message.content).map((item, idx) => (
+                        <Button
+                          key={idx}
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => sendMediaToCanvas(item.url, item.type)}
+                        >
+                          <ImagePlus className="h-3 w-3 mr-1" />
+                          发送{item.type === 'image' ? '图片' : item.type === 'video' ? '视频' : '音频'}到画布
+                        </Button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

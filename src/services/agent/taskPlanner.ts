@@ -9,7 +9,6 @@ import type { ParsedIntent, TaskGraph, TaskNode } from './types'
  * 生成任务图
  */
 export function generateTaskGraph(intent: ParsedIntent): TaskGraph {
-  const nodes: TaskNode[] = []
 
   switch (intent.type) {
     case 'image':

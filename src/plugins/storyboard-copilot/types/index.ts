@@ -16,7 +16,8 @@ export const CANVAS_NODE_TYPES = {
   audioUpload: 'audioUploadNode',
   imageToPrompt: 'imageToPromptNode',
   imageCompare: 'imageCompareNode',
-  videoReverse: 'videoReverseNode',
+  runninghub: 'runninghubNode',
+  runninghubWallet: 'runninghubWalletNode',
 } as const
 
 export type CanvasNodeType = (typeof CANVAS_NODE_TYPES)[keyof typeof CANVAS_NODE_TYPES]
@@ -276,28 +277,18 @@ export interface ImageToPromptNodeData extends NodeDisplayData {
   isAnalyzing: boolean
 }
 
-// 视频反推节点数据
-export interface VideoReverseNodeData extends NodeDisplayData {
+// RunningHub 工作流节点数据
+export interface RunningHubNodeData extends NodeDisplayData {
+  webappId: string
+  status: 'idle' | 'submitting' | 'polling' | 'success' | 'error'
+  taskId?: string
+  errorMessage?: string
+  appInfo?: Record<string, unknown>
+  paramValues: Record<string, { value: string; sourceFromUpstream?: boolean }>
+  imageUrl: string | null
   videoUrl: string | null
-  prompt: string
-  description: string
-  characters: Array<{
-    name: string
-    description: string
-    prompt: string
-  }>
-  scenes: Array<{
-    name: string
-    description: string
-    prompt: string
-  }>
-  summary: string
-  tags: string[]
-  extractedFrames: Array<{
-    timestamp: number
-    imageUrl: string | null
-  }>
-  isAnalyzing: boolean
+  audioUrl: string | null
+  useWallet: boolean
 }
 
 // 文本注释节点数据（别名，用于 CanvasNodeData 联合类型）
@@ -317,7 +308,7 @@ export type CanvasNodeData =
   | VideoUploadNodeData
   | AudioUploadNodeData
   | ImageToPromptNodeData
-  | VideoReverseNodeData
+  | RunningHubNodeData
 
 // ==================== 画布类型 ====================
 export interface CanvasNode {

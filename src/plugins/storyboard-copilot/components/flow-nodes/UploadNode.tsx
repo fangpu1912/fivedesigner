@@ -42,7 +42,7 @@ export const UploadNode = memo(({ id, data, selected }: UploadNodeProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const currentProjectId = useUIStore((state) => state.currentProjectId)
   const currentEpisodeId = useUIStore((state) => state.currentEpisodeId)
-  const { getUpstreamImageData, upstreamImage } = useUpstreamData(id)
+  const { upstreamImage } = useUpstreamData(id)
   const upstreamImageRef = useRef<string | null>(null)
   const enlargedHandles = useEnlargedHandles(id)
 

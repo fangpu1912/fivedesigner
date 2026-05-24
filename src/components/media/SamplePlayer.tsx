@@ -1,11 +1,8 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
 
-import { convertFileSrc } from '@tauri-apps/api/core'
 import {
   Play,
   Pause,
-  SkipBack,
-  SkipForward,
   Maximize2,
   Minimize2,
   Image as ImageIcon,
@@ -15,13 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
-
-// 获取文件URL
-function getFileUrl(path?: string | null): string | null {
-  if (!path) return null
-  if (path.startsWith('http') || path.startsWith('data:')) return path
-  return convertFileSrc(path)
-}
+import { getAssetUrl } from '@/utils/asset'
 
 interface SampleClip {
   id: string
@@ -239,7 +230,7 @@ export function SamplePlayer({
         {clip.videoUrl ? (
           <video
             ref={videoRef}
-            src={getFileUrl(clip.videoUrl) || ''}
+            src={getAssetUrl(clip.videoUrl) || ''}
             className={cn('max-w-full max-h-full', isFullscreen ? 'max-h-[80vh]' : 'max-h-[50vh]')}
             muted
             playsInline
@@ -248,7 +239,7 @@ export function SamplePlayer({
           />
         ) : clip.imageUrl ? (
           <img
-            src={getFileUrl(clip.imageUrl) || ''}
+            src={getAssetUrl(clip.imageUrl) || ''}
             alt={clip.storyboard.name}
             className={cn(
               'max-w-full max-h-full object-contain',
@@ -266,7 +257,7 @@ export function SamplePlayer({
         {clip.audioUrl && (
           <audio
             ref={audioRef}
-            src={getFileUrl(clip.audioUrl) || ''}
+            src={getAssetUrl(clip.audioUrl) || ''}
             onTimeUpdate={handleAudioTimeUpdate}
             onEnded={handleAudioEnded}
           />

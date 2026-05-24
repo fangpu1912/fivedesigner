@@ -324,7 +324,7 @@ export function PromptTester({ template }: PromptTesterProps) {
               <div className="space-y-4">
                 {messages.map((message, index) => (
                   <div
-                    key={index}
+                    key={'msg-' + index}
                     className={cn(
                       'flex gap-3',
                       message.role === 'user' ? 'flex-row' : 'flex-row-reverse'

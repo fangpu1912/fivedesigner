@@ -97,6 +97,7 @@ async function executeTask(taskId: string) {
         progress: 100,
         result,
         completedAt: Date.now(),
+        abortController: undefined,
       })
     } else {
       useTaskQueueStore.getState().updateTask(taskId, {
@@ -104,6 +105,7 @@ async function executeTask(taskId: string) {
         errorMessage: result.error || '任务执行失败',
         result,
         completedAt: Date.now(),
+        abortController: undefined,
       })
     }
   } catch (error) {
@@ -111,6 +113,7 @@ async function executeTask(taskId: string) {
       useTaskQueueStore.getState().updateTask(taskId, {
         status: 'cancelled',
         completedAt: Date.now(),
+        abortController: undefined,
       })
       return
     }
@@ -119,6 +122,7 @@ async function executeTask(taskId: string) {
       status: 'failed',
       errorMessage: error instanceof Error ? error.message : '任务执行失败',
       completedAt: Date.now(),
+      abortController: undefined,
     })
   }
 }

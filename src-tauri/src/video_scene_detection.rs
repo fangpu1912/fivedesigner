@@ -5,6 +5,11 @@ use tauri::command;
 
 use crate::create_command;
 
+/// 获取临时目录路径
+fn get_temp_dir() -> PathBuf {
+    std::env::temp_dir().join("fivedesigner-analysis")
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SceneDetectionRequest {
     pub video_path: String,
@@ -334,12 +339,23 @@ pub async fn export_scenes(
 }
 
 /// 按指定时间截取单帧截图
+/// output_path 为空时，使用临时目录自动生成路径
 #[command]
 pub async fn capture_frame(
     video_path: String,
     timestamp: f64,
     output_path: String,
 ) -> Result<String, String> {
+    // 如果 output_path 为空，使用临时目录
+    let final_output_path = if output_path.is_empty() {
+        let temp_dir = get_temp_dir();
+        let _ = fs::create_dir_all(&temp_dir);
+        let filename = format!("frame_{:.3}_{}.jpg", timestamp, uuid::Uuid::new_v4());
+        temp_dir.join(filename).to_string_lossy().to_string()
+    } else {
+        output_path
+    };
+
     let output = create_command("ffmpeg")
         .args(&[
             "-ss", &format!("{:.3}", timestamp),
@@ -347,7 +363,7 @@ pub async fn capture_frame(
             "-vframes", "1",
             "-q:v", "2",
             "-y",
-            &output_path,
+            &final_output_path,
         ])
         .output()
         .map_err(|e| format!("截取帧失败: {}", e))?;
@@ -357,5 +373,78 @@ pub async fn capture_frame(
         return Err(format!("截取帧失败: {}", stderr));
     }
 
-    Ok(output_path)
+    Ok(final_output_path)
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VideoInfoResult {
+    pub duration: f64,
+    pub width: i32,
+    pub height: i32,
+    pub fps: f64,
+    pub codec: String,
+}
+
+#[command]
+pub async fn get_video_info(
+    video_path: String,
+) -> Result<VideoInfoResult, String> {
+    let path = PathBuf::from(&video_path);
+    if !path.exists() {
+        return Err(format!("视频文件不存在: {}", video_path));
+    }
+
+    let output = create_command("ffprobe")
+        .args(&[
+            "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=width,height,r_frame_rate,duration,codec_name",
+            "-show_entries", "format=duration",
+            "-of", "json",
+            &video_path,
+        ])
+        .output()
+        .map_err(|e| format!("ffprobe 执行失败: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("ffprobe 错误: {}", stderr));
+    }
+
+    let info: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .map_err(|e| format!("解析视频信息失败: {}", e))?;
+
+    let duration = info["format"]["duration"]
+        .as_str()
+        .and_then(|s| s.parse::<f64>().ok())
+        .or_else(|| info["streams"][0]["duration"].as_str().and_then(|s| s.parse::<f64>().ok()))
+        .unwrap_or(0.0);
+
+    let width = info["streams"][0]["width"].as_i64().unwrap_or(0) as i32;
+    let height = info["streams"][0]["height"].as_i64().unwrap_or(0) as i32;
+
+    let fps_str = info["streams"][0]["r_frame_rate"].as_str().unwrap_or("24/1");
+    let fps = if fps_str.contains('/') {
+        let parts: Vec<&str> = fps_str.split('/').collect();
+        if parts.len() == 2 {
+            parts[0].parse::<f64>().unwrap_or(24.0) / parts[1].parse::<f64>().unwrap_or(1.0)
+        } else {
+            24.0
+        }
+    } else {
+        fps_str.parse::<f64>().unwrap_or(24.0)
+    };
+
+    let codec = info["streams"][0]["codec_name"]
+        .as_str()
+        .unwrap_or("unknown")
+        .to_string();
+
+    Ok(VideoInfoResult {
+        duration,
+        width,
+        height,
+        fps,
+        codec,
+    })
 }

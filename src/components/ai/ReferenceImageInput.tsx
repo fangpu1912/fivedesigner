@@ -38,6 +38,7 @@ export interface ReferenceItem {
   episodeName?: string
   prompt?: string
   description?: string
+  aliases?: string[]
 }
 
 interface LinkedAsset {
@@ -74,9 +75,10 @@ interface ReferenceImageInputProps {
     episode_id?: string
     prompt?: string
     description?: string
+    aliases?: string[]
   }>
-  scenes?: Array<{ id: string; name: string; image?: string; episode_id?: string; prompt?: string; description?: string }>
-  props?: Array<{ id: string; name: string; image?: string; episode_id?: string; prompt?: string; description?: string }>
+  scenes?: Array<{ id: string; name: string; image?: string; episode_id?: string; prompt?: string; description?: string; aliases?: string[] }>
+  props?: Array<{ id: string; name: string; image?: string; episode_id?: string; prompt?: string; description?: string; aliases?: string[] }>
   currentEpisodeId?: string
   currentProjectId?: string
   displayMode?: 'thumbnail' | 'large'
@@ -209,6 +211,7 @@ export function ReferenceImageInput({
             episodeId: char.episode_id,
             prompt: char.prompt,
             description: char.description,
+            aliases: char.aliases,
           })
         }
       })
@@ -223,6 +226,7 @@ export function ReferenceImageInput({
             episodeId: scene.episode_id,
             prompt: scene.prompt,
             description: scene.description,
+            aliases: scene.aliases,
           })
         }
       })
@@ -237,6 +241,7 @@ export function ReferenceImageInput({
             episodeId: prop.episode_id,
             prompt: prop.prompt,
             description: prop.description,
+            aliases: prop.aliases,
           })
         }
       })
@@ -282,6 +287,7 @@ export function ReferenceImageInput({
         episodeId: char.episode_id,
         prompt: char.prompt,
         description: char.description,
+        aliases: char.aliases,
       })
     })
     scenes.forEach(scene => {
@@ -293,6 +299,7 @@ export function ReferenceImageInput({
         episodeId: scene.episode_id,
         prompt: scene.prompt,
         description: scene.description,
+        aliases: scene.aliases,
       })
     })
     props.forEach(prop => {
@@ -304,6 +311,7 @@ export function ReferenceImageInput({
         episodeId: prop.episode_id,
         prompt: prop.prompt,
         description: prop.description,
+        aliases: prop.aliases,
       })
     })
     uploadedFiles.forEach(file => addItem(file))

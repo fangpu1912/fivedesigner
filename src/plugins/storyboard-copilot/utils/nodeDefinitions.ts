@@ -186,28 +186,47 @@ export const nodeDefinitions: NodeDefinition[] = [
     },
   },
 
-  // ==================== 视频反推 ====================
+  // ==================== RunningHub ====================
   {
-    type: CANVAS_NODE_TYPES.videoReverse,
-    label: '视频反推',
-    category: 'video',
-    description: '使用AI分析视频内容，提取角色、场景、动作信息',
+    type: CANVAS_NODE_TYPES.runninghub,
+    label: 'RunningHub',
+    category: 'runninghub',
+    description: 'RH 工作流主节点，云端执行 ComfyUI 工作流',
     inputs: [
-      { id: 'target', name: 'target', type: 'data', label: '视频', required: true },
+      { id: 'input', name: 'input', type: 'data', label: '数据输入', required: false },
     ],
     outputs: [
-      { id: 'prompt', name: 'prompt', type: 'data', label: '分析结果' },
+      { id: 'output', name: 'output', type: 'data', label: '输出数据' },
     ],
     defaultProperties: {
+      webappId: '',
+      status: 'idle',
+      paramValues: {},
+      imageUrl: null,
       videoUrl: null,
-      prompt: '',
-      description: '',
-      characters: [],
-      scenes: [],
-      summary: '',
-      tags: [],
-      extractedFrames: [],
-      isAnalyzing: false,
+      audioUrl: null,
+      useWallet: false,
+    },
+  },
+  {
+    type: CANVAS_NODE_TYPES.runninghubWallet,
+    label: 'RH钱包应用',
+    category: 'runninghub',
+    description: 'RH 钱包应用工作流（需配置 RH 企业级共享 API Key）',
+    inputs: [
+      { id: 'input', name: 'input', type: 'data', label: '数据输入', required: false },
+    ],
+    outputs: [
+      { id: 'output', name: 'output', type: 'data', label: '输出数据' },
+    ],
+    defaultProperties: {
+      webappId: '',
+      status: 'idle',
+      paramValues: {},
+      imageUrl: null,
+      videoUrl: null,
+      audioUrl: null,
+      useWallet: true,
     },
   },
 
@@ -279,6 +298,7 @@ export const nodeCategories = [
   { id: 'image', label: '图片', color: '#1890ff' },
   { id: 'video', label: '视频', color: '#f5222d' },
   { id: 'storyboard', label: '分镜', color: '#722ed1' },
+  { id: 'runninghub', label: 'RunningHub', color: '#06b6d4' },
 ]
 
 export function getNodeDefinition(type: CanvasNodeType): NodeDefinition | undefined {
@@ -319,7 +339,8 @@ export function getDefaultNodeDimensions(type: CanvasNodeType) {
     [CANVAS_NODE_TYPES.audioUpload]: { width: 280, height: 140 },
     [CANVAS_NODE_TYPES.imageToPrompt]: { width: 360, height: 420 },
     [CANVAS_NODE_TYPES.imageCompare]: { width: 320, height: 280 },
-    [CANVAS_NODE_TYPES.videoReverse]: { width: 420, height: 560 },
+    [CANVAS_NODE_TYPES.runninghub]: { width: 380, height: 480 },
+    [CANVAS_NODE_TYPES.runninghubWallet]: { width: 380, height: 480 },
   }
   return defaults[type]
 }
@@ -346,7 +367,8 @@ export const NODE_HANDLES: Record<string, { source: string[]; target: string[] }
   [CANVAS_NODE_TYPES.audioUpload]: { source: ['audio'], target: ['target'] },
   [CANVAS_NODE_TYPES.imageToPrompt]: { source: ['prompt'], target: ['target'] },
   [CANVAS_NODE_TYPES.imageCompare]: { source: [], target: ['left', 'right'] },
-  [CANVAS_NODE_TYPES.videoReverse]: { source: ['prompt'], target: ['target'] },
+  [CANVAS_NODE_TYPES.runninghub]: { source: ['output'], target: ['input'] },
+  [CANVAS_NODE_TYPES.runninghubWallet]: { source: ['output'], target: ['input'] },
 }
 
 export function isValidEdge(

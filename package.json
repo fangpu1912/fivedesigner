@@ -1,7 +1,7 @@
 {
   "name": "fivedesigner",
   "private": true,
-  "version": "1.0.2",
+  "version": "1.0.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -77,6 +77,7 @@
     "@tiptap/extension-underline": "^3.20.5",
     "@tiptap/react": "^3.20.5",
     "@tiptap/starter-kit": "^3.20.5",
+    "@types/jszip": "^3.4.1",
     "@types/uuid": "^11.0.0",
     "@xyflow/react": "^12.10.2",
     "axios": "^1.14.0",
@@ -86,6 +87,7 @@
     "html2canvas": "^1.4.1",
     "i18next": "^26.0.6",
     "immer": "^11.1.4",
+    "jszip": "^3.10.1",
     "konva": "^9.3.22",
     "lucide-react": "^1.7.0",
     "radix-ui": "^1.4.3",

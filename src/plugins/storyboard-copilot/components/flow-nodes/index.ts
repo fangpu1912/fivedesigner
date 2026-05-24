@@ -8,13 +8,13 @@ import { ExecutionStatusBadge, NodeExecutionOverlay, type ExecutionStatus } from
 import { ImageCompareNode } from './ImageCompareNode'
 import { ImageEditNode } from './ImageEditNode'
 import { ImageToPromptNode } from './ImageToPromptNode'
+import { RunningHubNode } from './RunningHubNode'
 import { SceneDirectorNode } from './SceneDirectorNode'
 import { StoryboardNode } from './StoryboardNode'
 import { TextAnnotationNode } from './TextAnnotationNode'
 import { UploadNode } from './UploadNode'
 import { UpscaleNode } from './UpscaleNode'
 import { VideoGenNode } from './VideoGenNode'
-import { VideoReverseNode } from './VideoReverseNode'
 import { VideoUploadNode } from './VideoUploadNode'
 
 import type { NodeTypes, EdgeTypes } from '@xyflow/react'
@@ -33,7 +33,8 @@ export const nodeTypes = {
   [CANVAS_NODE_TYPES.audioUpload]: AudioUploadNode,
   [CANVAS_NODE_TYPES.imageToPrompt]: ImageToPromptNode,
   [CANVAS_NODE_TYPES.imageCompare]: ImageCompareNode,
-  [CANVAS_NODE_TYPES.videoReverse]: VideoReverseNode,
+  [CANVAS_NODE_TYPES.runninghub]: RunningHubNode,
+  [CANVAS_NODE_TYPES.runninghubWallet]: RunningHubNode,
 } as unknown as NodeTypes
 
 export const edgeTypes = {
@@ -44,6 +45,6 @@ export {
   UploadNode, ImageEditNode, AIImageEditNode, BlankImageNode, StoryboardNode,
   SceneDirectorNode, TextAnnotationNode, UpscaleNode, CustomEdge, VideoGenNode,
   VideoUploadNode, AudioUploadNode, ImageToPromptNode,
-  ImageCompareNode, VideoReverseNode,
+  ImageCompareNode, RunningHubNode,
   ExecutionStatusBadge, NodeExecutionOverlay, type ExecutionStatus
 }

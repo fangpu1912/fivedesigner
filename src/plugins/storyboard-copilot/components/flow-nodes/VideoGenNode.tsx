@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useState, useRef, useMemo } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import { Play, Loader2, Video, X, Volume2, VolumeX } from 'lucide-react'
+import { Play, Loader2, Video, X, Volume2, VolumeX, Scissors } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { NodePromptInput, type MentionInputRef } from './NodePromptInput'
@@ -22,6 +22,7 @@ import type { VendorConfig } from '@/services/vendor'
 import type { VideoGenNodeData } from '../../types'
 import { IMAGE_ASPECT_RATIOS } from '../../types'
 import { getNodeContainerClass, getTargetHandleClass, getSourceHandleClass, NODE_HEADER_FLOATING_CLASS, NODE_HEADER_CLASSES } from './NodeStyles'
+import { VideoClipDialog } from '../VideoClipDialog'
 
 interface VideoGenNodeProps extends NodeProps {
   data: VideoGenNodeData
@@ -33,7 +34,7 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
   const currentProjectId = useUIStore(state => state.currentProjectId)
   const currentEpisodeId = useUIStore(state => state.currentEpisodeId)
   const { data: currentProject } = useProjectQuery(currentProjectId || '')
-  const { getUpstreamImageData, getUpstreamTextData, upstreamImage, upstreamText, upstreamImages } = useUpstreamData(id)
+  const { getUpstreamImageData, upstreamImage, upstreamText, upstreamImages } = useUpstreamData(id)
 
   const [items, setItems] = useState(data.items || [])
   const [model, setModel] = useState(data.model || '')
@@ -61,6 +62,7 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
   const [aspectRatio, setAspectRatio] = useState(data.aspectRatio || (isValidProjectRatio ? projectAspectRatio : '16:9'))
   const [fps, _setFps] = useState(data.fps || 24)
   const [previewVideo, setPreviewVideo] = useState<string | null>(null)
+  const [clipDialogOpen, setClipDialogOpen] = useState(false)
   const enlargedHandles = useEnlargedHandles(id)
 
   // 加载供应商配置
@@ -84,7 +86,7 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
 
   // 获取可用的时长列表
   const availableDurations = useMemo(() => {
-    if (!currentModelConfig?.durationResolutionMap) return [5, 10, 15, 30]
+    if (!currentModelConfig || !('durationResolutionMap' in currentModelConfig)) return [5, 10, 15, 30]
     const durations = new Set<number>()
     for (const map of currentModelConfig.durationResolutionMap) {
       for (const d of map.duration) {
@@ -96,7 +98,7 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
 
   // 获取可用的分辨率列表
   const availableResolutions = useMemo(() => {
-    if (!currentModelConfig?.durationResolutionMap) return ['720p']
+    if (!currentModelConfig || !('durationResolutionMap' in currentModelConfig)) return ['720p']
     const resolutions = new Set<string>()
     for (const map of currentModelConfig.durationResolutionMap) {
       for (const r of map.resolution) {
@@ -109,13 +111,13 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
   // 当切换模型时，自动调整时长和分辨率为可用值
   useEffect(() => {
     if (availableDurations.length > 0 && !availableDurations.includes(duration)) {
-      setDuration(availableDurations[0])
+      setDuration(availableDurations[0]!)
     }
   }, [availableDurations, duration])
 
   useEffect(() => {
     if (availableResolutions.length > 0 && !availableResolutions.includes(resolution)) {
-      setResolution(availableResolutions[0])
+      setResolution(availableResolutions[0]!)
     }
   }, [availableResolutions, resolution])
 
@@ -348,6 +350,16 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
               <button
                 onClick={(e) => {
                   e.stopPropagation()
+                  setClipDialogOpen(true)
+                }}
+                className="p-1.5 rounded-md bg-blue-500/80 text-white hover:bg-blue-600"
+                title="截取片段"
+              >
+                <Scissors className="w-4 h-4" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
                   setItems(prev => prev.map(item => ({ ...item, videoUrl: null, status: 'pending' as const })))
                 }}
                 className="p-1.5 rounded-md bg-red-500/80 text-white hover:bg-red-600"
@@ -494,6 +506,17 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
           </div>
         </div>
       )}
+
+      {/* 视频截取弹窗 */}
+      <VideoClipDialog
+        open={clipDialogOpen}
+        onClose={() => setClipDialogOpen(false)}
+        videoUrl={latestVideo || ''}
+        videoFps={fps}
+        projectId={currentProjectId || undefined}
+        episodeId={currentEpisodeId || undefined}
+        sourceNodeId={id}
+      />
     </div>
   )
 })

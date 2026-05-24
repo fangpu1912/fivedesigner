@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 
-import { convertFileSrc } from '@tauri-apps/api/core'
 import {
   Play,
   Pause,
@@ -17,6 +16,7 @@ import {
   Image as ImageIcon,
   Video,
   Wand2,
+  Repeat1,
 } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 
@@ -30,19 +30,13 @@ import { sampleProjectDB, storyboardDB, dubbingDB } from '@/db'
 import { useToast } from '@/hooks/useToast'
 import { exportToCapCut, downloadCapCutJson } from '@/services/capcutExporter'
 import { useUIStore } from '@/store/useUIStore'
+import { getAssetUrl } from '@/utils/asset'
 import type {
   SampleProject,
   SampleClip as SampleClipType,
   Storyboard,
   Dubbing,
 } from '@/types'
-
-// 获取文件URL
-function getFileUrl(path?: string | null): string | null {
-  if (!path) return null
-  if (path.startsWith('http') || path.startsWith('data:')) return path
-  return convertFileSrc(path)
-}
 
 // 样片片段（由分镜和配音组合）
 interface SampleClip {
@@ -87,6 +81,7 @@ export default function SampleReview() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentClipIndex, setCurrentClipIndex] = useState(0)
   const [clips, setClips] = useState<SampleClip[]>([])
+  const [loopCurrentClip, setLoopCurrentClip] = useState(false)
 
   // 适配模式：'audio' = 视频适配音频, 'video' = 音频适配视频
   const [adaptMode, setAdaptMode] = useState<'audio' | 'video'>('video')
@@ -156,7 +151,7 @@ export default function SampleReview() {
           let videoDuration = storyboard.video_duration || 0
           if (storyboard.video && !videoDuration) {
             try {
-              const videoUrl = getFileUrl(storyboard.video)
+              const videoUrl = getAssetUrl(storyboard.video)
               if (videoUrl) {
                 const tempVideo = document.createElement('video')
                 tempVideo.src = videoUrl
@@ -228,6 +223,22 @@ export default function SampleReview() {
 
   // 播放下一个片段
   const playNext = useCallback(() => {
+    // 如果开启了单分镜循环，重新播放当前分镜
+    if (loopCurrentClip) {
+      const video = videoRef.current
+      const audio = audioRef.current
+      if (video) {
+        video.currentTime = 0
+        video.play().catch(() => {})
+      }
+      if (audio) {
+        audio.currentTime = 0
+        audio.play().catch(() => {})
+      }
+      setCurrentTime(0)
+      return
+    }
+
     if (currentClipIndex < clips.length - 1) {
       setCurrentClipIndex(prev => prev + 1)
       setCurrentTime(0)
@@ -237,7 +248,7 @@ export default function SampleReview() {
       setCurrentClipIndex(0)
       setCurrentTime(0)
     }
-  }, [currentClipIndex, clips.length])
+  }, [currentClipIndex, clips.length, loopCurrentClip])
 
   // 播放上一个片段
   const playPrev = useCallback(() => {
@@ -340,6 +351,18 @@ export default function SampleReview() {
       const currentClip = clips[currentClipIndex]
       if (!currentClip) return
 
+      // 如果开启了单分镜循环，重新播放当前分镜
+      if (loopCurrentClip) {
+        video.currentTime = 0
+        video.play().catch(() => {})
+        const audio = audioRef.current
+        if (audio) {
+          audio.currentTime = 0
+          audio.play().catch(() => {})
+        }
+        return
+      }
+
       // 只有在音频适配视频模式下才需要循环
       if (adaptMode === 'audio' && currentClip.audioUrl) {
         // 检查是否还有音频在播放
@@ -376,7 +399,7 @@ export default function SampleReview() {
       video.removeEventListener('ended', handleVideoEnded)
       video.removeEventListener('timeupdate', handleTimeUpdate)
     }
-  }, [currentClipIndex, clips, adaptMode])
+  }, [currentClipIndex, clips, adaptMode, loopCurrentClip])
 
   // 监听音频结束事件
   useEffect(() => {
@@ -386,6 +409,18 @@ export default function SampleReview() {
     const handleAudioEnded = () => {
       const currentClip = clips[currentClipIndex]
       if (!currentClip) return
+
+      // 如果开启了单分镜循环，重新播放当前分镜
+      if (loopCurrentClip) {
+        audio.currentTime = 0
+        audio.play().catch(() => {})
+        const video = videoRef.current
+        if (video) {
+          video.currentTime = 0
+          video.play().catch(() => {})
+        }
+        return
+      }
 
       // 音频结束，如果视频也结束或没有视频，则播放下一个
       const video = videoRef.current
@@ -398,7 +433,7 @@ export default function SampleReview() {
 
     audio.addEventListener('ended', handleAudioEnded)
     return () => audio.removeEventListener('ended', handleAudioEnded)
-  }, [currentClipIndex, clips, playNext])
+  }, [currentClipIndex, clips, playNext, loopCurrentClip])
 
   // 格式化时间显示
   const formatTime = (seconds: number): string => {
@@ -623,13 +658,13 @@ export default function SampleReview() {
                   <div className="aspect-video bg-muted rounded overflow-hidden relative">
                     {clip.videoUrl ? (
                       <video
-                        src={getFileUrl(clip.videoUrl) || ''}
+                        src={getAssetUrl(clip.videoUrl) || ''}
                         className="w-full h-full object-cover"
                         muted
                       />
                     ) : clip.imageUrl ? (
                       <img
-                        src={getFileUrl(clip.imageUrl) || ''}
+                        src={getAssetUrl(clip.imageUrl) || ''}
                         alt={clip.storyboard.name}
                         className="w-full h-full object-cover"
                       />
@@ -681,18 +716,25 @@ export default function SampleReview() {
           >
             {currentClip ? (
               <>
-                {/* 视频或图片 */}
+                {/* 视频或图片 - 添加淡入动画 */}
                 {currentClip.videoUrl ? (
                   <video
+                    key={`video-${currentClipIndex}`}
                     ref={videoRef}
-                    src={getFileUrl(currentClip.videoUrl) || ''}
+                    src={getAssetUrl(currentClip.videoUrl) || ''}
                     className="w-full h-full object-contain"
+                    style={{ animation: 'fadeIn 0.2s ease-out' }}
                     playsInline
+                    preload="auto"
                   />
                 ) : currentClip.imageUrl ? (
-                  <div className="w-full h-full flex items-center justify-center p-8">
+                  <div
+                    key={`image-${currentClipIndex}`}
+                    className="w-full h-full flex items-center justify-center p-8"
+                    style={{ animation: 'fadeIn 0.2s ease-out' }}
+                  >
                     <img
-                      src={getFileUrl(currentClip.imageUrl) || ''}
+                      src={getAssetUrl(currentClip.imageUrl) || ''}
                       alt={currentClip.storyboard.name}
                       className="w-full h-full object-contain"
                     />
@@ -706,7 +748,7 @@ export default function SampleReview() {
 
                 {/* 音频元素 */}
                 {currentClip.audioUrl && (
-                  <audio ref={audioRef} src={getFileUrl(currentClip.audioUrl) || ''} />
+                  <audio key={`audio-${currentClipIndex}`} ref={audioRef} src={getAssetUrl(currentClip.audioUrl) || ''} preload="auto" />
                 )}
 
                 {/* 播放控制栏 */}
@@ -736,6 +778,17 @@ export default function SampleReview() {
                     disabled={currentClipIndex === clips.length - 1}
                   >
                     <SkipForward className="h-4 w-4" />
+                  </Button>
+                  <Separator orientation="vertical" className="h-6 bg-white/30 mx-2" />
+                  {/* 循环播放当前分镜 */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`h-8 w-8 ${loopCurrentClip ? 'text-primary bg-white/20' : 'text-white/70 hover:text-white hover:bg-white/20'}`}
+                    onClick={() => setLoopCurrentClip(!loopCurrentClip)}
+                    title={loopCurrentClip ? '关闭单分镜循环' : '循环播放当前分镜'}
+                  >
+                    <Repeat1 className="h-4 w-4" />
                   </Button>
                   <Separator orientation="vertical" className="h-6 bg-white/30 mx-2" />
                   <div className="text-white text-sm font-mono">

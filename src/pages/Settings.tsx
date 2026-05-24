@@ -20,7 +20,6 @@ import {
   RefreshCw,
   Globe,
   FolderOpen,
-  Film,
   AlertCircle,
   Mic,
   Check,
@@ -238,7 +237,6 @@ export function Settings() {
 
   // 剪映路径配置
   const [capcutPath, setCapcutPath] = useState<string>('')
-  const [isLoadingCapcutPath, setIsLoadingCapcutPath] = useState(false)
 
   const [workflows, setWorkflows] = useState<WorkflowConfig[]>([])
   const [newWorkflow, setNewWorkflow] = useState({
@@ -1062,7 +1060,7 @@ export function Settings() {
       const update = await checkUpdate()
       setUpdateInfo(update ?? null)
       if (!update) {
-        toast({ title: '已是最新版本', description: `v1.0.0` })
+        toast({ title: '已是最新版本', description: `v1.0.4` })
       }
     } catch (error) {
       toast({ title: '检查更新失败', description: String(error), variant: 'destructive' })
@@ -2053,7 +2051,7 @@ export function Settings() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium">当前版本</p>
-                    <p className="text-xs text-muted-foreground">v1.0.0</p>
+                    <p className="text-xs text-muted-foreground">v1.0.4</p>
                   </div>
                   <div className="flex gap-2">
                     {updateInfo ? (

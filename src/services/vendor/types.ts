@@ -54,7 +54,6 @@ export interface VendorInput {
 
 export interface VendorConfig {
   id: string
-  author: string
   description?: string
   name: string
   icon?: string
