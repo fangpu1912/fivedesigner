@@ -518,16 +518,18 @@ export function StoryboardDraw() {
       setLocalLastFrame(undefined)
       setGeneratedImage(null)
       setPreviewVideo(null)
+      autoMentionInjectedRef.current = null
       return
     }
 
     const item = activeItem as any
 
+    // 根据生成类型加载对应的提示词（提升到 if 块外，供 @ 注入使用）
+    const prompt = item.prompt || ''
+    const videoPrompt = item.video_prompt || ''
+
     // 当项目变化或生成类型变化时，更新提示词和参考图
     if (isItemChanged || isTypeChanged) {
-      // 根据生成类型加载对应的提示词
-      const prompt = item.prompt || ''
-      const videoPrompt = item.video_prompt || ''
       // 🔑 加载参考图 - 根据生成类型选择不同的字段
       const savedRefImages = generationType === 'video' 
         ? (item.video_reference_images || []) 
@@ -645,6 +647,28 @@ export function StoryboardDraw() {
         // 保存关联资产到 state（用于显示首字图标）
         setLinkedAssets(linkedAssets)
 
+        // 🔑 自动注入 @mention 到提示词（使用刚计算的 linkedAssets，避免批处理时序问题）
+        if (linkedAssets.length > 0) {
+          const targetText = generationType === 'video' ? videoPrompt : prompt
+          if (targetText) {
+            autoMentionInjectedRef.current = currentId
+            const savedJSON = generationType === 'video' ? null : (item.metadata?.promptJSON)
+            setTimeout(() => {
+              if (savedJSON && promptInputRef.current) {
+                promptInputRef.current.setContentFromJSON(savedJSON)
+              } else if (promptInputRef.current) {
+                promptInputRef.current.setMentionValue(targetText, linkedAssets.map(a => ({
+                  id: a.id,
+                  name: a.name,
+                  type: a.type,
+                  imageUrl: a.image,
+                  aliases: a.aliases,
+                })))
+              }
+            }, 50)
+          }
+        }
+
         const linkedImages = linkedAssets.filter(a => a.image).map(a => a.image!)
         const savedImages = generationType === 'video'
           ? ((item as any).video_reference_images || [])
@@ -664,36 +688,6 @@ export function StoryboardDraw() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeItem?.id, generationType, activeTab])
-
-  // 自动注入 @mention 到提示词
-  useEffect(() => {
-    const itemId = activeItem?.id
-    if (!itemId || linkedAssets.length === 0) return
-    if (autoMentionInjectedRef.current === itemId) return
-
-    const currentText = generationType === 'video' ? localVideoPrompt : localPrompt
-    if (!currentText) return
-
-    autoMentionInjectedRef.current = itemId
-    const timer = setTimeout(() => {
-      const item = activeItem as any
-      const savedJSON = generationType === 'video' ? null : (item?.metadata?.promptJSON)
-      if (savedJSON && promptInputRef.current) {
-        promptInputRef.current.setContentFromJSON(savedJSON)
-        return
-      }
-      if (promptInputRef.current) {
-        promptInputRef.current.setMentionValue(currentText, linkedAssets.map(a => ({
-          id: a.id,
-          name: a.name,
-          type: a.type,
-          imageUrl: a.image,
-          aliases: a.aliases,
-        })))
-      }
-    }, 50)
-    return () => clearTimeout(timer)
-  }, [activeItem?.id, linkedAssets.length, generationType])
 
   // 简化：移除自动保存逻辑，改为手动保存
 
@@ -1985,64 +1979,6 @@ export function StoryboardDraw() {
     }
   }
 
-  const handleAddAssetMapping = useCallback(async (
-    assetType: 'character' | 'scene' | 'prop',
-    assetId: string,
-  ) => {
-    if (!activeItem || activeTab !== 'storyboard') return
-    const storyboard = activeItem as any
-
-    if (assetType === 'character') {
-      const currentIds: string[] = storyboard.character_ids || []
-      if (currentIds.includes(assetId)) return
-      await updateStoryboardAsync({
-        id: storyboard.id,
-        data: { character_ids: [...currentIds, assetId] },
-      })
-    } else if (assetType === 'scene') {
-      await updateStoryboardAsync({
-        id: storyboard.id,
-        data: { scene_id: assetId },
-      })
-    } else if (assetType === 'prop') {
-      const currentIds: string[] = storyboard.prop_ids || []
-      if (currentIds.includes(assetId)) return
-      await updateStoryboardAsync({
-        id: storyboard.id,
-        data: { prop_ids: [...currentIds, assetId] },
-      })
-    }
-    toast({ title: '已关联资产' })
-  }, [activeItem, activeTab, updateStoryboardAsync, toast])
-
-  const handleRemoveAssetMapping = useCallback(async (
-    assetType: 'character' | 'scene' | 'prop',
-    assetId: string,
-  ) => {
-    if (!activeItem || activeTab !== 'storyboard') return
-    const storyboard = activeItem as any
-
-    if (assetType === 'character') {
-      const currentIds: string[] = storyboard.character_ids || []
-      await updateStoryboardAsync({
-        id: storyboard.id,
-        data: { character_ids: currentIds.filter(id => id !== assetId) },
-      })
-    } else if (assetType === 'scene') {
-      await updateStoryboardAsync({
-        id: storyboard.id,
-        data: { scene_id: undefined },
-      })
-    } else if (assetType === 'prop') {
-      const currentIds: string[] = storyboard.prop_ids || []
-      await updateStoryboardAsync({
-        id: storyboard.id,
-        data: { prop_ids: currentIds.filter(id => id !== assetId) },
-      })
-    }
-    toast({ title: '已取消关联' })
-  }, [activeItem, activeTab, updateStoryboardAsync, toast])
-
   // Auto-save effect - 自动保存参考图和提示词
   useEffect(() => {
     if (!activeItem || activeTab !== 'storyboard') return
@@ -2590,175 +2526,6 @@ export function StoryboardDraw() {
                   {/* 参考图 Tab */}
                   <TabsContent value="reference" className="flex-1 m-0 p-4 overflow-hidden">
                     <div className="h-full flex flex-col gap-4 overflow-y-auto">
-                      {/* 关联资产区域 - 仅分镜模式显示 */}
-                      {activeTab === 'storyboard' && activeItem && (
-                        <div className="space-y-2 pb-2 border-b">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium">关联资产</span>
-                            <span className="text-[10px] text-muted-foreground">生成时自动作为参考图</span>
-                          </div>
-                          <div className="space-y-2">
-                            {/* 场景 */}
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-muted-foreground w-8 shrink-0">场景</span>
-                              {(() => {
-                                const sb = activeItem as any
-                                const linkedScene = sb.scene_id ? scenes.find((s: any) => s.id === sb.scene_id) : null
-                                if (linkedScene) {
-                                  return (
-                                    <div className="flex items-center gap-1 flex-1 min-w-0">
-                                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-xs min-w-0 flex-1">
-                                        {linkedScene.image ? (
-                                          <img src={getImageUrl(linkedScene.image) || ''} alt="" className="w-5 h-5 rounded object-cover shrink-0" />
-                                        ) : (
-                                          <div className="w-5 h-5 rounded bg-green-200 dark:bg-green-800 flex items-center justify-center text-[8px] text-green-700 dark:text-green-300 shrink-0">
-                                            {linkedScene.name.charAt(0)}
-                                          </div>
-                                        )}
-                                        <span className="truncate">{linkedScene.name}</span>
-                                        {!linkedScene.image && (
-                                          <span className="text-[9px] text-amber-500 shrink-0">待生成</span>
-                                        )}
-                                      </div>
-                                      <button
-                                        onClick={() => handleRemoveAssetMapping('scene', linkedScene.id)}
-                                        className="shrink-0 p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
-                                      >
-                                        <X className="w-3 h-3" />
-                                      </button>
-                                    </div>
-                                  )
-                                }
-                                return (
-                                  <select
-                                    className="flex-1 text-xs h-7 rounded-md border border-input bg-background px-2"
-                                    value=""
-                                    onChange={e => {
-                                      if (e.target.value) handleAddAssetMapping('scene', e.target.value)
-                                    }}
-                                  >
-                                    <option value="">选择场景...</option>
-                                    {scenes
-                                      .filter((s: any) => s.id !== sb.scene_id)
-                                      .map((s: any) => (
-                                        <option key={s.id} value={s.id}>{s.name}</option>
-                                      ))
-                                    }
-                                  </select>
-                                )
-                              })()}
-                            </div>
-                            {/* 角色 */}
-                            <div className="flex items-start gap-2">
-                              <span className="text-xs text-muted-foreground w-8 shrink-0 pt-1">角色</span>
-                              <div className="flex-1 flex flex-wrap gap-1">
-                                {(() => {
-                                  const sb = activeItem as any
-                                  const charIds: string[] = sb.character_ids || []
-                                  return (
-                                    <>
-                                      {charIds.map(charId => {
-                                        const char = characters.find((c: any) => c.id === charId)
-                                        if (!char) return null
-                                        return (
-                                          <div key={charId} className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-xs">
-                                            {char.image ? (
-                                              <img src={getImageUrl(char.image) || ''} alt="" className="w-4 h-4 rounded object-cover" />
-                                            ) : (
-                                              <div className="w-4 h-4 rounded bg-blue-200 dark:bg-blue-800 flex items-center justify-center text-[7px] text-blue-700 dark:text-blue-300">
-                                                {char.name.charAt(0)}
-                                              </div>
-                                            )}
-                                            <span className="max-w-[60px] truncate">{char.name}</span>
-                                            {!char.image && (
-                                              <span className="text-[8px] text-amber-500">待生成</span>
-                                            )}
-                                            <button
-                                              onClick={() => handleRemoveAssetMapping('character', charId)}
-                                              className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
-                                            >
-                                              <X className="w-2.5 h-2.5" />
-                                            </button>
-                                          </div>
-                                        )
-                                      })}
-                                      <select
-                                        className="text-xs h-6 rounded-md border border-dashed border-input bg-background px-1.5"
-                                        value=""
-                                        onChange={e => {
-                                          if (e.target.value) handleAddAssetMapping('character', e.target.value)
-                                        }}
-                                      >
-                                        <option value="">+</option>
-                                        {characters
-                                          .filter((c: any) => !charIds.includes(c.id))
-                                          .map((c: any) => (
-                                            <option key={c.id} value={c.id}>{c.name}</option>
-                                          ))
-                                        }
-                                      </select>
-                                    </>
-                                  )
-                                })()}
-                              </div>
-                            </div>
-                            {/* 道具 */}
-                            <div className="flex items-start gap-2">
-                              <span className="text-xs text-muted-foreground w-8 shrink-0 pt-1">道具</span>
-                              <div className="flex-1 flex flex-wrap gap-1">
-                                {(() => {
-                                  const sb = activeItem as any
-                                  const pIds: string[] = sb.prop_ids || []
-                                  return (
-                                    <>
-                                      {pIds.map(propId => {
-                                        const prop = props.find((p: any) => p.id === propId)
-                                        if (!prop) return null
-                                        return (
-                                          <div key={propId} className="flex items-center gap-1 px-2 py-1 rounded-md bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 text-xs">
-                                            {prop.image ? (
-                                              <img src={getImageUrl(prop.image) || ''} alt="" className="w-4 h-4 rounded object-cover" />
-                                            ) : (
-                                              <div className="w-4 h-4 rounded bg-orange-200 dark:bg-orange-800 flex items-center justify-center text-[7px] text-orange-700 dark:text-orange-300">
-                                                {prop.name.charAt(0)}
-                                              </div>
-                                            )}
-                                            <span className="max-w-[60px] truncate">{prop.name}</span>
-                                            {!prop.image && (
-                                              <span className="text-[8px] text-amber-500">待生成</span>
-                                            )}
-                                            <button
-                                              onClick={() => handleRemoveAssetMapping('prop', propId)}
-                                              className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
-                                            >
-                                              <X className="w-2.5 h-2.5" />
-                                            </button>
-                                          </div>
-                                        )
-                                      })}
-                                      <select
-                                        className="text-xs h-6 rounded-md border border-dashed border-input bg-background px-1.5"
-                                        value=""
-                                        onChange={e => {
-                                          if (e.target.value) handleAddAssetMapping('prop', e.target.value)
-                                        }}
-                                      >
-                                        <option value="">+</option>
-                                        {props
-                                          .filter((p: any) => !pIds.includes(p.id))
-                                          .map((p: any) => (
-                                            <option key={p.id} value={p.id}>{p.name}</option>
-                                          ))
-                                        }
-                                      </select>
-                                    </>
-                                  )
-                                })()}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
 
                       {/* 模式标签 */}
                       <div className="flex items-center gap-2 pb-2 border-b">

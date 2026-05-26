@@ -68,6 +68,7 @@ import {
   useStoryboards,
   useStoryboardMutations,
 } from '@/hooks/useStoryboards'
+import { outfitDB } from '@/db'
 
 import { AssetGalleryView } from './AssetGalleryView'
 import { CharacterWardrobeDialog } from './CharacterWardrobeDialog'
@@ -661,39 +662,36 @@ export function AssetManagerPanel({ projectId, episodeId }: AssetManagerPanelPro
     setImportJsonInput(`{
   "characters": [
     {
-      "category": "character",
-      "name": "主角-李明",
-      "description": "25岁左右的年轻男性，身材中等，短发，眼神坚定",
-      "prompt": "25-year-old Asian male, short black hair, determined eyes...",
-      "tags": ["主角", "男性", "现代"]
+      "name": "角色名",
+      "description": "人物简单描述",
+      "prompt": "人物描述（人物名、年龄段、体型、五官、发型、肤色、服装、配饰），然后附加结构限定（16:9横版构图,左侧1/3超大高清面部特写,右侧2/3整齐排布正面、侧面、背面三张全身三视图,纯白色背景,视觉对齐,超高清,超写实8K）",
+      "wardrobeVariants": "衍生衣橱提示词,根据剧情列出多种服饰状态提示词（如便装、华服、战损、伪装）,展示服饰多面性"
     }
   ],
   "scenes": [
     {
-      "category": "scene",
-      "name": "现代办公室",
-      "description": "宽敞明亮的现代办公室，落地窗外是城市夜景",
-      "prompt": "Modern office interior, spacious and bright...",
-      "tags": ["室内", "现代", "办公室"]
+      "name": "场景名",
+      "description": "场景简单描述",
+      "prompt": "场景描述（视角、时间段、天气、地理位置、环境元素、材质、颜色、光线、色调），然后附加结构限定（前视图、右视图、后视图、左视图,2×2网格排列,同一中心点平视,建筑结构、材质、色调、光线一致,严禁出现人物）"
     }
   ],
   "props": [
     {
-      "category": "prop",
-      "name": "神秘信封",
-      "description": "泛黄的旧信封，封口处有红色蜡封",
-      "prompt": "Old yellowed envelope, red wax seal...",
-      "tags": ["道具", "神秘", "复古"]
+      "name": "道具名",
+      "description": "道具简单描述",
+      "prompt": "道具描述（道具名、类型、形态、材质、颜色、细节特征），然后附加结构限定(正面图、侧面图、背面图、细节特写,四宫格2×2布局,纯净中性灰背景,均匀柔光,严禁出现人物、手部、肢体)"
     }
   ],
   "storyboards": [
     {
-      "category": "storyboard",
-      "name": "开场-办公室全景",
-      "description": "广角镜头展示办公室全景",
-      "prompt": "Wide shot, modern office interior...",
-      "videoPrompt": "Slow pan from window to protagonist...",
-      "sort_order": 1
+      "description": "精简概括本组核心剧情",
+      "prompt": "镜头组首帧静态定格画面描述",
+      "videoPrompt": "整合时长、运镜、动作、台词、剪辑节奏的完整镜头文案",
+      "characters": ["角色名1", "角色名2"],
+      "scene_id": "匹配既定场景名称",
+      "props": ["道具名1", "道具名2"],
+      "shot_type": "多景别连贯切换 / 单景别固定镜头",
+      "duration": 10
     }
   ]
 }`)
@@ -745,25 +743,13 @@ export function AssetManagerPanel({ projectId, episodeId }: AssetManagerPanelPro
 
     try {
       // 解析 JSON
-      let jsonData: AssetItem | AssetItem[]
+      let jsonData: Record<string, unknown>
       try {
         jsonData = JSON.parse(importJsonInput)
       } catch {
         toast({
           title: 'JSON 格式错误',
           description: '无法解析 JSON 内容，请检查格式',
-          variant: 'destructive',
-        })
-        return
-      }
-
-      // 转换为数组
-      const newAssets: AssetItem[] = Array.isArray(jsonData) ? jsonData : [jsonData]
-
-      if (newAssets.length === 0) {
-        toast({
-          title: '没有可导入的资产',
-          description: 'JSON 中未找到有效的资产数据',
           variant: 'destructive',
         })
         return
@@ -777,59 +763,132 @@ export function AssetManagerPanel({ projectId, episodeId }: AssetManagerPanelPro
         storyboard: 0,
       }
 
-      // 创建资产
       let createdCount = 0
-      for (const asset of newAssets) {
-        const category = asset.category || activeCategory
-        stats[category]++
+      const assetProjectId = projectId || ''
+      const assetEpisodeId = episodeId || ''
 
-        try {
-          // 🔑 优先使用 JSON 中的 project_id 和 episode_id，如果没有则使用当前页面选中的
-          const assetProjectId = asset.project_id || projectId || ''
-          const assetEpisodeId = asset.episode_id || episodeId || ''
-          
-          if (category === 'character') {
-            await createAsset(category, {
+      // 导入角色
+      const characters = jsonData.characters as Array<Record<string, unknown>> | undefined
+      if (Array.isArray(characters)) {
+        for (const char of characters) {
+          try {
+            const newCharacter = await createAsset('character', {
               project_id: assetProjectId,
               episode_id: assetEpisodeId,
-              name: asset.name || '未命名角色',
-              description: asset.description || '',
-              prompt: asset.prompt || '',
-              tags: asset.tags || [],
-            })
-          } else if (category === 'scene') {
-            await createAsset(category, {
-              project_id: assetProjectId,
-              episode_id: assetEpisodeId,
-              name: asset.name || '未命名场景',
-              description: asset.description || '',
-              prompt: asset.prompt || '',
-              tags: asset.tags || [],
-            })
-          } else if (category === 'prop') {
-            await createAsset(category, {
-              project_id: assetProjectId,
-              episode_id: assetEpisodeId,
-              name: asset.name || '未命名道具',
-              description: asset.description || '',
-              prompt: asset.prompt || '',
-              tags: asset.tags || [],
-            })
-          } else if (category === 'storyboard') {
-            await createAsset(category, {
-              episode_id: assetEpisodeId,
-              project_id: assetProjectId,
-              name: asset.name || '未命名分镜',
-              description: asset.description || '',
-              prompt: asset.prompt || '',
-              video_prompt: asset.videoPrompt || '',
-              sort_order: asset.sort_order || 0,
-            })
+              name: String(char.name || '未命名角色'),
+              description: String(char.description || ''),
+              prompt: String(char.prompt || ''),
+              tags: Array.isArray(char.tags) ? char.tags : [],
+            }) as { id: string }
+            stats.character++
+            createdCount++
+
+            // 解析 wardrobeVariants 创建衣橱
+            const wardrobeVariants = char.wardrobeVariants
+            if (typeof wardrobeVariants === 'string' && wardrobeVariants.trim() && newCharacter?.id) {
+              try {
+                // 按逗号或换行分割，提取不同的服装变体
+                const variants = wardrobeVariants
+                  .split(/[,，\n]/)
+                  .map(v => v.trim())
+                  .filter(v => v.length > 0)
+
+                for (let i = 0; i < variants.length; i++) {
+                  const variant = variants[i]
+                  if (!variant) continue
+                  await outfitDB.create({
+                    character_id: newCharacter.id,
+                    name: variant.length > 20 ? variant.slice(0, 20) + '...' : variant,
+                    description: variant,
+                    prompt: variant,
+                    is_default: i === 0,
+                  })
+                }
+              } catch (outfitError) {
+                console.error(`创建衣橱失败: ${char.name}`, outfitError)
+              }
+            }
+          } catch (error) {
+            console.error(`创建角色失败: ${char.name}`, error)
           }
-          createdCount++
-        } catch (error) {
-          console.error(`创建资产失败: ${asset.name}`, error)
         }
+      }
+
+      // 导入场景
+      const scenes = jsonData.scenes as Array<Record<string, unknown>> | undefined
+      if (Array.isArray(scenes)) {
+        for (const scene of scenes) {
+          try {
+            await createAsset('scene', {
+              project_id: assetProjectId,
+              episode_id: assetEpisodeId,
+              name: String(scene.name || '未命名场景'),
+              description: String(scene.description || ''),
+              prompt: String(scene.prompt || ''),
+              tags: Array.isArray(scene.tags) ? scene.tags : [],
+            })
+            stats.scene++
+            createdCount++
+          } catch (error) {
+            console.error(`创建场景失败: ${scene.name}`, error)
+          }
+        }
+      }
+
+      // 导入道具
+      const props = jsonData.props as Array<Record<string, unknown>> | undefined
+      if (Array.isArray(props)) {
+        for (const prop of props) {
+          try {
+            await createAsset('prop', {
+              project_id: assetProjectId,
+              episode_id: assetEpisodeId,
+              name: String(prop.name || '未命名道具'),
+              description: String(prop.description || ''),
+              prompt: String(prop.prompt || ''),
+              tags: Array.isArray(prop.tags) ? prop.tags : [],
+            })
+            stats.prop++
+            createdCount++
+          } catch (error) {
+            console.error(`创建道具失败: ${prop.name}`, error)
+          }
+        }
+      }
+
+      // 导入分镜
+      const storyboards = jsonData.storyboards as Array<Record<string, unknown>> | undefined
+      if (Array.isArray(storyboards)) {
+        for (let i = 0; i < storyboards.length; i++) {
+          const sb = storyboards[i]
+          if (!sb) continue
+          try {
+            await createAsset('storyboard', {
+              episode_id: assetEpisodeId,
+              project_id: assetProjectId,
+              name: String(sb.name || `分镜-${i + 1}`),
+              description: String(sb.description || ''),
+              prompt: String(sb.prompt || ''),
+              video_prompt: String(sb.videoPrompt || ''),
+              shot_type: String(sb.shot_type || ''),
+              duration: typeof sb.duration === 'number' ? sb.duration : 0,
+              sort_order: i + 1,
+            })
+            stats.storyboard++
+            createdCount++
+          } catch (error) {
+            console.error(`创建分镜失败: ${sb.name}`, error)
+          }
+        }
+      }
+
+      if (createdCount === 0) {
+        toast({
+          title: '没有可导入的资产',
+          description: 'JSON 中未找到有效的资产数据（需要包含 characters/scenes/props/storyboards 字段）',
+          variant: 'destructive',
+        })
+        return
       }
 
       // 关闭对话框

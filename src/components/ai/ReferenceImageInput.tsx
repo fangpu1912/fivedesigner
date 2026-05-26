@@ -11,6 +11,7 @@ import {
   Eye,
   Video,
   Music,
+  Shirt,
 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
@@ -21,6 +22,8 @@ import { cn } from '@/lib/utils'
 import { getImageUrl } from '@/utils/asset'
 import { MediaThumbnail as SharedMediaThumbnail, isVideoMediaType, isAudioMediaType } from '@/components/media/MediaThumbnail'
 import { open } from '@tauri-apps/plugin-dialog'
+import { useOutfitsByCharacter } from '@/hooks/useOutfits'
+import type { CharacterOutfit } from '@/types'
 
 interface Episode {
   id: string
@@ -85,6 +88,125 @@ interface ReferenceImageInputProps {
   linkedAssets?: LinkedAsset[]
   allowVideo?: boolean
   allowAudio?: boolean
+  enableCharacterOutfits?: boolean
+}
+
+// 角色衣橱选择按钮组件
+function CharacterOutfitButton({
+  characterId,
+  characterName,
+  characterImage,
+  isSelected,
+  onSelectMain,
+  onSelectOutfit,
+}: {
+  characterId: string
+  characterName: string
+  characterImage?: string
+  isSelected: boolean
+  onSelectMain: () => void
+  onSelectOutfit: (outfit: CharacterOutfit) => void
+}) {
+  const { data: outfits = [] } = useOutfitsByCharacter(characterId)
+  const [showOutfits, setShowOutfits] = useState(false)
+
+  const hasOutfits = outfits.length > 0
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => {
+          if (hasOutfits) {
+            setShowOutfits(!showOutfits)
+          } else {
+            onSelectMain()
+          }
+        }}
+        className={cn(
+          'group relative aspect-video rounded-lg overflow-hidden border-2 transition-all w-full',
+          isSelected
+            ? 'border-primary ring-2 ring-primary/20'
+            : 'border-transparent hover:border-primary/50'
+        )}
+      >
+        <SharedMediaThumbnail url={characterImage || ''} mediaType="image" alt={characterName} />
+
+        {/* 衣橱图标 */}
+        {hasOutfits && (
+          <div className="absolute top-1 right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center shadow">
+            <Shirt className="w-3 h-3 text-white" />
+          </div>
+        )}
+
+        {/* 角色名称 */}
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 py-1">
+          <span className="text-[9px] text-white/90 truncate block">
+            {characterName}
+          </span>
+        </div>
+
+        {/* 选中状态 */}
+        {isSelected && (
+          <div className="absolute inset-0 bg-primary/10 flex items-center justify-center">
+            <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center shadow">
+              <span className="text-white text-xs font-bold">✓</span>
+            </div>
+          </div>
+        )}
+      </button>
+
+      {/* 衣橱下拉菜单 */}
+      {showOutfits && hasOutfits && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-background border rounded-lg shadow-lg z-50 p-2">
+          <div className="text-[10px] text-muted-foreground mb-1">选择服装:</div>
+          <div className="space-y-1 max-h-32 overflow-y-auto">
+            {/* 默认/主形象 */}
+            <button
+              onClick={() => {
+                onSelectMain()
+                setShowOutfits(false)
+              }}
+              className={cn(
+                'w-full flex items-center gap-2 p-1.5 rounded hover:bg-muted text-left',
+                isSelected && 'bg-primary/10'
+              )}
+            >
+              <div className="w-8 h-8 rounded bg-muted overflow-hidden shrink-0">
+                {characterImage && (
+                  <img src={getImageUrl(characterImage) || ''} alt="" className="w-full h-full object-cover" />
+                )}
+              </div>
+              <span className="text-xs truncate">默认形象</span>
+            </button>
+
+            {/* 衣橱列表 */}
+            {outfits.map(outfit => (
+              <button
+                key={outfit.id}
+                onClick={() => {
+                  onSelectOutfit(outfit)
+                  setShowOutfits(false)
+                }}
+                className="w-full flex items-center gap-2 p-1.5 rounded hover:bg-muted text-left"
+              >
+                <div className="w-8 h-8 rounded bg-muted overflow-hidden shrink-0">
+                  {outfit.image && (
+                    <img src={getImageUrl(outfit.image) || ''} alt="" className="w-full h-full object-cover" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs truncate block">{outfit.name}</span>
+                  {outfit.is_default && (
+                    <span className="text-[9px] text-yellow-500">默认</span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 const TABS = [
@@ -139,6 +261,7 @@ export function ReferenceImageInput({
   linkedAssets = [],
   allowVideo = true,
   allowAudio = true,
+  enableCharacterOutfits = true,
 }: ReferenceImageInputProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<string>('storyboard')
@@ -708,6 +831,45 @@ export function ReferenceImageInput({
                           </div>
                         </div>
                       )}
+                    </div>
+                  ) : activeTab === 'character' && enableCharacterOutfits ? (
+                    <div className="grid grid-cols-4 gap-2">
+                      {characters
+                        .filter(char => selectedEpisodeId === 'all' || char.episode_id === selectedEpisodeId)
+                        .map(char => (
+                          <CharacterOutfitButton
+                            key={char.id}
+                            characterId={char.id}
+                            characterName={char.name}
+                            characterImage={char.image}
+                            isSelected={value.includes(char.image || '')}
+                            onSelectMain={() => {
+                              const ref: ReferenceItem = {
+                                id: char.id,
+                                url: char.image || '',
+                                name: char.name,
+                                type: 'character',
+                                episodeId: char.episode_id,
+                                prompt: char.prompt,
+                                description: char.description,
+                                aliases: char.aliases,
+                              }
+                              toggleReference(ref)
+                            }}
+                            onSelectOutfit={(outfit) => {
+                              const ref: ReferenceItem = {
+                                id: `${char.id}-outfit-${outfit.id}`,
+                                url: outfit.image || char.image || '',
+                                name: `${char.name} - ${outfit.name}`,
+                                type: 'character',
+                                episodeId: char.episode_id,
+                                prompt: outfit.prompt || char.prompt,
+                                description: outfit.description || char.description,
+                              }
+                              toggleReference(ref)
+                            }}
+                          />
+                        ))}
                     </div>
                   ) : (
                     <div className="grid grid-cols-4 gap-2">

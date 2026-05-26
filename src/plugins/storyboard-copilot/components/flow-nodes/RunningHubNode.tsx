@@ -120,7 +120,17 @@ export const RunningHubNode = memo(({ id, data, selected }: RunningHubNodeProps)
     }
     try {
       updateNodeData(id, { ...data, webappId, status: 'submitting' as const })
-      const result = await rhRequest('/api/webapp/apiCallDemo', { webappId })
+      const apiKey = getApiKey()
+      const baseUrl = getBaseUrl()
+      const url = `${baseUrl}/api/webapp/apiCallDemo?apiKey=${encodeURIComponent(apiKey)}&webappId=${encodeURIComponent(webappId)}`
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      })
+      const result = await response.json()
+      if (result.code !== undefined && result.code !== 0 && result.code !== 200) {
+        throw new Error(result.msg || result.message || JSON.stringify(result))
+      }
       const appInfo = result.data || result
       const nodeInfoList = appInfo?.nodeInfoList || []
       const paramValues: Record<string, { value: string; sourceFromUpstream?: boolean }> = {}
