@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, Brush, Circle, Square, Type, Undo2, Trash2, Grid3X3 } from 'lucide-react'
+import { ArrowRight, Brush, Circle, Square, Type, Undo2, Trash2, Grid3X3, Palette } from 'lucide-react'
 import { Stage, Layer, Image as KonvaImage, Rect, Ellipse, Arrow, Line, Text, Transformer, Group } from 'react-konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import type Konva from 'konva'
@@ -23,7 +23,7 @@ const DEFAULT_TEXT_SIZE_PERCENT = 10
 const MIN_TEXT_SIZE_PERCENT = 1
 const MAX_TEXT_SIZE_PERCENT = 30
 
-type ToolButton = { type: AnnotationToolType | 'faceGrid'; label: string; icon: typeof Square }
+type ToolButton = { type: AnnotationToolType | 'faceGrid' | 'gongbi'; label: string; icon: typeof Square }
 
 const TOOL_BUTTONS: ToolButton[] = [
   { type: 'rect', label: '矩形', icon: Square },
@@ -32,6 +32,7 @@ const TOOL_BUTTONS: ToolButton[] = [
   { type: 'pen', label: '画笔', icon: Brush },
   { type: 'text', label: '文本', icon: Type },
   { type: 'faceGrid', label: '人脸网格', icon: Grid3X3 },
+  { type: 'gongbi', label: '淡彩工笔', icon: Palette },
 ]
 
 type FaceGridRegion = {
@@ -44,6 +45,16 @@ type FaceGridRegion = {
   gridSize: number
   angle: number
   color: string
+}
+
+type GongbiRegion = {
+  id: string
+  x: number
+  y: number
+  width: number
+  height: number
+  ksize: number   // 线条粗细
+  alpha: number   // 色彩浓度
 }
 
 function createAnnotationId(): string {
@@ -185,43 +196,128 @@ function drawAnnotationOnCanvas(ctx: CanvasRenderingContext2D, item: AnnotationI
 
 function drawFaceGridOnCanvas(ctx: CanvasRenderingContext2D, region: FaceGridRegion): void {
   ctx.save()
-  
+
   const centerX = region.x + region.width / 2
   const centerY = region.y + region.height / 2
   const radiusX = region.width / 2
   const radiusY = region.height / 2
-  
+
   ctx.beginPath()
   ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2)
   ctx.clip()
-  
+
   ctx.translate(centerX, centerY)
   ctx.rotate((region.angle * Math.PI) / 180)
   ctx.translate(-centerX, -centerY)
-  
+
   ctx.strokeStyle = region.color
   ctx.globalAlpha = region.opacity
   ctx.lineWidth = 0.5
-  
+
   const diagonal = Math.sqrt(region.width ** 2 + region.height ** 2) * 1.5
   const startX = centerX - diagonal / 2
   const startY = centerY - diagonal / 2
-  
+
   for (let y = startY; y < startY + diagonal; y += region.gridSize) {
     ctx.beginPath()
     ctx.moveTo(startX, y)
     ctx.lineTo(startX + diagonal, y)
     ctx.stroke()
   }
-  
+
   for (let x = startX; x < startX + diagonal; x += region.gridSize) {
     ctx.beginPath()
     ctx.moveTo(x, startY)
     ctx.lineTo(x, startY + diagonal)
     ctx.stroke()
   }
-  
+
   ctx.restore()
+}
+
+/**
+ * 在 canvas 上对指定矩形区域应用淡彩工笔效果
+ * 算法：灰度 → 高斯模糊 → divide(灰度, 模糊) 得线稿 → 与原图混合
+ */
+function applyGongbiOnCanvas(ctx: CanvasRenderingContext2D, region: GongbiRegion, canvasWidth: number, canvasHeight: number): void {
+  const rx = Math.max(0, Math.round(region.x))
+  const ry = Math.max(0, Math.round(region.y))
+  const rw = Math.min(Math.round(region.width), canvasWidth - rx)
+  const rh = Math.min(Math.round(region.height), canvasHeight - ry)
+  if (rw < 2 || rh < 2) return
+
+  // 1. 读取选区像素
+  const originalData = ctx.getImageData(rx, ry, rw, rh)
+  const pixels = originalData.data
+
+  // 2. 提取灰度
+  const gray = new Float32Array(rw * rh)
+  for (let i = 0; i < rw * rh; i++) {
+    const r = pixels[i * 4]!
+    const g = pixels[i * 4 + 1]!
+    const b = pixels[i * 4 + 2]!
+    gray[i] = 0.299 * r + 0.587 * g + 0.114 * b
+  }
+
+  // 3. Box blur 近似高斯模糊（水平+垂直）
+  let kernelSize = region.ksize
+  if (kernelSize % 2 === 0) kernelSize += 1
+  const half = Math.floor(kernelSize / 2)
+
+  // 水平方向
+  const temp = new Float32Array(rw * rh)
+  for (let y = 0; y < rh; y++) {
+    for (let x = 0; x < rw; x++) {
+      let sum = 0
+      let count = 0
+      for (let k = -half; k <= half; k++) {
+        const nx = x + k
+        if (nx >= 0 && nx < rw) {
+          sum += gray[y * rw + nx]!
+          count++
+        }
+      }
+      temp[y * rw + x] = sum / count
+    }
+  }
+  // 垂直方向
+  const blurred = new Float32Array(rw * rh)
+  for (let y = 0; y < rh; y++) {
+    for (let x = 0; x < rw; x++) {
+      let sum = 0
+      let count = 0
+      for (let k = -half; k <= half; k++) {
+        const ny = y + k
+        if (ny >= 0 && ny < rh) {
+          sum += temp[ny * rw + x]!
+          count++
+        }
+      }
+      blurred[y * rw + x] = sum / count
+    }
+  }
+
+  // 4. 线稿：divide(gray, blurred)
+  const sketch = new Float32Array(rw * rh)
+  for (let i = 0; i < rw * rh; i++) {
+    const b = blurred[i]!
+    sketch[i] = b === 0 ? 255 : Math.min(255, (gray[i]! / b) * 255)
+  }
+
+  // 5. 混合：result = original * alpha + sketch * (1 - alpha)
+  const alpha = region.alpha
+  const resultData = new ImageData(rw, rh)
+  const result = resultData.data
+  for (let i = 0; i < rw * rh; i++) {
+    const s = sketch[i]!
+    result[i * 4] = Math.round(pixels[i * 4]! * alpha + s * (1 - alpha))
+    result[i * 4 + 1] = Math.round(pixels[i * 4 + 1]! * alpha + s * (1 - alpha))
+    result[i * 4 + 2] = Math.round(pixels[i * 4 + 2]! * alpha + s * (1 - alpha))
+    result[i * 4 + 3] = pixels[i * 4 + 3]!
+  }
+
+  // 6. 写回选区
+  ctx.putImageData(resultData, rx, ry)
 }
 
 type DraftState = {
@@ -251,12 +347,12 @@ interface ImageEditorDialogProps {
 
 export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEditorDialogProps) {
   const [image, setImage] = useState<HTMLImageElement | null>(null)
-  const [tool, setTool] = useState<AnnotationToolType | 'faceGrid'>('rect')
+  const [tool, setTool] = useState<AnnotationToolType | 'faceGrid' | 'gongbi'>('rect')
   const [annotations, setAnnotations] = useState<AnnotationItem[]>([])
   const [faceGridRegions, setFaceGridRegions] = useState<FaceGridRegion[]>([])
   const [draft, setDraft] = useState<DraftState | null>(null)
-  const [undoStack, setUndoStack] = useState<(AnnotationItem[] | FaceGridRegion[])[]>([])
-  const [redoStack, setRedoStack] = useState<(AnnotationItem[] | FaceGridRegion[])[]>([])
+  const [undoStack, setUndoStack] = useState<(AnnotationItem[] | FaceGridRegion[] | GongbiRegion[])[]>([])
+  const [redoStack, setRedoStack] = useState<(AnnotationItem[] | FaceGridRegion[] | GongbiRegion[])[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [color, setColor] = useState('#ff4d4f')
   const [lineWidthPercent, setLineWidthPercent] = useState(DEFAULT_LINE_WIDTH_PERCENT)
@@ -270,6 +366,13 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
   const [gridAngle, setGridAngle] = useState(45)
   const [gridColor, setGridColor] = useState('#000000')
   const [draftFaceGrid, setDraftFaceGrid] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
+
+  // 淡彩工笔参数
+  const [gongbiKsize, setGongbiKsize] = useState(21)
+  const [gongbiAlpha, setGongbiAlpha] = useState(0.6)
+  const [gongbiRegions, setGongbiRegions] = useState<GongbiRegion[]>([])
+  const [draftGongbi, setDraftGongbi] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
+  const [gongbiPreviewImage, setGongbiPreviewImage] = useState<HTMLCanvasElement | null>(null)
 
   const stageRef = useRef<Konva.Stage | null>(null)
   const contentGroupRef = useRef<Konva.Group | null>(null)
@@ -293,13 +396,40 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
     if (!open) return
     setAnnotations([])
     setFaceGridRegions([])
+    setGongbiRegions([])
     setUndoStack([])
     setRedoStack([])
     setSelectedId(null)
     setDraft(null)
     setDraftFaceGrid(null)
+    setDraftGongbi(null)
     setTextEditorState(null)
   }, [open, imageUrl])
+
+  // 淡彩工笔实时预览：当 regions 或参数变化时，生成预览图
+  useEffect(() => {
+    if (!image || gongbiRegions.length === 0) {
+      setGongbiPreviewImage(null)
+      return
+    }
+
+    const canvas = document.createElement('canvas')
+    canvas.width = image.naturalWidth
+    canvas.height = image.naturalHeight
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+    if (!ctx) { setGongbiPreviewImage(null); return }
+
+    ctx.drawImage(image, 0, 0)
+
+    // 对每个选区应用淡彩工笔效果（使用当前滑块值）
+    for (const region of gongbiRegions) {
+      applyGongbiOnCanvas(ctx, { ...region, ksize: gongbiKsize, alpha: gongbiAlpha }, image.naturalWidth, image.naturalHeight)
+    }
+
+    setGongbiPreviewImage(canvas)
+
+    return () => { setGongbiPreviewImage(null) }
+  }, [image, gongbiRegions, gongbiKsize, gongbiAlpha])
 
   useEffect(() => {
     const element = viewportRef.current
@@ -387,6 +517,11 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
       return
     }
 
+    if (tool === 'gongbi') {
+      setDraftGongbi({ x: point.x, y: point.y, width: 0, height: 0 })
+      return
+    }
+
     setTextEditorState(null)
     setSelectedId(null)
     setDraft({
@@ -410,6 +545,18 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
       return
     }
 
+    if (tool === 'gongbi' && draftGongbi) {
+      const point = getImagePoint()
+      if (!point) return
+      setDraftGongbi({
+        x: Math.min(draftGongbi.x, point.x),
+        y: Math.min(draftGongbi.y, point.y),
+        width: Math.abs(point.x - draftGongbi.x),
+        height: Math.abs(point.y - draftGongbi.y),
+      })
+      return
+    }
+
     if (!draft) return
     const point = getImagePoint()
     if (!point) return
@@ -420,7 +567,7 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
       return
     }
     setDraft(prev => prev ? { ...prev, currentX: point.x, currentY: point.y } : prev)
-  }, [draft, draftFaceGrid, getImagePoint, tool])
+  }, [draft, draftFaceGrid, draftGongbi, getImagePoint, tool])
 
   const handlePointerUp = useCallback(() => {
     if (tool === 'faceGrid' && draftFaceGrid) {
@@ -442,6 +589,23 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
       return
     }
 
+    if (tool === 'gongbi' && draftGongbi) {
+      if (draftGongbi.width > 10 && draftGongbi.height > 10) {
+        const newRegion: GongbiRegion = {
+          id: createAnnotationId(),
+          ...draftGongbi,
+          ksize: gongbiKsize,
+          alpha: gongbiAlpha,
+        }
+        setUndoStack(prev => [...prev, gongbiRegions])
+        setRedoStack([])
+        setGongbiRegions(prev => [...prev, newRegion])
+        setSelectedId(newRegion.id)
+      }
+      setDraftGongbi(null)
+      return
+    }
+
     if (!draft) return
     const point = getImagePoint()
     const finalX = point?.x ?? draft.currentX
@@ -460,22 +624,24 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
     setAnnotations(nextAnnotations)
     setSelectedId(createdItem.id)
     setDraft(null)
-  }, [annotations, buildDraftAnnotation, draft, draftFaceGrid, faceGridRegions, getImagePoint, gridAngle, gridColor, gridOpacity, gridSize, tool])
+  }, [annotations, buildDraftAnnotation, draft, draftFaceGrid, draftGongbi, faceGridRegions, gongbiAlpha, gongbiKsize, gongbiRegions, getImagePoint, gridAngle, gridColor, gridOpacity, gridSize, tool])
 
   const handleDeleteSelected = useCallback(() => {
     if (!selectedId) return
     setUndoStack(prev => [...prev, annotations])
     setRedoStack([])
-    
+
     // 检查是否是标注
     const isAnnotation = annotations.some(a => a.id === selectedId)
     if (isAnnotation) {
       setAnnotations(prev => prev.filter(item => item.id !== selectedId))
-    } else {
+    } else if (faceGridRegions.some(r => r.id === selectedId)) {
       setFaceGridRegions(prev => prev.filter(r => r.id !== selectedId))
+    } else {
+      setGongbiRegions(prev => prev.filter(r => r.id !== selectedId))
     }
     setSelectedId(null)
-  }, [annotations, selectedId])
+  }, [annotations, faceGridRegions, selectedId])
 
   const handleUndo = useCallback(() => {
     if (undoStack.length === 0) return
@@ -512,6 +678,7 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
     setSelectedId(null)
     setAnnotations([])
     setFaceGridRegions([])
+    setGongbiRegions([])
   }, [annotations])
 
   const handleSave = useCallback(() => {
@@ -531,7 +698,12 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
 
     ctx.drawImage(image, 0, 0)
 
-    // 先绘制人脸网格
+    // 先应用淡彩工笔效果（直接修改像素，使用当前滑块值）
+    for (const region of gongbiRegions) {
+      applyGongbiOnCanvas(ctx, { ...region, ksize: gongbiKsize, alpha: gongbiAlpha }, image.naturalWidth, image.naturalHeight)
+    }
+
+    // 再绘制人脸网格
     for (const region of faceGridRegions) {
       drawFaceGridOnCanvas(ctx, region)
     }
@@ -552,7 +724,7 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
 
     onClose()
     onSave(dataUrl)
-  }, [image, annotations, faceGridRegions, onSave, onClose])
+  }, [image, annotations, faceGridRegions, gongbiRegions, onSave, onClose])
 
   const handleCommitTextEditor = useCallback(() => {
     if (!textEditorState) return
@@ -645,9 +817,10 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
     return <Text key={item.id} ref={node => bindShapeRef(item.id, node)} x={item.x} y={item.y} text={item.text} fill={item.color} fontStyle="bold" fontSize={item.fontSize} lineHeight={1.2} opacity={opacity} {...commonHandlers} onDblClick={() => setTextEditorState({ annotationId: item.id, x: item.x, y: item.y, value: item.text })} />
   }, [bindShapeRef, handleAnnotationDragEnd, handleAnnotationTransformEnd, selectedId, tool])
 
-  const activeStyleKind = useMemo<'shape' | 'text' | 'faceGrid' | null>(() => {
+  const activeStyleKind = useMemo<'shape' | 'text' | 'faceGrid' | 'gongbi' | null>(() => {
     if (tool === 'text') return 'text'
     if (tool === 'faceGrid') return 'faceGrid'
+    if (tool === 'gongbi') return 'gongbi'
     if (['rect', 'ellipse', 'arrow', 'pen'].includes(tool)) return 'shape'
     return null
   }, [tool])
@@ -715,6 +888,21 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
               </div>
             </div>
           )}
+          {activeStyleKind === 'gongbi' && (
+            <div className="flex items-center gap-3 text-xs">
+              <div className="flex items-center gap-1">
+                <span className="text-muted-foreground">线条粗细</span>
+                <input type="range" min={5} max={41} step={1} value={gongbiKsize} onChange={e => setGongbiKsize(Number(e.target.value))} className="w-20" />
+                <span className="text-muted-foreground w-6">{gongbiKsize}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-muted-foreground">色彩浓度</span>
+                <input type="range" min={0} max={100} step={1} value={Math.round(gongbiAlpha * 100)} onChange={e => setGongbiAlpha(Number(e.target.value) / 100)} className="w-20" />
+                <span className="text-muted-foreground w-8">{Math.round(gongbiAlpha * 100)}%</span>
+              </div>
+              <span className="text-muted-foreground">框选区域应用淡彩工笔效果</span>
+            </div>
+          )}
           <Button variant="outline" size="sm" onClick={handleUndo} disabled={undoStack.length === 0}>
             <Undo2 className="h-4 w-4 mr-1" />撤销
           </Button>
@@ -747,7 +935,13 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
             <Layer>
               <Group ref={contentGroupRef} x={0} y={0} scaleX={scale} scaleY={scale}>
                 {image && (
-                  <KonvaImage image={image} x={0} y={0} width={image.naturalWidth} height={image.naturalHeight} name="annotation-background" />
+                  <KonvaImage
+                    image={gongbiPreviewImage || image}
+                    x={0} y={0}
+                    width={image.naturalWidth}
+                    height={image.naturalHeight}
+                    name="annotation-background"
+                  />
                 )}
                 
                 {/* 渲染人脸网格区域 */}
@@ -774,6 +968,36 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
                     radiusX={draftFaceGrid.width / 2}
                     radiusY={draftFaceGrid.height / 2}
                     stroke="#a855f7"
+                    strokeWidth={2}
+                    dash={[5, 5]}
+                    strokeScaleEnabled={false}
+                  />
+                ) : null}
+
+                {/* 渲染淡彩工笔选区 */}
+                {gongbiRegions.map(region => (
+                  <Rect
+                    key={region.id}
+                    x={region.x}
+                    y={region.y}
+                    width={region.width}
+                    height={region.height}
+                    stroke="#f59e0b"
+                    strokeWidth={2}
+                    strokeScaleEnabled={false}
+                    onClick={() => tool === 'gongbi' && setSelectedId(region.id)}
+                    onTap={() => tool === 'gongbi' && setSelectedId(region.id)}
+                  />
+                ))}
+
+                {/* 渲染正在绘制的淡彩工笔选区 */}
+                {draftGongbi && draftGongbi.width > 0 && draftGongbi.height > 0 ? (
+                  <Rect
+                    x={draftGongbi.x}
+                    y={draftGongbi.y}
+                    width={draftGongbi.width}
+                    height={draftGongbi.height}
+                    stroke="#f59e0b"
                     strokeWidth={2}
                     dash={[5, 5]}
                     strokeScaleEnabled={false}
@@ -823,6 +1047,7 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
             {image && `原图: ${image.naturalWidth} × ${image.naturalHeight}`}
             {annotations.length > 0 && <span className="ml-3">标注: {annotations.length}</span>}
             {faceGridRegions.length > 0 && <span className="ml-3">网格: {faceGridRegions.length}</span>}
+            {gongbiRegions.length > 0 && <span className="ml-3">工笔: {gongbiRegions.length}</span>}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={onClose}>取消</Button>

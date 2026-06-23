@@ -12,6 +12,7 @@ import {
   RotateCcw,
   Loader2,
   PlayCircle,
+  Camera,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -67,6 +68,7 @@ export function VideoClipDialog({
   const [dragging, setDragging] = useState<'start' | 'end' | 'playhead' | null>(null)
   const [videoLoaded, setVideoLoaded] = useState(false)
   const [isPlayingClip, setIsPlayingClip] = useState(false)
+  const [isCapturingFrame, setIsCapturingFrame] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -353,6 +355,59 @@ export function VideoClipDialog({
     }
   }, [videoUrl, clipStart, clipEnd, clipDuration, projectId, episodeId, toast, onClipSaved, onClose, formatShortTime, sourceNodeId])
 
+  const handleCaptureFrame = useCallback(async () => {
+    if (!videoUrl || !videoRef.current) return
+
+    setIsCapturingFrame(true)
+    try {
+      // 使用当前播放时间作为截取时间点
+      const captureTime = currentTime
+
+      const outputPath = `${videoUrl}_frame_${Date.now()}.png`
+
+      await invoke<string>('capture_frame', {
+        videoPath: videoUrl,
+        timestamp: captureTime,
+        outputPath,
+      })
+
+      let savedPath = outputPath
+      if (projectId && episodeId) {
+        try {
+          const { readFile } = await import('@tauri-apps/plugin-fs')
+          const fileData = await readFile(outputPath)
+          savedPath = await saveMediaFile(fileData, {
+            projectId,
+            episodeId,
+            type: 'image',
+            fileName: `frame_${Date.now()}.png`,
+            extension: 'png',
+          })
+        } catch { /* fallback to raw output path */ }
+      }
+
+      toast({ title: '截取单帧成功', description: `时间点: ${formatTimecode(captureTime)}` })
+
+      if (sourceNodeId) {
+        canvasEvents.emit({
+          type: 'addResultNode',
+          imageUrl: savedPath,
+          sourceNodeId,
+          sourceHandleId: 'image',
+          noConnect: true,
+        })
+      }
+    } catch (error) {
+      toast({
+        title: '截取单帧失败',
+        description: String(error),
+        variant: 'destructive',
+      })
+    } finally {
+      setIsCapturingFrame(false)
+    }
+  }, [videoUrl, currentTime, projectId, episodeId, toast, sourceNodeId, formatTimecode])
+
   const displayUrl = getVideoUrl(videoUrl) || videoUrl
 
   const currentFrame = Math.floor(currentTime * fps)
@@ -427,6 +482,24 @@ export function VideoClipDialog({
             >
               <PlayCircle className="h-3.5 w-3.5" />
               播放选中
+            </Button>
+
+            <div className="w-px h-5 bg-border mx-1" />
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1 text-[10px] px-2"
+              onClick={handleCaptureFrame}
+              disabled={isCapturingFrame || !videoLoaded}
+              title="截取当前帧为图片"
+            >
+              {isCapturingFrame ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Camera className="h-3.5 w-3.5" />
+              )}
+              截取单帧
             </Button>
 
             <div className="flex-1" />

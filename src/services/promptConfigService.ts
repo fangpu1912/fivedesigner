@@ -7,7 +7,7 @@ import {
 
 const PROMPT_CONFIG_KEY = 'fivedesigner_prompt_config'
 const PROMPT_CONFIG_VERSION_KEY = 'fivedesigner_prompt_config_version'
-const CURRENT_CONFIG_VERSION = '4.0' // 4.0: 引入"脊骨与皮肉"创作哲学，强化台词与表演的联动关系，新增镜头组设计理念
+const CURRENT_CONFIG_VERSION = '10.0'
 
 // 生成唯一ID
 function generateId(): string {

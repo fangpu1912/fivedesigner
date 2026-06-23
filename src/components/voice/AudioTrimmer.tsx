@@ -11,13 +11,12 @@ interface AudioTrimmerProps {
 }
 
 export function AudioTrimmer({ audioFile, onConfirm, onCancel }: AudioTrimmerProps) {
-  console.log('[AudioTrimmer] 组件渲染, audioFile:', audioFile?.name)
-
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const audioBufferRef = useRef<AudioBuffer | null>(null)
   const sourceRef = useRef<AudioBufferSourceNode | null>(null)
   const gainNodeRef = useRef<GainNode | null>(null)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const [duration, setDuration] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
@@ -282,6 +281,7 @@ export function AudioTrimmer({ audioFile, onConfirm, onCancel }: AudioTrimmerPro
             setCurrentTime(endTime)
             setIsPlaying(false)
             clearInterval(intervalId)
+            intervalRef.current = null
             try {
               source.stop()
             } catch (e) {}
@@ -292,27 +292,36 @@ export function AudioTrimmer({ audioFile, onConfirm, onCancel }: AudioTrimmerPro
         }
       }, 50) // 每 50ms 更新一次
 
+      intervalRef.current = intervalId
+
       source.onended = () => {
         setIsPlaying(false)
         clearInterval(intervalId)
+        intervalRef.current = null
         sourceRef.current = null
       }
-
-      // 保存 interval ID 以便停止
-      ;(source as any).intervalId = intervalId
 
       setIsPlaying(true)
     }
   }, [isPlaying, startPos, endPos, duration])
 
+  // 组件卸载时清理 interval
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+    }
+  }, [])
+
   // 停止播放
   const stopPlayback = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
     if (sourceRef.current) {
-      // 清理 interval
-      const intervalId = (sourceRef.current as any).intervalId
-      if (intervalId) {
-        clearInterval(intervalId)
-      }
       try {
         sourceRef.current.stop()
       } catch (e) {}

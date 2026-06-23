@@ -82,7 +82,7 @@ export const UploadNode = memo(({ id, data, selected }: UploadNodeProps) => {
     async (file: File) => {
       if (!file.type.startsWith('image/')) {
         toast({ title: '请上传图片文件', variant: 'destructive' })
-        return
+        return null
       }
       try {
         const arrayBuffer = await file.arrayBuffer()
@@ -92,35 +92,117 @@ export const UploadNode = memo(({ id, data, selected }: UploadNodeProps) => {
           projectId: currentProjectId || 'temp',
           episodeId: currentEpisodeId || 'temp',
           type: 'image',
-          fileName: `upload_${Date.now()}.${ext}`,
+          fileName: `upload_${Date.now()}_${Math.random().toString(36).substr(2, 6)}.${ext}`,
           extension: ext,
         })
-        updateNodeData(id, { ...data, imageUrl: savedPath, sourceFileName: file.name, aspectRatio: DEFAULT_ASPECT_RATIO })
-        toast({ title: '图片上传成功' })
+        return { savedPath, fileName: file.name }
       } catch (error) {
         toast({ title: '上传失败', description: String(error), variant: 'destructive' })
+        return null
       }
     },
-    [currentProjectId, currentEpisodeId, data, id, toast, updateNodeData],
+    [currentProjectId, currentEpisodeId, toast],
+  )
+
+  // 批量上传多张图片，创建宫格排列的节点
+  const handleBatchUpload = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return
+      const currentNode = getNode(id)
+      if (!currentNode) return
+
+      const imageFiles = files.filter(f => f.type.startsWith('image/'))
+      if (imageFiles.length === 0) {
+        toast({ title: '请上传图片文件', variant: 'destructive' })
+        return
+      }
+
+      // 第一张图放到当前节点
+      const firstResult = await handleFileUpload(imageFiles[0]!)
+      if (firstResult) {
+        updateNodeData(id, { ...data, imageUrl: firstResult.savedPath, sourceFileName: firstResult.fileName, aspectRatio: DEFAULT_ASPECT_RATIO })
+      }
+
+      // 剩余图片创建新节点，宫格排列
+      if (imageFiles.length > 1) {
+        const nodeWidth = 280
+        const nodeHeight = 280
+        const gapX = 40
+        const gapY = 40
+        const cols = Math.min(Math.ceil(Math.sqrt(imageFiles.length)), 4) // 最多4列
+
+        const newNodes = []
+        for (let i = 1; i < imageFiles.length; i++) {
+          const result = await handleFileUpload(imageFiles[i]!)
+          if (!result) continue
+
+          const col = i % cols
+          const row = Math.floor(i / cols)
+          const newNodeId = `upload-${Date.now()}-${i}`
+
+          newNodes.push({
+            id: newNodeId,
+            type: 'uploadNode' as const,
+            position: {
+              x: (currentNode.position.x ?? 0) + col * (nodeWidth + gapX),
+              y: (currentNode.position.y ?? 0) + (row + 1) * (nodeHeight + gapY),
+            },
+            data: {
+              imageUrl: result.savedPath,
+              sourceFileName: result.fileName,
+              aspectRatio: DEFAULT_ASPECT_RATIO,
+            },
+          })
+        }
+
+        if (newNodes.length > 0) {
+          addNodes(newNodes)
+          toast({ title: `已上传 ${imageFiles.length} 张图片` })
+        }
+      } else if (firstResult) {
+        toast({ title: '图片上传成功' })
+      }
+    },
+    [addNodes, data, getNode, handleFileUpload, id, updateNodeData],
   )
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0]
-      if (file) handleFileUpload(file)
+      const files = e.target.files
+      if (!files || files.length === 0) return
+      if (files.length === 1) {
+        handleFileUpload(files[0]!).then(result => {
+          if (result) {
+            updateNodeData(id, { ...data, imageUrl: result.savedPath, sourceFileName: result.fileName, aspectRatio: DEFAULT_ASPECT_RATIO })
+            toast({ title: '图片上传成功' })
+          }
+        })
+      } else {
+        handleBatchUpload(Array.from(files))
+      }
       e.target.value = ''
     },
-    [handleFileUpload],
+    [data, handleBatchUpload, handleFileUpload, id, toast, updateNodeData],
   )
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault()
       setIsDragging(false)
-      const file = e.dataTransfer.files?.[0]
-      if (file) handleFileUpload(file)
+      const files = e.dataTransfer.files
+      if (!files || files.length === 0) return
+      if (files.length === 1) {
+        handleFileUpload(files[0]!).then(result => {
+          if (result) {
+            updateNodeData(id, { ...data, imageUrl: result.savedPath, sourceFileName: result.fileName, aspectRatio: DEFAULT_ASPECT_RATIO })
+            toast({ title: '图片上传成功' })
+          }
+        })
+      } else {
+        handleBatchUpload(Array.from(files))
+      }
     },
-    [handleFileUpload],
+    [data, handleBatchUpload, handleFileUpload, id, toast, updateNodeData],
   )
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -307,7 +389,7 @@ export const UploadNode = memo(({ id, data, selected }: UploadNodeProps) => {
             className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-muted-foreground/30 rounded-lg hover:border-primary/50 hover:bg-muted/50 transition-all"
           >
             <Upload className="h-8 w-8 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">点击上传图片</span>
+            <span className="text-xs text-muted-foreground">点击上传图片（可多选）</span>
           </button>
           <span className="text-[10px] text-muted-foreground">或拖拽图片到此区域</span>
         </div>
@@ -330,7 +412,7 @@ export const UploadNode = memo(({ id, data, selected }: UploadNodeProps) => {
       />
 
       {/* 隐藏的文件输入 */}
-      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleInputChange} />
+      <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleInputChange} />
 
       {/* 预览弹窗 */}
       {imageSource && (

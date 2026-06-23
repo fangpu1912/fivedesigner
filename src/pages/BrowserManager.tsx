@@ -30,6 +30,7 @@ interface BrowserAccount {
   dataDir: string
   pid?: number
   isRunning: boolean
+  proxy?: string
 }
 
 const PLATFORM_URLS = {
@@ -149,8 +150,9 @@ export default function BrowserManager() {
           id: accountId,
           name: account.name,
           data_dir: account.dataDir,
-          viewport_width: 1366,
-          viewport_height: 768,
+          proxy: account.proxy || null,
+          viewport_width: 0,
+          viewport_height: 0,
           locale: 'zh-CN',
           timezone: 'Asia/Shanghai',
           color_scheme: 'light',
@@ -203,6 +205,7 @@ export default function BrowserManager() {
       platform,
       url,
       dataDir: `profile_${Date.now()}`,
+      proxy: newAccount.proxy || undefined,
       isRunning: false,
     }
 
@@ -296,6 +299,12 @@ export default function BrowserManager() {
                   {account.url}
                 </div>
 
+                {account.proxy && (
+                  <div className="text-xs text-blue-500 truncate">
+                    代理: {account.proxy}
+                  </div>
+                )}
+
                 <div className="flex gap-2">
                   {account.isRunning ? (
                     <Button
@@ -383,10 +392,25 @@ export default function BrowserManager() {
               </div>
             )}
 
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                代理 IP <span className="text-muted-foreground font-normal">（可选，防多账号关联）</span>
+              </label>
+              <Input
+                value={newAccount.proxy || ''}
+                onChange={(e) => setNewAccount({ ...newAccount, proxy: e.target.value })}
+                placeholder="http://127.0.0.1:8080"
+              />
+              <p className="text-xs text-muted-foreground">
+                不填则使用本机 IP。多开同平台账号建议每个配不同代理。
+              </p>
+            </div>
+
             <div className="flex items-start gap-2 p-3 bg-muted rounded-md text-xs text-muted-foreground">
               <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
               <p>
                 添加后点击"打开"，在浏览器中完成登录，关闭后下次可直接打开使用，无需重新登录。
+                指纹（UA/Canvas/WebGL）自动随机，无需手动配置。
               </p>
             </div>
 

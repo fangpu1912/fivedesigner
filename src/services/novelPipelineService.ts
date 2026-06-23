@@ -1,9 +1,9 @@
-import { AI } from '@/services/vendor/aiService'
-import { getActivePrompt } from '@/services/promptConfigService'
 import { characterDB, sceneDB, propDB, storyboardDB, dubbingDB } from '@/db'
+import { getActivePrompt } from '@/services/promptConfigService'
+import { parseJSON, callAI, splitContentIntoChunks, mergeSceneChunks } from '@/utils/aiHelper'
+import type { PipelineSceneInput } from '@/utils/aiHelper'
 import logger from '@/utils/logger'
 import { matchAssetsByName } from '@/utils/storyboardReferences'
-import { createProductionScheduler, ProductionTask, ProductionProgress } from '@/services/productionAgentService'
 
 export interface PipelineScene {
   name: string
@@ -66,76 +66,86 @@ export interface PipelineProgress {
 
 export type PipelineProgressCallback = (progress: PipelineProgress) => void
 
-function parseJSON<T>(text: string): T {
-  let cleaned = text.trim()
-
-  const codeBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (codeBlockMatch) {
-    cleaned = codeBlockMatch[1]!.trim()
-  }
-
-  try {
-    return JSON.parse(cleaned) as T
-  } catch {}
-
-  const firstArr = cleaned.indexOf('[')
-  const firstObj = cleaned.indexOf('{')
-  const startIdx = firstArr === -1 ? firstObj : firstObj === -1 ? firstArr : Math.min(firstArr, firstObj)
-
-  if (startIdx === -1) {
-    throw new Error(`无法从AI响应中提取JSON: ${cleaned.substring(0, 200)}`)
-  }
-
-  const openChar = cleaned[startIdx]
-  const closeChar = openChar === '[' ? ']' : '}'
-
-  let depth = 0
-  let inStr = false
-  let escape = false
-  for (let i = startIdx; i < cleaned.length; i++) {
-    const ch = cleaned[i]
-    if (escape) { escape = false; continue }
-    if (ch === '\\' && inStr) { escape = true; continue }
-    if (ch === '"') { inStr = !inStr; continue }
-    if (inStr) continue
-    if (ch === openChar) depth++
-    if (ch === closeChar) {
-      depth--
-      if (depth === 0) {
-        const candidate = cleaned.substring(startIdx, i + 1)
-        try {
-          return JSON.parse(candidate) as T
-        } catch {}
-        break
-      }
-    }
-  }
-
-  const arrMatch = cleaned.match(/\[[\s\S]*?\]/)
-  const objMatch = cleaned.match(/\{[\s\S]*?\}/)
-  const fallback = arrMatch?.[0] || objMatch?.[0]
-  if (fallback) {
-    return JSON.parse(fallback) as T
-  }
-
-  throw new Error(`无法解析AI响应为JSON: ${cleaned.substring(0, 300)}`)
+async function segmentScenesForChunk(chunk: string): Promise<PipelineScene[]> {
+  const prompt = getActivePrompt('pipeline_scene_segmentation', { content: chunk })
+  const result = await callAI(prompt)
+  return parseJSON<PipelineScene[]>(result)
 }
 
-async function callAI(prompt: string): Promise<string> {
-  try {
-    const result = await AI.Text.generate({
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
-      maxTokens: 8192,
-    })
-    if (!result) {
-      throw new Error('AI 返回了空结果')
-    }
-    return result
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : (typeof error === 'string' ? error : JSON.stringify(error))
-    throw new Error(`AI 生成失败: ${msg}`)
+async function segmentScenesFullContent(content: string, onProgress?: (msg: string) => void): Promise<PipelineScene[]> {
+  if (content.length <= 12000) {
+    onProgress?.('场景划分（单次）')
+    return segmentScenesForChunk(content)
   }
+
+  const chunks = splitContentIntoChunks(content, 10000)
+  onProgress?.(`场景划分（分 ${chunks.length} 块处理）`)
+
+  const allScenes: PipelineScene[] = []
+  for (let i = 0; i < chunks.length; i++) {
+    onProgress?.(`场景划分 - 第 ${i + 1}/${chunks.length} 块`)
+    try {
+      const chunkScenes = await segmentScenesForChunk(chunks[i]!)
+      allScenes.push(...chunkScenes)
+    } catch (e) {
+      logger.error(`[Pipeline] 第 ${i + 1} 块场景划分失败:`, e)
+    }
+  }
+
+  const merged = mergeSceneChunks(allScenes as PipelineSceneInput[]) as PipelineScene[]
+  logger.info(`[Pipeline] 分块划分完成，合并后 ${merged.length} 个场景（原始 ${allScenes.length} 个）`)
+  return merged
+}
+
+async function extractAssetsForContent(
+  content: string,
+  scenesSummary: string,
+): Promise<{ characters: PipelineCharacter[]; scenes: PipelineSceneAsset[]; props: PipelineProp[] }> {
+  if (content.length <= 12000) {
+    const prompt = getActivePrompt('pipeline_asset_extraction', { content, scenes: scenesSummary })
+    const result = await callAI(prompt)
+    return parseJSON(result)
+  }
+
+  const chunks = splitContentIntoChunks(content, 10000)
+  const allAssets: { characters: PipelineCharacter[]; scenes: PipelineSceneAsset[]; props: PipelineProp[] } = {
+    characters: [], scenes: [], props: [],
+  }
+
+  for (let i = 0; i < chunks.length; i++) {
+    try {
+      const prompt = getActivePrompt('pipeline_asset_extraction', {
+        content: chunks[i]!,
+        scenes: scenesSummary,
+      })
+      const result = await callAI(prompt)
+      const chunkAssets = parseJSON<{
+        characters: PipelineCharacter[]
+        scenes: PipelineSceneAsset[]
+        props: PipelineProp[]
+      }>(result)
+
+      for (const char of chunkAssets.characters) {
+        if (!allAssets.characters.find(c => c.name === char.name)) {
+          allAssets.characters.push(char)
+        }
+      }
+      for (const scene of chunkAssets.scenes) {
+        if (!allAssets.scenes.find(s => s.name === scene.name)) {
+          allAssets.scenes.push(scene)
+        }
+      }
+      for (const prop of chunkAssets.props) {
+        if (!allAssets.props.find(p => p.name === prop.name)) {
+          allAssets.props.push(prop)
+        }
+      }
+    } catch (e) {
+      logger.error(`[Pipeline] 第 ${i + 1} 块资产提取失败:`, e)
+    }
+  }
+
+  return allAssets
 }
 
 export async function runPipeline(
@@ -158,33 +168,29 @@ export async function runPipeline(
     })
   }
 
+  // ====== Step 0: 场景划分（支持长文本分块） ======
   advanceStep('场景划分', 5)
 
-  const segmentationPrompt = getActivePrompt('pipeline_scene_segmentation', {
-    content: content.substring(0, 12000),
+  const scenes = await segmentScenesFullContent(content, (msg) => {
+    onProgress?.({ step: currentStep, stepName: msg, percent: 8, totalSteps: 0 })
   })
-
-  const segmentationResult = await callAI(segmentationPrompt)
-  const scenes: PipelineScene[] = parseJSON<PipelineScene[]>(segmentationResult)
   logger.info(`[Pipeline] 划分了 ${scenes.length} 个场景`)
 
+  if (scenes.length === 0) {
+    throw new Error('场景划分结果为空，请检查剧本内容')
+  }
+
+  // ====== Step 1: 全局资产提取（支持长文本分块） ======
   advanceStep('全局资产提取', 15)
 
-  const scenesSummary = scenes.map((s, i) => `场景${i + 1}: ${s.name} - ${s.summary} (角色: ${s.characters.join(', ')})`).join('\n')
+  const scenesSummary = scenes.map((s, i) =>
+    `场景${i + 1}: ${s.name} - ${s.summary} (角色: ${s.characters.join(', ')})`
+  ).join('\n')
 
-  const assetPrompt = getActivePrompt('pipeline_asset_extraction', {
-    content: content.substring(0, 12000),
-    scenes: scenesSummary,
-  })
-
-  const assetResult = await callAI(assetPrompt)
-  const assets = parseJSON<{
-    characters: PipelineCharacter[]
-    scenes: PipelineSceneAsset[]
-    props: PipelineProp[]
-  }>(assetResult)
+  const assets = await extractAssetsForContent(content, scenesSummary)
   logger.info(`[Pipeline] 提取了 ${assets.characters.length} 角色, ${assets.scenes.length} 场景, ${assets.props.length} 道具`)
 
+  // ====== Step 1.5: 保存资产到数据库 ======
   const existingMatch = await matchAssetsByName(
     episodeId,
     assets.characters.map(c => c.name),
@@ -194,10 +200,7 @@ export async function runPipeline(
 
   const characterIdMap = new Map<string, string>(existingMatch.characterMap)
   for (const char of assets.characters) {
-    if (characterIdMap.has(char.name)) {
-      logger.info(`[Pipeline] 复用已有角色: ${char.name}`)
-      continue
-    }
+    if (characterIdMap.has(char.name)) continue
     try {
       const created = await characterDB.create({
         project_id: projectId,
@@ -215,10 +218,7 @@ export async function runPipeline(
 
   const sceneIdMap = new Map<string, string>(existingMatch.sceneMap)
   for (const scene of assets.scenes) {
-    if (sceneIdMap.has(scene.name)) {
-      logger.info(`[Pipeline] 复用已有场景: ${scene.name}`)
-      continue
-    }
+    if (sceneIdMap.has(scene.name)) continue
     try {
       const created = await sceneDB.create({
         project_id: projectId,
@@ -235,10 +235,7 @@ export async function runPipeline(
 
   const propIdMap = new Map<string, string>(existingMatch.propMap)
   for (const prop of assets.props) {
-    if (propIdMap.has(prop.name)) {
-      logger.info(`[Pipeline] 复用已有道具: ${prop.name}`)
-      continue
-    }
+    if (propIdMap.has(prop.name)) continue
     try {
       const created = await propDB.create({
         project_id: projectId,
@@ -272,203 +269,167 @@ export async function runPipeline(
     `道具: ${assets.props.map(p => p.name).join(', ')}`,
   ].join('\n')
 
-  const SEGMENT_SIZE = 3
-  const segments: PipelineScene[][] = []
-  for (let i = 0; i < scenes.length; i += SEGMENT_SIZE) {
-    segments.push(scenes.slice(i, i + SEGMENT_SIZE))
-  }
+  // ====== Step 2: 逐场景串行分镜拆解（保证连续性） ======
+  advanceStep('分镜拆解', 25)
 
-  interface SegmentResult {
-    segIdx: number
-    shots: PipelineShot[]
-    dubbingResults: PipelineDubbingResult[]
-    error?: string
-  }
+  const allShots: PipelineShot[] = []
+  const allDubbing: PipelineDubbingResult[] = []
+  let previousShotDesc = '（这是第一个场景，没有上一场景）'
 
-  const segmentResults: SegmentResult[] = []
+  for (let sceneIdx = 0; sceneIdx < scenes.length; sceneIdx++) {
+    const scene = scenes[sceneIdx]!
+    const scenePercent = 25 + Math.floor((sceneIdx / scenes.length) * 55)
 
-  advanceStep('并行分镜拆解', 30)
-
-  const scheduler = createProductionScheduler({ maxConcurrency: 3 })
-
-  scheduler.setProgressCallback((progress: ProductionProgress) => {
     onProgress?.({
       step: currentStep,
-      stepName: `并行分镜拆解 (${progress.running}运行中 / ${progress.completed}完成 / ${progress.failed}失败)`,
-      percent: 30 + Math.floor(progress.percent * 0.5),
+      stepName: `分镜拆解 (${sceneIdx + 1}/${scenes.length}): ${scene.name}`,
+      percent: scenePercent,
+      currentScene: sceneIdx + 1,
+      totalScenes: scenes.length,
+      sceneName: scene.name,
       totalSteps: 0,
     })
-  })
 
-  for (let segIdx = 0; segIdx < segments.length; segIdx++) {
-    const segment = segments[segIdx]!
-    const segmentScenesInfo = segment.map((scene, i) => {
-      const idx = segIdx * SEGMENT_SIZE + i + 1
-      return `--- 场景${idx}: ${scene.name} ---\n地点: ${scene.location}\n时间: ${scene.time}\n氛围: ${scene.mood}\n出场角色: ${scene.characters.join(', ')}\n叙事功能: ${scene.narrativeFunction}\n概要: ${scene.summary}`
-    }).join('\n\n')
+    const sceneInfo = `--- 场景${sceneIdx + 1}: ${scene.name} ---\n地点: ${scene.location}\n时间: ${scene.time}\n氛围: ${scene.mood}\n出场角色: ${scene.characters.join(', ')}\n叙事功能: ${scene.narrativeFunction}\n概要: ${scene.summary}`
 
-    const segmentOriginalText = segment
-      .map(s => s.originalText || s.summary)
-      .filter(Boolean)
-      .join('\n')
+    // 下一场景预告（用于场景退出铺垫）
+    const nextScene = scenes[sceneIdx + 1]
+    const nextSceneInfo = nextScene
+      ? `下一场景: ${nextScene.name}\n地点: ${nextScene.location}\n时间: ${nextScene.time}\n氛围: ${nextScene.mood}\n概要: ${nextScene.summary}`
+      : '（这是最后一个场景，无需退出铺垫）'
 
-    const segmentCharacterNames = [...new Set(segment.flatMap(s => s.characters))]
-    const characterPromptsStr = segmentCharacterNames
+    const sceneOriginalText = scene.originalText || scene.summary
+
+    const sceneCharacterNames = [...new Set(scene.characters)]
+    const characterPromptsStr = sceneCharacterNames
       .map(name => `${name}: ${characterPromptMap.get(name) || '未知角色'}`)
       .join('\n')
-    const scenePromptsStr = segment
-      .map(s => `${s.name}: ${scenePromptMap.get(s.name) || '未知场景'}`)
-      .join('\n')
+    const scenePromptsStr = `${scene.name}: ${scenePromptMap.get(scene.name) || '未知场景'}`
     const propPromptsStr = assets.props
       .map(p => `${p.name}: ${p.prompt}`)
       .join('\n')
 
-    scheduler.addTask({
-      id: `segment-${segIdx}`,
-      type: 'storyboard_breakdown',
-      name: `片段${segIdx + 1}: ${segment.map(s => s.name).join(' / ')}`,
-      maxRetries: 2,
-      metadata: {
-        segIdx,
-        segmentScenesInfo,
-        segmentOriginalText,
-        characterPromptsStr,
-        scenePromptsStr,
-        propPromptsStr,
-      },
-    })
+    try {
+      const breakdownPrompt = getActivePrompt('pipeline_storyboard_breakdown', {
+        sceneContent: sceneOriginalText,
+        sceneInfo,
+        previousShot: previousShotDesc,
+        nextSceneInfo,
+        assetList: assetListStr,
+        characterPrompts: characterPromptsStr,
+        scenePrompts: scenePromptsStr,
+        propPrompts: propPromptsStr,
+      })
+
+      const breakdownResult = await callAI(breakdownPrompt, { maxTokens: 16384 })
+      const shots: PipelineShot[] = parseJSON<PipelineShot[]>(breakdownResult)
+      logger.info(`[Pipeline] 场景${sceneIdx + 1} "${scene.name}" 拆解了 ${shots.length} 个镜头`)
+
+      if (shots.length > 0) {
+        allShots.push(...shots)
+        const lastShot = shots[shots.length - 1]!
+        previousShotDesc = [
+          `景别: ${lastShot.shot_type || '固定'}`,
+          `画面: ${lastShot.prompt || lastShot.description || ''}`,
+          `动态: ${lastShot.videoPrompt || ''}`,
+        ].join('\n')
+      }
+
+      try {
+        const shotsDescription = shots.map((shot, i) => {
+          const parts = [
+            `镜头${i + 1}:`,
+            `  画面: ${shot.description}`,
+            `  场景: ${shot.scene_id}`,
+            `  景别运镜: ${shot.shot_type}`,
+            `  时长: ${shot.duration}秒`,
+            `  出场角色: ${shot.characters.join(', ')}`,
+            `  出场道具: ${shot.props.join(', ') || '无'}`,
+          ]
+          return parts.join('\n')
+        }).join('\n\n')
+
+        const characterVoicesStr = assets.characters
+          .map(c => c.voiceProfile ? `${c.name}: ${c.voiceProfile}` : '')
+          .filter(Boolean)
+          .join('\n')
+
+        const dubbingPrompt = getActivePrompt('pipeline_dubbing_generation', {
+          shotsDescription,
+          characterVoices: characterVoicesStr || '无角色声音描述',
+        })
+        const dubbingResult = await callAI(dubbingPrompt)
+        const dubbing: PipelineDubbingResult[] = parseJSON<PipelineDubbingResult[]>(dubbingResult)
+        allDubbing.push(...dubbing)
+      } catch (e) {
+        logger.error(`[Pipeline] 配音生成失败，场景${sceneIdx + 1}`, e)
+      }
+    } catch (e) {
+      logger.error(`[Pipeline] 分镜拆解失败，场景${sceneIdx + 1} "${scene.name}"`, e)
+    }
   }
 
-  scheduler.registerExecutor('storyboard_breakdown', async (task: ProductionTask) => {
-    const { segIdx, segmentScenesInfo, segmentOriginalText, characterPromptsStr, scenePromptsStr, propPromptsStr } = task.metadata as {
-      segIdx: number
-      segmentScenesInfo: string
-      segmentOriginalText: string
-      characterPromptsStr: string
-      scenePromptsStr: string
-      propPromptsStr: string
-    }
-
-    const prevSegIdx = segIdx - 1
-    const previousShot = prevSegIdx >= 0 && segmentResults[prevSegIdx]
-      ? `镜号：${segmentResults[prevSegIdx]!.shots.slice(-1)[0]?.shot_type || '固定'}，${segmentResults[prevSegIdx]!.shots.slice(-1)[0]?.description || ''}`
-      : '（这是第一个场景，没有上一场景）'
-
-    const breakdownPrompt = getActivePrompt('pipeline_storyboard_breakdown', {
-      sceneContent: segmentOriginalText,
-      sceneInfo: segmentScenesInfo,
-      previousShot,
-      assetList: assetListStr,
-      characterPrompts: characterPromptsStr,
-      scenePrompts: scenePromptsStr,
-      propPrompts: propPromptsStr,
-    })
-
-    const breakdownResult = await callAI(breakdownPrompt)
-    const shots: PipelineShot[] = parseJSON<PipelineShot[]>(breakdownResult)
-    logger.info(`[Pipeline] 片段${segIdx + 1} 拆解了 ${shots.length} 个镜头`)
-
-    let dubbingResults: PipelineDubbingResult[] = []
-
-    // 构建shots描述用于配音生成
-    const shotsDescription = shots.map((shot, i) => {
-      const parts = [
-        `镜头${i + 1}:`,
-        `  画面: ${shot.description}`,
-        `  场景: ${shot.scene_id}`,
-        `  景别运镜: ${shot.shot_type}`,
-        `  时长: ${shot.duration}秒`,
-        `  出场角色: ${shot.characters.join(', ')}`,
-        `  出场道具: ${shot.props.join(', ') || '无'}`,
-      ]
-      return parts.join('\n')
-    }).join('\n\n')
-
-    // 配音生成（如果需要）
-    try {
-      const dubbingPrompt = getActivePrompt('pipeline_dubbing_generation', {
-        shotsDescription,
-      })
-      const dubbingResult = await callAI(dubbingPrompt)
-      dubbingResults = parseJSON<PipelineDubbingResult[]>(dubbingResult)
-    } catch (e) {
-      logger.error(`[Pipeline] 配音生成失败，片段${segIdx + 1}`, e)
-      dubbingResults = []
-    }
-
-    segmentResults[segIdx] = { segIdx, shots, dubbingResults }
-    return { shots, dubbingResults }
-  })
-
-  await scheduler.start()
-
+  // ====== Step 3: 保存分镜和配音到数据库 ======
   advanceStep('保存分镜数据', 85)
 
   let globalShotIndex = 0
-  for (let segIdx = 0; segIdx < segmentResults.length; segIdx++) {
-    const result = segmentResults[segIdx]
-    if (!result || result.shots.length === 0) continue
+  let dubbingIdx = 0
 
-    const { shots, dubbingResults } = result
-    let dubbingIdx = 0
+  for (const shot of allShots) {
+    globalShotIndex++
 
-    for (let shotIdx = 0; shotIdx < shots.length; shotIdx++) {
-      const shot = shots[shotIdx]!
-      globalShotIndex++
+    const promptText = shot.prompt || shot.description
+    const videoPromptText = shot.videoPrompt || shot.description
 
-      const promptText = shot.prompt || shot.description
-      const videoPromptText = shot.videoPrompt || shot.description
+    const characterIds = shot.characters
+      .map(name => characterIdMap.get(name))
+      .filter((id): id is string => !!id)
+    const sceneId = sceneIdMap.get(shot.scene_id) || undefined
+    const propIds = shot.props
+      .map(name => propIdMap.get(name))
+      .filter((id): id is string => !!id)
 
-      const characterIds = shot.characters
-        .map(name => characterIdMap.get(name))
-        .filter((id): id is string => !!id)
-      const sceneId = sceneIdMap.get(shot.scene_id) || undefined
-      const propIds = shot.props
-        .map(name => propIdMap.get(name))
-        .filter((id): id is string => !!id)
+    let createdStoryboard
+    try {
+      createdStoryboard = await storyboardDB.create({
+        project_id: projectId,
+        episode_id: episodeId,
+        name: `分镜 ${globalShotIndex}`,
+        description: shot.description,
+        prompt: promptText,
+        video_prompt: videoPromptText,
+        sort_order: globalShotIndex - 1,
+        status: 'pending',
+        character_ids: characterIds,
+        scene_id: sceneId,
+        prop_ids: propIds,
+        reference_images: [],
+        video_reference_images: [],
+      })
+    } catch (e) {
+      logger.error(`[Pipeline] 创建分镜失败: 分镜${globalShotIndex}`, e)
+      continue
+    }
 
-      let createdStoryboard
+    const sceneDubbing = allDubbing.filter(d =>
+      shot.characters.includes(d.character)
+    )
+    for (const item of sceneDubbing) {
+      dubbingIdx++
+      const characterId = characterIdMap.get(item.character)
       try {
-        createdStoryboard = await storyboardDB.create({
+        await dubbingDB.create({
           project_id: projectId,
-          episode_id: episodeId,
-          name: `分镜 ${globalShotIndex}`,
-          description: shot.description,
-          prompt: promptText,
-          video_prompt: videoPromptText,
-          sort_order: globalShotIndex - 1,
+          storyboard_id: createdStoryboard.id,
+          character_id: characterId || undefined,
+          text: item.line,
+          emotion: item.emotion,
+          audio_prompt: item.audio_prompt,
           status: 'pending',
-          character_ids: characterIds,
-          scene_id: sceneId,
-          prop_ids: propIds,
-          reference_images: [],
-          video_reference_images: [],
+          sequence: dubbingIdx,
         })
       } catch (e) {
-        logger.error(`[Pipeline] 创建分镜失败: 分镜${globalShotIndex}`, e)
-        continue
-      }
-
-      // 保存配音结果（如果有）
-      if (dubbingResults.length > 0) {
-        for (const item of dubbingResults) {
-          dubbingIdx++
-          const characterId = characterIdMap.get(item.character)
-          try {
-            await dubbingDB.create({
-              project_id: projectId,
-              storyboard_id: createdStoryboard.id,
-              character_id: characterId || undefined,
-              text: item.line,
-              emotion: item.emotion,
-              audio_prompt: item.audio_prompt,
-              status: 'pending',
-              sequence: dubbingIdx,
-            })
-          } catch (e) {
-            logger.error(`[Pipeline] 创建配音失败: ${item.character}`, e)
-          }
-        }
+        logger.error(`[Pipeline] 创建配音失败: ${item.character}`, e)
       }
     }
   }

@@ -691,7 +691,7 @@ export function AssetManagerPanel({ projectId, episodeId }: AssetManagerPanelPro
       "scene_id": "匹配既定场景名称",
       "props": ["道具名1", "道具名2"],
       "shot_type": "多景别连贯切换 / 单景别固定镜头",
-      "duration": 10
+      "duration": 15
     }
   ]
 }`)

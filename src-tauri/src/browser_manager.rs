@@ -18,6 +18,7 @@ pub struct BrowserProfile {
     pub color_scheme: String,
     pub data_dir: String,
     pub extensions: Vec<String>,
+    pub proxy: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,6 +70,132 @@ pub async fn detect_browser() -> Result<String, String> {
     Err("未找到 Chrome 或 Edge 浏览器".to_string())
 }
 
+/// 生成随机 User-Agent
+fn generate_random_ua() -> String {
+    let chrome_versions = [
+        "120.0.0.0", "121.0.0.0", "122.0.0.0", "123.0.0.0",
+        "124.0.0.0", "125.0.0.0", "126.0.0.0", "127.0.0.0",
+        "128.0.0.0", "129.0.0.0", "130.0.0.0", "131.0.0.0",
+    ];
+    let idx = rand::random::<usize>() % chrome_versions.len();
+    let ver = chrome_versions[idx];
+    format!(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{} Safari/537.36",
+        ver
+    )
+}
+
+/// 为每个 profile 生成指纹伪造扩展
+fn ensure_fingerprint_extension(app_data_dir: &std::path::Path, profile_id: &str) -> Option<PathBuf> {
+    let ext_dir = app_data_dir.join("browser_profiles").join(profile_id).join("_fingerprint_ext");
+    
+    // 如果已存在则直接返回
+    if ext_dir.join("manifest.json").exists() {
+        return Some(ext_dir);
+    }
+    
+    std::fs::create_dir_all(&ext_dir).ok()?;
+    
+    // 生成随机种子（每个账号不同，canvas/webgl 指纹就不同）
+    let seed: u32 = rand::random();
+    let noise_strength: f64 = (rand::random::<u32>() % 100) as f64 / 1000.0; // 0.000-0.099
+    
+    let manifest = serde_json::json!({
+        "manifest_version": 3,
+        "name": "Fingerprint Guard",
+        "version": "1.0",
+        "description": "Canvas/WebGL fingerprint noise injection",
+        "content_scripts": [{
+            "matches": ["<all_urls>"],
+            "js": ["inject.js"],
+            "run_at": "document_start",
+            "all_frames": true,
+            "world": "MAIN"
+        }]
+    });
+    
+    let inject_js = format!(r#"
+(function() {{
+    const seed = {seed};
+    const noise = {noise_strength};
+    
+    // Canvas 指纹伪造 - 注入微小噪声
+    const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
+    HTMLCanvasElement.prototype.toDataURL = function() {{
+        const ctx = this.getContext('2d');
+        if (ctx) {{
+            try {{
+                const imageData = ctx.getImageData(0, 0, this.width, this.height);
+                const data = imageData.data;
+                for (let i = 0; i < data.length; i += 4) {{
+                    // 用 seed 生成确定性噪声
+                    const n = ((Math.sin(i * seed) * 10000) % 1) * noise * 255;
+                    data[i] = Math.max(0, Math.min(255, data[i] + n));
+                }}
+                ctx.putImageData(imageData, 0, 0);
+            }} catch(e) {{}}
+        }}
+        return origToDataURL.apply(this, arguments);
+    }};
+    
+    const origToBlob = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function() {{
+        const ctx = this.getContext('2d');
+        if (ctx) {{
+            try {{
+                const imageData = ctx.getImageData(0, 0, this.width, this.height);
+                const data = imageData.data;
+                for (let i = 0; i < data.length; i += 4) {{
+                    const n = ((Math.sin(i * seed) * 10000) % 1) * noise * 255;
+                    data[i] = Math.max(0, Math.min(255, data[i] + n));
+                }}
+                ctx.putImageData(imageData, 0, 0);
+            }} catch(e) {{}}
+        }}
+        return origToBlob.apply(this, arguments);
+    }};
+    
+    // WebGL 指纹伪造
+    const origGetParameter = WebGLRenderingContext.prototype.getParameter;
+    WebGLRenderingContext.prototype.getParameter = function(param) {{
+        // VENDOR
+        if (param === 37445) return 'Google Inc. (NVIDIA)';
+        // RENDERER
+        if (param === 37446) return 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)';
+        return origGetParameter.apply(this, arguments);
+    }};
+    
+    try {{
+        const origGetParameter2 = WebGL2RenderingContext.prototype.getParameter;
+        WebGL2RenderingContext.prototype.getParameter = function(param) {{
+            if (param === 37445) return 'Google Inc. (NVIDIA)';
+            if (param === 37446) return 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)';
+            return origGetParameter2.apply(this, arguments);
+        }};
+    }} catch(e) {{}}
+    
+    // AudioContext 指纹伪造
+    const origCreateAnalyser = AudioContext.prototype.createAnalyser;
+    AudioContext.prototype.createAnalyser = function() {{
+        const analyser = origCreateAnalyser.apply(this, arguments);
+        const origGetFloatFrequencyData = analyser.getFloatFrequencyData;
+        analyser.getFloatFrequencyData = function(array) {{
+            origGetFloatFrequencyData.apply(this, arguments);
+            for (let i = 0; i < array.length; i++) {{
+                array[i] += ((Math.sin(i * seed) * 10000) % 1) * noise * 10;
+            }}
+        }};
+        return analyser;
+    }};
+}})();
+"#);
+    
+    std::fs::write(ext_dir.join("manifest.json"), manifest.to_string()).ok()?;
+    std::fs::write(ext_dir.join("inject.js"), inject_js).ok()?;
+    
+    Some(ext_dir)
+}
+
 /// 创建新的浏览器窗口 - 使用独立进程模式
 #[command]
 pub async fn create_browser_window(
@@ -92,19 +219,36 @@ pub async fn create_browser_window(
     let extensions_dir = app_data_dir.join("browser_extensions");
     std::fs::create_dir_all(&extensions_dir).ok();
     
+    // 生成指纹伪造扩展（每个账号独立 seed）
+    let fingerprint_ext = ensure_fingerprint_extension(&app_data_dir, &profile.id);
+    
     // 生成独立端口
     let debug_port = 19222 + rand::random::<u16>() % 1000;
     
     // 窗口位置偏移
     let window_offset = rand::random::<i32>() % 100;
     
-    // 关键：使用 --single-process 模式禁用多进程，强制每个实例完全独立
+    // 随机分辨率（从常见分辨率中选）
+    let resolutions = [
+        (1366, 768), (1920, 1080), (1440, 900), (1536, 864),
+        (1600, 900), (1280, 720), (1280, 800),
+    ];
+    let (vp_w, vp_h) = if profile.viewport_width > 0 && profile.viewport_height > 0 {
+        (profile.viewport_width, profile.viewport_height)
+    } else {
+        let idx = rand::random::<usize>() % resolutions.len();
+        resolutions[idx]
+    };
+    
+    // 随机 UA（如果 profile 未指定）
+    let user_agent = profile.user_agent.clone()
+        .unwrap_or_else(generate_random_ua);
+    
     let mut args = vec![
         format!("--user-data-dir={}", user_data_dir.to_string_lossy()),
-        format!("--window-size=1366,768"),
+        format!("--window-size={},{}", vp_w, vp_h),
         format!("--window-position={},100", 100 + window_offset),
         format!("--remote-debugging-port={}", debug_port),
-        // 强制独立实例的关键参数
         "--no-first-run".to_string(),
         "--no-default-browser-check".to_string(),
         "--disable-default-apps".to_string(),
@@ -117,28 +261,25 @@ pub async fn create_browser_window(
         "--disable-ipc-flooding-protection".to_string(),
         "--disable-hang-monitor".to_string(),
         "--force-color-profile=srgb".to_string(),
-        "--disable-gpu".to_string(),
-        "--disable-software-rasterizer".to_string(),
         "--disable-dev-shm-usage".to_string(),
         "--disable-breakpad".to_string(),
         "--disable-crash-reporter".to_string(),
         "--disable-features=IsolateOrigins,site-per-process".to_string(),
-        "--allow-running-insecure-content".to_string(),
         "--disable-site-isolation-trials".to_string(),
-        "--disable-web-security".to_string(),
-        "--disable-features=CrossSiteDocumentBlocking".to_string(),
-        // 禁用单实例检查
-        "--disable-features=ChromeSingle".to_string(),
+        "--disable-features=CrossSiteDocumentBlocking,ChromeSingle".to_string(),
         "--disable-backgrounding-occluded-windows".to_string(),
         format!("--lang={}", profile.locale),
+        format!("--user-agent={}", user_agent),
     ];
     
-    // User-Agent
-    if let Some(ua) = &profile.user_agent {
-        args.push(format!("--user-agent={}", ua));
+    // 代理配置
+    if let Some(proxy) = &profile.proxy {
+        if !proxy.is_empty() {
+            args.push(format!("--proxy-server={}", proxy));
+        }
     }
     
-    // 加载扩展
+    // 加载扩展（用户扩展 + 指纹扩展）
     let mut load_extensions = vec![];
     if let Ok(entries) = std::fs::read_dir(&extensions_dir) {
         for entry in entries.flatten() {
@@ -147,6 +288,9 @@ pub async fn create_browser_window(
                 load_extensions.push(path.to_string_lossy().to_string());
             }
         }
+    }
+    if let Some(fp_ext) = &fingerprint_ext {
+        load_extensions.push(fp_ext.to_string_lossy().to_string());
     }
     
     if !load_extensions.is_empty() {
@@ -164,7 +308,6 @@ pub async fn create_browser_window(
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
-        // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP - 完全独立的进程
         cmd.creation_flags(0x00000008 | 0x00000200);
     }
     
@@ -173,7 +316,6 @@ pub async fn create_browser_window(
     
     let pid = child.id();
     
-    // 记录进程
     if let Ok(mut processes) = BROWSER_PROCESSES.lock() {
         processes.insert(profile.id.clone(), pid);
     }

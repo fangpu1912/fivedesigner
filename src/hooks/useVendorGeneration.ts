@@ -258,6 +258,8 @@ export function useImageGeneration() {
           imageBase64,
           imageUrls,
           maskBase64: maskBase64 || undefined,
+          width: request.width,
+          height: request.height,
           size: request.width && request.height
             ? getImageSize(request.width, request.height)
             : '1K' as const,

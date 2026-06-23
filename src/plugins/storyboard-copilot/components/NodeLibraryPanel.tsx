@@ -15,6 +15,8 @@ import {
   SplitSquareHorizontal,
   Workflow,
   Wallet,
+  FolderOpen,
+  Eraser,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -45,6 +47,8 @@ const nodeIcons: Record<CanvasNodeType, React.ReactNode> = {
   [CANVAS_NODE_TYPES.imageCompare]: <SplitSquareHorizontal className="h-3.5 w-3.5" />,
   [CANVAS_NODE_TYPES.runninghub]: <Workflow className="h-3.5 w-3.5" />,
   [CANVAS_NODE_TYPES.runninghubWallet]: <Wallet className="h-3.5 w-3.5" />,
+  [CANVAS_NODE_TYPES.batchUpload]: <FolderOpen className="h-3.5 w-3.5" />,
+  [CANVAS_NODE_TYPES.comfyUIEdit]: <Eraser className="h-3.5 w-3.5" />,
 }
 
 export function NodeLibraryPanel({ onAddNode }: NodeLibraryPanelProps) {

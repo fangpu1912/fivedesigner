@@ -2,7 +2,9 @@ import { CANVAS_NODE_TYPES } from '../../types'
 
 import { AIImageEditNode } from './AIImageEditNode'
 import { AudioUploadNode } from './AudioUploadNode'
+import { BatchUploadNode } from './BatchUploadNode'
 import { BlankImageNode } from './BlankImageNode'
+import { ComfyUIEditNode } from './ComfyUIEditNode'
 import { CustomEdge } from './CustomEdge'
 import { ExecutionStatusBadge, NodeExecutionOverlay, type ExecutionStatus } from './ExecutionStatusBadge'
 import { ImageCompareNode } from './ImageCompareNode'
@@ -35,6 +37,8 @@ export const nodeTypes = {
   [CANVAS_NODE_TYPES.imageCompare]: ImageCompareNode,
   [CANVAS_NODE_TYPES.runninghub]: RunningHubNode,
   [CANVAS_NODE_TYPES.runninghubWallet]: RunningHubNode,
+  [CANVAS_NODE_TYPES.batchUpload]: BatchUploadNode,
+  [CANVAS_NODE_TYPES.comfyUIEdit]: ComfyUIEditNode,
 } as unknown as NodeTypes
 
 export const edgeTypes = {
@@ -45,6 +49,6 @@ export {
   UploadNode, ImageEditNode, AIImageEditNode, BlankImageNode, StoryboardNode,
   SceneDirectorNode, TextAnnotationNode, UpscaleNode, CustomEdge, VideoGenNode,
   VideoUploadNode, AudioUploadNode, ImageToPromptNode,
-  ImageCompareNode, RunningHubNode,
+  ImageCompareNode, RunningHubNode, BatchUploadNode, ComfyUIEditNode,
   ExecutionStatusBadge, NodeExecutionOverlay, type ExecutionStatus
 }

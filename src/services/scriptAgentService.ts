@@ -1,5 +1,5 @@
-import { AI } from '@/services/vendor/aiService'
 import { getActivePrompt } from '@/services/promptConfigService'
+import { parseJSON, callAI } from '@/utils/aiHelper'
 
 export interface StoryStructure {
   mainPlot: string
@@ -53,65 +53,6 @@ export interface ScriptAgentProgress {
 }
 
 export type ScriptAgentProgressCallback = (progress: ScriptAgentProgress) => void
-
-function parseJSON<T>(text: string): T {
-  let cleaned = text.trim()
-
-  const codeBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (codeBlockMatch) {
-    cleaned = codeBlockMatch[1]!.trim()
-  }
-
-  try {
-    return JSON.parse(cleaned) as T
-  } catch {}
-
-  const firstObj = cleaned.indexOf('{')
-  if (firstObj === -1) {
-    throw new Error(`无法从AI响应中提取JSON: ${cleaned.substring(0, 200)}`)
-  }
-
-  let depth = 0
-  let inStr = false
-  let escape = false
-  for (let i = firstObj; i < cleaned.length; i++) {
-    const ch = cleaned[i]
-    if (escape) { escape = false; continue }
-    if (ch === '\\' && inStr) { escape = true; continue }
-    if (ch === '"') { inStr = !inStr; continue }
-    if (inStr) continue
-    if (ch === '{') depth++
-    if (ch === '}') {
-      depth--
-      if (depth === 0) {
-        const candidate = cleaned.substring(firstObj, i + 1)
-        try {
-          return JSON.parse(candidate) as T
-        } catch {}
-        break
-      }
-    }
-  }
-
-  throw new Error(`无法解析AI响应为JSON: ${cleaned.substring(0, 300)}`)
-}
-
-async function callAI(prompt: string): Promise<string> {
-  try {
-    const result = await AI.Text.generate({
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
-      maxTokens: 8192,
-    })
-    if (!result) {
-      throw new Error('AI 返回了空结果')
-    }
-    return result
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : (typeof error === 'string' ? error : JSON.stringify(error))
-    throw new Error(`AI 生成失败: ${msg}`)
-  }
-}
 
 export async function analyzeNovelStructure(
   content: string,

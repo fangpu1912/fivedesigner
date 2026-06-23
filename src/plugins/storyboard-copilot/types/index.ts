@@ -18,6 +18,8 @@ export const CANVAS_NODE_TYPES = {
   imageCompare: 'imageCompareNode',
   runninghub: 'runninghubNode',
   runninghubWallet: 'runninghubWalletNode',
+  batchUpload: 'batchUploadNode',
+  comfyUIEdit: 'comfyUIEditNode',
 } as const
 
 export type CanvasNodeType = (typeof CANVAS_NODE_TYPES)[keyof typeof CANVAS_NODE_TYPES]
@@ -294,6 +296,44 @@ export interface RunningHubNodeData extends NodeDisplayData {
 // 文本注释节点数据（别名，用于 CanvasNodeData 联合类型）
 export type TextNodeData = TextAnnotationNodeData
 
+// 批量上传节点数据
+export type BatchMediaType = 'image' | 'video' | 'audio'
+
+export interface BatchUploadItem {
+  id: string
+  mediaUrl: string       // 统一媒体路径（图片/视频/音频）
+  mediaType: BatchMediaType
+  sourceFileName: string
+  status: 'pending' | 'done' | 'error'
+}
+
+export interface BatchUploadNodeData extends NodeDisplayData {
+  items: BatchUploadItem[]
+  sourceFolder?: string | null
+}
+
+// ComfyUI 编辑节点数据
+export interface ComfyUIEditItem {
+  id: string
+  inputUrl: string | null       // 输入媒体路径
+  inputType: BatchMediaType     // 输入类型
+  outputUrl: string | null      // 输出媒体路径
+  outputType?: BatchMediaType   // 输出类型（默认与输入一致）
+  sourceFileName?: string
+  status: 'pending' | 'processing' | 'done' | 'error'
+  progress?: number
+  error?: string
+}
+
+export interface ComfyUIEditNodeData extends NodeDisplayData {
+  items: ComfyUIEditItem[]
+  workflowId?: string
+  workflowName?: string
+  isProcessing: boolean
+  currentProgress: number
+  batchSize: number
+}
+
 // 联合类型
 export type CanvasNodeData =
   | UploadImageNodeData
@@ -309,6 +349,8 @@ export type CanvasNodeData =
   | AudioUploadNodeData
   | ImageToPromptNodeData
   | RunningHubNodeData
+  | BatchUploadNodeData
+  | ComfyUIEditNodeData
 
 // ==================== 画布类型 ====================
 export interface CanvasNode {

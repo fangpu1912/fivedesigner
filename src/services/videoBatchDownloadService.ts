@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { secureStorage } from '@/services/secureStorage'
 import logger from '@/utils/logger'
 
 export interface VideoDownloadTask {
@@ -37,6 +38,9 @@ type DownloadEventHandler = (event: DownloadEvent) => void
 
 const COOKIES_STORAGE_KEY = 'video_download_cookies'
 
+// 缓存避免每次都读文件
+let cookiesCache: string | null = null
+
 let taskCounter = 0
 
 function generateTaskId(): string {
@@ -73,20 +77,25 @@ class VideoBatchDownloadService {
 
   setCookies(value: string) {
     this._cookies = value
-    try {
-      localStorage.setItem(COOKIES_STORAGE_KEY, value)
-    } catch {}
+    cookiesCache = value
+    secureStorage.set(COOKIES_STORAGE_KEY, value).catch(() => {})
   }
 
-  loadCookies() {
+  async loadCookies() {
+    if (cookiesCache !== null) {
+      this._cookies = cookiesCache
+      return
+    }
     try {
-      this._cookies = localStorage.getItem(COOKIES_STORAGE_KEY) || ''
+      const value = await secureStorage.get(COOKIES_STORAGE_KEY)
+      this._cookies = value || ''
+      cookiesCache = this._cookies
     } catch {}
   }
 
   async init() {
     if (this.tauriListener) return
-    this.loadCookies()
+    await this.loadCookies()
 
     this.tauriListener = await listen<VideoDownloadProgress>('download-video-progress', (event) => {
       const payload = event.payload

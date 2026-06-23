@@ -291,6 +291,41 @@ export const nodeDefinitions: NodeDefinition[] = [
       showGrid: true,
     },
   },
+
+  // ==================== 批量处理 ====================
+  {
+    type: CANVAS_NODE_TYPES.batchUpload,
+    label: '批量上传',
+    category: 'input',
+    description: '批量上传图片或选择文件夹，输出多张图片供下游批量处理',
+    outputs: [
+      { id: 'images', name: 'images', type: 'image', label: '图片列表' },
+    ],
+    defaultProperties: {
+      items: [],
+      sourceFolder: null,
+    },
+  },
+  {
+    type: CANVAS_NODE_TYPES.comfyUIEdit,
+    label: 'ComfyUI编辑',
+    category: 'image',
+    description: '使用ComfyUI工作流批量处理图片（去水印、字幕、风格迁移等）',
+    inputs: [
+      { id: 'target', name: 'target', type: 'image', label: '图片', required: true },
+    ],
+    outputs: [
+      { id: 'source', name: 'source', type: 'image', label: '处理结果' },
+    ],
+    defaultProperties: {
+      items: [],
+      workflowId: '',
+      workflowName: '',
+      isProcessing: false,
+      currentProgress: 0,
+      batchSize: 1,
+    },
+  },
 ]
 
 export const nodeCategories = [
@@ -341,6 +376,8 @@ export function getDefaultNodeDimensions(type: CanvasNodeType) {
     [CANVAS_NODE_TYPES.imageCompare]: { width: 320, height: 280 },
     [CANVAS_NODE_TYPES.runninghub]: { width: 380, height: 480 },
     [CANVAS_NODE_TYPES.runninghubWallet]: { width: 380, height: 480 },
+    [CANVAS_NODE_TYPES.batchUpload]: { width: 320, height: 400 },
+    [CANVAS_NODE_TYPES.comfyUIEdit]: { width: 360, height: 500 },
   }
   return defaults[type]
 }
@@ -369,6 +406,8 @@ export const NODE_HANDLES: Record<string, { source: string[]; target: string[] }
   [CANVAS_NODE_TYPES.imageCompare]: { source: [], target: ['left', 'right'] },
   [CANVAS_NODE_TYPES.runninghub]: { source: ['output'], target: ['input'] },
   [CANVAS_NODE_TYPES.runninghubWallet]: { source: ['output'], target: ['input'] },
+  [CANVAS_NODE_TYPES.batchUpload]: { source: ['images'], target: [] },
+  [CANVAS_NODE_TYPES.comfyUIEdit]: { source: ['source'], target: ['target'] },
 }
 
 export function isValidEdge(

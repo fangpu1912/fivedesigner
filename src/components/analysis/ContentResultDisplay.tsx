@@ -1,7 +1,8 @@
-import { Sparkles, FileText, Video } from 'lucide-react'
-import { ReactNode } from 'react'
+import { type ReactNode } from 'react'
+
 import { save } from '@tauri-apps/plugin-dialog'
 import { writeFile } from '@tauri-apps/plugin-fs'
+import { Sparkles, FileText, Video } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -41,11 +42,19 @@ export interface ContentStoryboard {
   duration?: string
 }
 
+export interface ContentDubbing {
+  character: string
+  line: string
+  emotion: string
+  audio_prompt: string
+}
+
 export interface ContentData {
   characters: ContentCharacter[]
   scenes: ContentScene[]
   props: ContentProp[]
   storyboards: ContentStoryboard[]
+  dubbing?: ContentDubbing[]
 }
 
 interface ContentResultDisplayProps {

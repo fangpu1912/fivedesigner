@@ -340,7 +340,7 @@ export const analysisService = {
       const response = await AI.VL.analyze({
         messages,
         temperature: 0.7,
-        maxTokens: 4096,
+        maxTokens: 16384,
       })
 
       // 解析 AI 响应
@@ -348,32 +348,83 @@ export const analysisService = {
       try {
         const text = typeof response === 'string' ? response : JSON.stringify(response)
         logger.info('[AnalysisService] AI response length:', text.length, 'first 200:', text.substring(0, 200))
+        logger.info('[AnalysisService] AI response last 200:', text.substring(Math.max(0, text.length - 200)))
         
-        // 尝试多种 JSON 提取方式
-        let jsonStr: string | null = null
+        let parsed: unknown = null
         
-        // 1. 尝试提取 markdown 代码块中的 JSON
-        const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
-        if (codeBlockMatch && codeBlockMatch[1]) {
-          jsonStr = codeBlockMatch[1].trim()
+        // 1. 尝试直接解析整个文本
+        try {
+          parsed = JSON.parse(text)
+          logger.info('[AnalysisService] Step 1 (direct parse) succeeded')
+        } catch (e1) {
+          logger.info('[AnalysisService] Step 1 (direct parse) failed:', e1 instanceof Error ? e1.message : String(e1))
         }
         
-        // 2. 尝试直接匹配 JSON 对象
-        if (!jsonStr) {
-          const jsonMatch = text.match(/\{[\s\S]*\}/)
-          if (jsonMatch) {
-            jsonStr = jsonMatch[0]
+        // 2. 尝试提取 markdown 代码块中的 JSON
+        if (!parsed) {
+          const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
+          if (codeBlockMatch && codeBlockMatch[1]) {
+            const extracted = codeBlockMatch[1].trim()
+            logger.info('[AnalysisService] Step 2 (code block) extracted length:', extracted.length, 'first 100:', extracted.substring(0, 100))
+            try {
+              parsed = JSON.parse(extracted)
+              logger.info('[AnalysisService] Step 2 (code block) succeeded')
+            } catch (e2) {
+              logger.info('[AnalysisService] Step 2 (code block) parse failed:', e2 instanceof Error ? e2.message : String(e2))
+            }
+          } else {
+            logger.info('[AnalysisService] Step 2: no code block match found')
           }
         }
         
-        if (jsonStr) {
-          const parsed = JSON.parse(jsonStr)
+        // 3. 尝试提取第一个 { 和最后一个 } 之间的内容
+        if (!parsed) {
+          const firstBrace = text.indexOf('{')
+          const lastBrace = text.lastIndexOf('}')
+          if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+            const extracted = text.substring(firstBrace, lastBrace + 1)
+            logger.info('[AnalysisService] Step 3 (brace extraction) length:', extracted.length)
+            try {
+              parsed = JSON.parse(extracted)
+              logger.info('[AnalysisService] Step 3 (brace extraction) succeeded')
+            } catch (e3) {
+              logger.info('[AnalysisService] Step 3 (brace extraction) parse failed:', e3 instanceof Error ? e3.message : String(e3))
+              // 尝试修复常见的 JSON 截断问题
+              try {
+                const fixed = extracted.replace(/,\s*([}\]])/g, '$1')
+                parsed = JSON.parse(fixed)
+                logger.info('[AnalysisService] Step 3 (fixed trailing comma) succeeded')
+              } catch {
+                // 最终尝试：逐字符匹配大括号
+                let depth = 0
+                let endIdx = -1
+                for (let i = firstBrace; i < text.length; i++) {
+                  if (text[i] === '{') depth++
+                  else if (text[i] === '}') depth--
+                  if (depth === 0) { endIdx = i; break }
+                }
+                if (endIdx > firstBrace) {
+                  const balanced = text.substring(firstBrace, endIdx + 1)
+                  try {
+                    parsed = JSON.parse(balanced)
+                    logger.info('[AnalysisService] Step 3 (balanced brace) succeeded')
+                  } catch (e4) {
+                    logger.info('[AnalysisService] Step 3 (balanced brace) failed:', e4 instanceof Error ? e4.message : String(e4))
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        if (parsed) {
           result = this.normalizeAnalysisResult(parsed)
         } else {
+          logger.error('[AnalysisService] All JSON parsing attempts failed. Response type:', typeof response, 'length:', text.length)
           throw new Error('AI 返回的结果无法解析为 JSON')
         }
       } catch (parseError) {
-        logger.error('[AnalysisService] Failed to parse analysis result:', parseError)
+        logger.error('[AnalysisService] Failed to parse analysis result:', parseError instanceof Error ? parseError.message : String(parseError))
         throw new Error('分析结果解析失败，请检查 AI 服务配置')
       }
 
@@ -398,58 +449,79 @@ export const analysisService = {
   normalizeAnalysisResult(parsed: unknown): AnalysisResult {
     const data = parsed as Record<string, unknown>
 
-    // 提取角色列表用于后续分镜提示词生成
-    const characters = Array.isArray(data.characters)
-      ? data.characters.map((c: unknown, index: number) => {
+    // 辅助函数：获取数组字段（支持多种字段名变体）
+    const getArrayField = (fieldNames: string[]): unknown[] => {
+      for (const name of fieldNames) {
+        const value = data[name]
+        if (Array.isArray(value) && value.length > 0) {
+          return value
+        }
+      }
+      return []
+    }
+
+    // 提取角色列表（支持 characters / character / roles / casts 等字段名）
+    const characterList = getArrayField(['characters', 'character', 'roles', 'casts', '人物', '角色'])
+    const characters = characterList.length > 0
+      ? characterList.map((c: unknown, index: number) => {
           const char = c as Record<string, unknown>
           return {
-            character_id: Number(char.character_id || index + 1),
-            name: String(char.name || `角色${index + 1}`),
-            description: String(char.description || ''),
-            prompt: String(char.prompt || char.appearance_prompt || ''),
+            character_id: Number(char.character_id || char.id || index + 1),
+            name: String(char.name || char.character_name || `角色${index + 1}`),
+            description: String(char.description || char.desc || char.introduction || ''),
+            prompt: String(char.prompt || char.appearance_prompt || char.image_prompt || ''),
             wardrobeVariants: char.wardrobeVariants ? String(char.wardrobeVariants) : undefined,
             replacement_image: null,
           }
         })
       : []
 
-    const scenes = Array.isArray(data.scenes)
-      ? data.scenes.map((s: unknown, index: number) => {
+    // 提取场景列表（支持 scenes / scene / locations / settings / backgrounds 等字段名）
+    const sceneList = getArrayField(['scenes', 'scene', 'locations', 'settings', 'backgrounds', '场景', '地点'])
+    const scenes = sceneList.length > 0
+      ? sceneList.map((s: unknown, index: number) => {
           const scene = s as Record<string, unknown>
           return {
-            scene_id: Number(scene.scene_id || index + 1),
-            name: String(scene.name || `场景${index + 1}`),
-            description: String(scene.description || ''),
-            prompt: String(scene.prompt || ''),
+            scene_id: Number(scene.scene_id || scene.id || index + 1),
+            name: String(scene.name || scene.scene_name || `场景${index + 1}`),
+            description: String(scene.description || scene.desc || ''),
+            prompt: String(scene.prompt || scene.image_prompt || ''),
           }
         })
       : []
 
-    const props = Array.isArray(data.props)
-      ? data.props.map((p: unknown, index: number) => {
+    // 提取道具列表（支持 props / prop / items / objects 等字段名）
+    const propList = getArrayField(['props', 'prop', 'items', 'objects', '道具', '物品'])
+    const props = propList.length > 0
+      ? propList.map((p: unknown, index: number) => {
           const prop = p as Record<string, unknown>
           return {
-            prop_id: Number(prop.prop_id || index + 1),
-            name: String(prop.name || `道具${index + 1}`),
-            description: String(prop.description || ''),
-            prompt: String(prop.prompt || ''),
+            prop_id: Number(prop.prop_id || prop.id || index + 1),
+            name: String(prop.name || prop.prop_name || `道具${index + 1}`),
+            description: String(prop.description || prop.desc || ''),
+            prompt: String(prop.prompt || prop.image_prompt || ''),
           }
         })
       : []
 
+    // 提取分镜列表（支持 storyboards / shots / scenes / cuts / frames / 分镜 / 镜头 等字段名）
+    const storyboardList = getArrayField([
+      'storyboards', 'shots', 'cuts', 'frames', '分镜', '镜头',
+      'scenes', 'scene', 'shots_list', 'storyboard_list'
+    ])
     // 处理分镜：直接使用AI返回的结果，不做自动生成
-    const storyboards = Array.isArray(data.storyboards || data.scenes)
-      ? ((data.storyboards || data.scenes) as unknown[]).map((s: unknown, index: number) => {
+    const storyboards = storyboardList.length > 0
+      ? storyboardList.map((s: unknown, index: number) => {
           const sb = s as Record<string, unknown>
           return {
-            storyboard_id: Number(sb.storyboard_id || sb.scene_id || index + 1),
-            timestamp: String(sb.timestamp || ''),
-            duration: Number(sb.duration || 5),
-            shot_type: String(sb.shot_type || ''),
-            camera_motion: String(sb.camera_motion || ''),
-            description: String(sb.description || sb.voiceover || ''),
-            prompt: String(sb.prompt || sb.image_prompt || ''),
-            videoPrompt: String(sb.videoPrompt || sb.video_prompt || ''),
+            storyboard_id: Number(sb.storyboard_id || sb.shot_id || sb.scene_id || sb.id || index + 1),
+            timestamp: String(sb.timestamp || sb.time || ''),
+            duration: Number(sb.duration || sb.length || 5),
+            shot_type: String(sb.shot_type || sb.shotType || sb.camera_angle || ''),
+            camera_motion: String(sb.camera_motion || sb.cameraMovement || ''),
+            description: String(sb.description || sb.desc || sb.voiceover || sb.content || ''),
+            prompt: String(sb.prompt || sb.image_prompt || sb.imagePrompt || ''),
+            videoPrompt: String(sb.videoPrompt || sb.video_prompt || sb.videoPrompt || sb.motion_prompt || ''),
             scene_id: sb.scene_id ? String(sb.scene_id) : undefined,
             characters: Array.isArray(sb.characters) ? sb.characters.map(String) : undefined,
             props: Array.isArray(sb.props) ? sb.props.map(String) : undefined,
@@ -458,10 +530,18 @@ export const analysisService = {
         })
       : []
 
+    logger.info('[AnalysisService] Normalized result:', {
+      characters: characters.length,
+      scenes: scenes.length,
+      props: props.length,
+      storyboards: storyboards.length,
+      availableFields: Object.keys(data),
+    })
+
     return {
-      title: String(data.title || '未命名视频'),
-      style: String(data.style || ''),
-      aspect_ratio: String(data.aspect_ratio || '9:16'),
+      title: String(data.title || data.name || '未命名视频'),
+      style: String(data.style || data.visual_style || data.style_description || ''),
+      aspect_ratio: String(data.aspect_ratio || data.aspectRatio || data.ratio || '9:16'),
       characters,
       scenes,
       props,

@@ -1,8 +1,8 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 
-import { type Editor } from '@tiptap/react'
 import { confirm, save } from '@tauri-apps/plugin-dialog'
 import { writeFile } from '@tauri-apps/plugin-fs'
+import { type Editor } from '@tiptap/react'
 import {
   MessageSquare,
   Send,
@@ -33,27 +33,27 @@ import {
   X,
 } from 'lucide-react'
 
+import { AutoPipelinePanel } from '@/components/ai/AutoPipelinePanel'
 import { RichTextEditor } from '@/components/editor'
 import { MarkdownPreview } from '@/components/editor/MarkdownPreview'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
+import { Textarea } from '@/components/ui/textarea'
+import { useScenes, useProps } from '@/hooks/useAssetManager'
+import { useAutoPipeline } from '@/hooks/useAutoPipeline'
+import { useCharacters } from '@/hooks/useCharacters'
+import { useDubbingByEpisode } from '@/hooks/useDubbing'
+import { useEpisodeQuery } from '@/hooks/useEpisodes'
+import { useNovelPipeline } from '@/hooks/useNovelPipeline'
+import { useScriptQuery, useUpdateScriptMutation, useCreateScriptMutation } from '@/hooks/useScript'
+import { useStoryboardMutations, useStoryboards } from '@/hooks/useStoryboards'
 import { useToast } from '@/hooks/useToast'
 import { cn } from '@/lib/utils'
+import { getActivePrompt } from '@/services/promptConfigService'
 import { AI } from '@/services/vendor'
 import { useUIStore } from '@/store/useUIStore'
-import { useEpisodeQuery } from '@/hooks/useEpisodes'
-import { useScriptQuery, useUpdateScriptMutation, useCreateScriptMutation } from '@/hooks/useScript'
-import { useCharacters } from '@/hooks/useCharacters'
-import { useScenes } from '@/hooks/useAssetManager'
-import { useProps } from '@/hooks/useAssetManager'
-import { useStoryboardMutations, useStoryboards } from '@/hooks/useStoryboards'
-import { useDubbingByEpisode } from '@/hooks/useDubbing'
-import { useNovelPipeline } from '@/hooks/useNovelPipeline'
-import { useAutoPipeline } from '@/hooks/useAutoPipeline'
-import { AutoPipelinePanel } from '@/components/ai/AutoPipelinePanel'
 
 interface OutlineItem {
   id: string
@@ -445,9 +445,15 @@ export const ScriptCreation: React.FC = () => {
     setIsGenerating(true)
 
     try {
-      // 直接使用 AI.Text.generate，不指定 modelName，让它自动使用 universalAi 配置
+      const charactersStr = dbCharacters.map(c => c.name).join(', ')
+      const systemPrompt = getActivePrompt('assistant_chat', {
+        content: content.substring(0, 8000),
+        characters: charactersStr || '暂无角色',
+      })
+
       const response = await AI.Text.generate({
         messages: [
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: messageContent },
         ],
       })

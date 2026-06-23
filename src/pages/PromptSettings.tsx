@@ -33,6 +33,8 @@ import {
   Video,
 } from 'lucide-react'
 
+import { PromptEditor } from '@/components/prompt/PromptEditor'
+import { PromptTester } from '@/components/prompt/PromptTester'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -74,8 +76,6 @@ import {
 } from '@/services/promptConfigService'
 import type { PromptTemplate, PromptType, PromptPreset } from '@/types/prompt'
 import { PROMPT_TYPE_CONFIG, POPULAR_PROMPT_PRESETS } from '@/types/prompt'
-import { PromptEditor } from '@/components/prompt/PromptEditor'
-import { PromptTester } from '@/components/prompt/PromptTester'
 // PromptDiffViewer imported for future use in version comparison feature
 import { optimizePrompt } from '@/utils/promptAnalyzer'
 
@@ -96,6 +96,7 @@ const TYPE_ICONS: Record<PromptType, React.ReactNode> = {
   script_adaptation_strategy: <GitBranch className="h-4 w-4" />,
   script_outline_generation: <ListTree className="h-4 w-4" />,
   inspiration_creation: <Sparkles className="h-4 w-4" />,
+  inspiration_story_generation: <BookOpen className="h-4 w-4" />,
   video_remake: <Video className="h-4 w-4" />,
 }
 

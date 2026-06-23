@@ -75,8 +75,15 @@ export function usePythonTTSGeneration() {
  * TTS 流式生成 Hook
  */
 export function usePythonTTSStream() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (request: TTSGenerationRequest) => pythonApi.generateTTSStream(request),
+    onSettled: (_, __, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: pythonQueryKeys.taskRecords(variables.project_id),
+      });
+    },
   });
 }
 

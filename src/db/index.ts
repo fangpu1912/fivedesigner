@@ -599,7 +599,7 @@ class SQLiteDatabase {
       sql += ' AND (episode_id = $2 OR episode_id IS NULL)'
       params.push(filters.episodeId)
     }
-    sql += ' ORDER BY created_at DESC'
+    sql += ' ORDER BY created_at ASC'
     const rows = await db.select<Record<string, unknown>[]>(sql, params)
     return rows.map(rowToCharacter)
   }
@@ -607,14 +607,14 @@ class SQLiteDatabase {
   async getAllCharacters(): Promise<Character[]> {
     await this.initialize()
     const db = await getDb()
-    const rows = await db.select<Record<string, unknown>[]>('SELECT * FROM characters ORDER BY created_at DESC')
+    const rows = await db.select<Record<string, unknown>[]>('SELECT * FROM characters ORDER BY created_at ASC' as const)
     return rows.map(rowToCharacter)
   }
 
   async getCharactersByEpisode(episodeId: string): Promise<Character[]> {
     await this.initialize()
     const db = await getDb()
-    const rows = await db.select<Record<string, unknown>[]>('SELECT * FROM characters WHERE episode_id = $1 OR episode_id IS NULL ORDER BY created_at DESC', [episodeId])
+    const rows = await db.select<Record<string, unknown>[]>('SELECT * FROM characters WHERE episode_id = $1 OR episode_id IS NULL ORDER BY created_at ASC' as const, [episodeId])
     return rows.map(rowToCharacter)
   }
 
@@ -772,7 +772,7 @@ class SQLiteDatabase {
     if (conditions.length > 0) {
       sql += ' WHERE ' + conditions.join(' AND ')
     }
-    sql += ' ORDER BY created_at DESC'
+    sql += ' ORDER BY created_at ASC'
     const rows = await db.select<Record<string, unknown>[]>(sql, params)
     return rows.map(rowToScene)
   }
@@ -840,7 +840,7 @@ class SQLiteDatabase {
     if (conditions.length > 0) {
       sql += ' WHERE ' + conditions.join(' AND ')
     }
-    sql += ' ORDER BY created_at DESC'
+    sql += ' ORDER BY created_at ASC'
     const rows = await db.select<Record<string, unknown>[]>(sql, params)
     return rows.map(rowToProp)
   }

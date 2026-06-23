@@ -820,7 +820,7 @@ export function StoryboardFlow({ className }: StoryboardFlowProps) {
           }
 
           return n
-        }))
+        }) as CanvasNode[])
 
         const downstreamTypes = connectedEdges
           .map(e => currentNodes.find(n => n.id === e.target)?.type)
@@ -922,7 +922,7 @@ export function StoryboardFlow({ className }: StoryboardFlowProps) {
       onUpdateNodeData: (nodeId, data) => {
         setNodes((nds) =>
           nds.map((n) =>
-            n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n
+            n.id === nodeId ? { ...n, data: { ...n.data, ...data } as CanvasNodeData } : n
           )
         )
       },

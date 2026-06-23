@@ -31,15 +31,21 @@ export interface ComfyUIQueueItem {
   outputs?: Record<string, unknown>
 }
 
+export interface ComfyUIOutputItem {
+  images?: Array<{ filename: string; subfolder: string; type: string }>
+  videos?: Array<{ filename: string; subfolder: string; type: string }>
+  audio?: Array<{ filename: string; subfolder: string; type: string }>
+}
+
 export interface ComfyUIHistory {
   promptId: string
   status: string
-  outputs: Record<string, { images?: Array<{ filename: string; subfolder: string; type: string }> }>
+  outputs: Record<string, ComfyUIOutputItem>
 }
 
 export interface ComfyUIHistoryItem {
   prompt: Record<string, unknown>
-  outputs: Record<string, { images?: Array<{ filename: string; subfolder: string; type: string }> }>
+  outputs: Record<string, ComfyUIOutputItem>
   status: {
     status_str: string
     completed: boolean
