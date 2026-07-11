@@ -30,7 +30,7 @@
         "style-src": "'self' 'unsafe-inline'",
         "connect-src": "'self' http: https: ws: wss: data:",
         "img-src": "'self' asset: http: https: data: blob:",
-        "media-src": "'self' asset: http: https: blob:"
+        "media-src": "'self' asset: dyproxy: http: https: blob:"
       },
       "assetProtocol": {
         "enable": true,

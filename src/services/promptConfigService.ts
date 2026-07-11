@@ -7,7 +7,7 @@ import {
 
 const PROMPT_CONFIG_KEY = 'fivedesigner_prompt_config'
 const PROMPT_CONFIG_VERSION_KEY = 'fivedesigner_prompt_config_version'
-const CURRENT_CONFIG_VERSION = '10.0'
+const CURRENT_CONFIG_VERSION = '11.0'
 
 // 生成唯一ID
 function generateId(): string {

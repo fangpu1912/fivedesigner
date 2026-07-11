@@ -13,6 +13,7 @@ export const mediaAssetKeys = {
   details: () => [...mediaAssetKeys.all, 'detail'] as const,
   detail: (id: string) => [...mediaAssetKeys.all, 'detail', id] as const,
   categories: () => [...mediaAssetKeys.all, 'categories'] as const,
+  categoryCounts: () => [...mediaAssetKeys.all, 'categoryCounts'] as const,
 }
 
 export function useMediaAssets(filters?: { type?: string; tag?: string; category?: string; search?: string }) {
@@ -40,6 +41,21 @@ export function useMediaCategories() {
       const customCategories = (settings[MEDIA_CATEGORIES_KEY] as string[]) || []
       const merged = [...new Set([...dbCategories, ...customCategories])].sort()
       return merged
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
+export function useMediaCategoryCounts() {
+  return useQuery({
+    queryKey: mediaAssetKeys.categoryCounts(),
+    queryFn: async () => {
+      const rows = await mediaAssetDB.getCategoryCounts()
+      const map: Record<string, number> = {}
+      for (const row of rows) {
+        if (row.category) map[row.category] = row.count
+      }
+      return map
     },
     staleTime: 5 * 60 * 1000,
   })

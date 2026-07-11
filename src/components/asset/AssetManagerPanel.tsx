@@ -670,7 +670,7 @@ export function AssetManagerPanel({ projectId, episodeId }: AssetManagerPanelPro
   ],
   "scenes": [
     {
-      "name": "场景名",
+      "name": "场景名（2-6字地点/环境名，如：咖啡馆、主角家、街角）",
       "description": "场景简单描述",
       "prompt": "场景描述（视角、时间段、天气、地理位置、环境元素、材质、颜色、光线、色调），然后附加结构限定（前视图、右视图、后视图、左视图,2×2网格排列,同一中心点平视,建筑结构、材质、色调、光线一致,严禁出现人物）"
     }
@@ -1272,7 +1272,7 @@ export function AssetManagerPanel({ projectId, episodeId }: AssetManagerPanelPro
                             file.name,
                             projectId || '',
                             episodeId || '',
-                            'image'
+                            createCategory || 'image'
                           )
                           setEditImage(imagePath)
                           toast({ title: '上传成功', description: '图片已保存' })
@@ -1762,7 +1762,7 @@ function AssetDetailPanel({
           file.name,
           projectId || '',
           episodeId || '',
-          'image'
+          asset.category || 'image'
         )
 
         onImageUpload(asset, imagePath)

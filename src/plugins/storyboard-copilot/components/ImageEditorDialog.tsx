@@ -45,7 +45,10 @@ type FaceGridRegion = {
   gridSize: number
   angle: number
   color: string
+  lineWidth: number
 }
+
+type GongbiMode = 'sketch' | 'pencil'
 
 type GongbiRegion = {
   id: string
@@ -53,8 +56,9 @@ type GongbiRegion = {
   y: number
   width: number
   height: number
-  ksize: number   // 线条粗细
+  ksize: number   // 笔触粗细 / 纸张颗粒
   alpha: number   // 色彩浓度
+  mode: GongbiMode // sketch=线稿模式, pencil=彩铅模式
 }
 
 function createAnnotationId(): string {
@@ -211,8 +215,8 @@ function drawFaceGridOnCanvas(ctx: CanvasRenderingContext2D, region: FaceGridReg
   ctx.translate(-centerX, -centerY)
 
   ctx.strokeStyle = region.color
+  ctx.lineWidth = region.lineWidth || 0.5
   ctx.globalAlpha = region.opacity
-  ctx.lineWidth = 0.5
 
   const diagonal = Math.sqrt(region.width ** 2 + region.height ** 2) * 1.5
   const startX = centerX - diagonal / 2
@@ -320,6 +324,153 @@ function applyGongbiOnCanvas(ctx: CanvasRenderingContext2D, region: GongbiRegion
   ctx.putImageData(resultData, rx, ry)
 }
 
+/**
+ * 彩铅模式：纸张纹理 + 色彩量化 + 边缘笔触 + 饱和度降低
+ * - 纸张噪声纹理：模拟彩铅画纸的颗粒感
+ * - 色彩量化：减少色彩层次，模拟彩铅层叠涂抹
+ * - Sobel 边缘笔触：提取轮廓，叠加深色笔触线条
+ * - 饱和度降低：彩铅通常色彩偏淡
+ * 最终效果：保留人脸轮廓细节，具有手绘彩铅的质感
+ */
+function applyPencilOnCanvas(ctx: CanvasRenderingContext2D, region: GongbiRegion, canvasWidth: number, canvasHeight: number): void {
+  const rx = Math.max(0, Math.round(region.x))
+  const ry = Math.max(0, Math.round(region.y))
+  const rw = Math.min(Math.round(region.width), canvasWidth - rx)
+  const rh = Math.min(Math.round(region.height), canvasHeight - ry)
+  if (rw < 4 || rh < 4) return
+
+  const originalData = ctx.getImageData(rx, ry, rw, rh)
+  const src = originalData.data
+
+  // 1. 计算亮度
+  const gray = new Float32Array(rw * rh)
+  for (let i = 0; i < rw * rh; i++) {
+    const r = src[i * 4]!
+    const g = src[i * 4 + 1]!
+    const b = src[i * 4 + 2]!
+    gray[i] = 0.299 * r + 0.587 * g + 0.114 * b
+  }
+
+  // 2. 轻度保边平滑（小窗口 Kuwahara，去除噪点但保留轮廓）
+  const halfWin = 2
+  const smoothed = new Float32Array(rw * rh)
+  for (let y = 0; y < rh; y++) {
+    for (let x = 0; x < rw; x++) {
+      let bestMean = gray[y * rw + x]!
+      let bestVar = Infinity
+      for (let q = 0; q < 4; q++) {
+        let xs = x, ys = y
+        if (q === 0) { xs = x - halfWin; ys = y - halfWin }
+        else if (q === 1) { xs = x; ys = y - halfWin }
+        else if (q === 2) { xs = x - halfWin; ys = y }
+        let sum = 0, sumSq = 0, cnt = 0
+        for (let dy = 0; dy <= halfWin; dy++) {
+          for (let dx = 0; dx <= halfWin; dx++) {
+            const px = xs + dx, py = ys + dy
+            if (px < 0 || px >= rw || py < 0 || py >= rh) continue
+            const v = gray[py * rw + px]!
+            sum += v; sumSq += v * v; cnt++
+          }
+        }
+        if (cnt === 0) continue
+        const m = sum / cnt
+        const v = sumSq / cnt - m * m
+        if (v < bestVar) { bestVar = v; bestMean = m }
+      }
+      smoothed[y * rw + x] = bestMean
+    }
+  }
+
+  // 3. Sobel 边缘检测（用平滑后的亮度，边缘更干净）
+  const edges = new Float32Array(rw * rh)
+  for (let y = 1; y < rh - 1; y++) {
+    for (let x = 1; x < rw - 1; x++) {
+      const idx = y * rw + x
+      const gx =
+        -smoothed[(y - 1) * rw + (x - 1)]! + smoothed[(y - 1) * rw + (x + 1)]! +
+        -2 * smoothed[y * rw + (x - 1)]! + 2 * smoothed[y * rw + (x + 1)]! +
+        -smoothed[(y + 1) * rw + (x - 1)]! + smoothed[(y + 1) * rw + (x + 1)]!
+      const gy =
+        -smoothed[(y - 1) * rw + (x - 1)]! - 2 * smoothed[(y - 1) * rw + x]! - smoothed[(y - 1) * rw + (x + 1)]! +
+        smoothed[(y + 1) * rw + (x - 1)]! + 2 * smoothed[(y + 1) * rw + x]! + smoothed[(y + 1) * rw + (x + 1)]!
+      edges[idx] = Math.min(255, Math.sqrt(gx * gx + gy * gy))
+    }
+  }
+
+  // 4. 生成纸张噪声纹理（基于种子，可复现）
+  // ksize 控制颗粒粗细：值越大颗粒越粗
+  const grainStrength = Math.min(0.4, region.ksize / 100) // 颗粒强度 0~0.4
+  const noise = new Float32Array(rw * rh)
+  for (let i = 0; i < rw * rh; i++) {
+    // 伪随机噪声（基于像素坐标，可复现）
+    const seed = (i * 9301 + 49297) % 233280
+    const rand = seed / 233280
+    noise[i] = (rand - 0.5) * 2 // -1 ~ 1
+  }
+
+  // 5. 色彩量化级数（模拟彩铅层叠）
+  // ksize 越大，量化级数越少，彩铅感越强
+  const levels = Math.max(4, Math.min(12, 14 - Math.floor(region.ksize / 5)))
+  const quantStep = 255 / (levels - 1)
+
+  // 6. 构建彩铅效果
+  const alpha = region.alpha
+  const resultData = new ImageData(rw, rh)
+  const result = resultData.data
+
+  for (let i = 0; i < rw * rh; i++) {
+    const r = src[i * 4]!
+    const g = src[i * 4 + 1]!
+    const b = src[i * 4 + 2]!
+
+    // 饱和度降低（彩铅偏淡）
+    const avg = (r + g + b) / 3
+    const satReduce = 0.75
+    const dr = avg + (r - avg) * satReduce
+    const dg = avg + (g - avg) * satReduce
+    const db = avg + (b - avg) * satReduce
+
+    // 色彩量化
+    const qr = Math.round(Math.round(dr / quantStep) * quantStep)
+    const qg = Math.round(Math.round(dg / quantStep) * quantStep)
+    const qb = Math.round(Math.round(db / quantStep) * quantStep)
+
+    // 纸张纹理叠加（亮度调制）
+    const grain = noise[i]! * grainStrength * 255
+    const pr = Math.min(255, Math.max(0, qr + grain))
+    const pg = Math.min(255, Math.max(0, qg + grain))
+    const pb = Math.min(255, Math.max(0, qb + grain))
+
+    // 边缘笔触：在边缘处叠加深色线条
+    const edgeStrength = Math.min(1, edges[i]! / 100)
+    const edgeDarken = 1 - edgeStrength * 0.6
+
+    // 混合：alpha 控制彩铅浓度
+    // - 高 alpha：更多原图，彩铅感弱
+    // - 低 alpha：更多彩铅效果
+    const origWeight = alpha
+    const pencilWeight = 1 - alpha
+
+    result[i * 4] = Math.round(r * origWeight + pr * edgeDarken * pencilWeight)
+    result[i * 4 + 1] = Math.round(g * origWeight + pg * edgeDarken * pencilWeight)
+    result[i * 4 + 2] = Math.round(b * origWeight + pb * edgeDarken * pencilWeight)
+    result[i * 4 + 3] = src[i * 4 + 3]!
+  }
+
+  ctx.putImageData(resultData, rx, ry)
+}
+
+/**
+ * 统一的淡彩工笔应用函数，根据 mode 分发
+ */
+function applyGongbiEffect(ctx: CanvasRenderingContext2D, region: GongbiRegion, canvasWidth: number, canvasHeight: number): void {
+  if (region.mode === 'pencil') {
+    applyPencilOnCanvas(ctx, region, canvasWidth, canvasHeight)
+  } else {
+    applyGongbiOnCanvas(ctx, region, canvasWidth, canvasHeight)
+  }
+}
+
 type DraftState = {
   tool: Exclude<AnnotationToolType, 'text'>
   startX: number
@@ -364,15 +515,18 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
   const [gridOpacity, setGridOpacity] = useState(0.35)
   const [gridSize, setGridSize] = useState(6)
   const [gridAngle, setGridAngle] = useState(45)
-  const [gridColor, setGridColor] = useState('#000000')
+  const [gridColor, setGridColor] = useState('#a855f7')
+  const [gridLineWidth, setGridLineWidth] = useState(0.5)
   const [draftFaceGrid, setDraftFaceGrid] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
 
   // 淡彩工笔参数
   const [gongbiKsize, setGongbiKsize] = useState(21)
   const [gongbiAlpha, setGongbiAlpha] = useState(0.6)
+  const [gongbiMode, setGongbiMode] = useState<GongbiMode>('pencil')
   const [gongbiRegions, setGongbiRegions] = useState<GongbiRegion[]>([])
   const [draftGongbi, setDraftGongbi] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
   const [gongbiPreviewImage, setGongbiPreviewImage] = useState<HTMLCanvasElement | null>(null)
+  const [faceGridPreviewImage, setFaceGridPreviewImage] = useState<HTMLCanvasElement | null>(null)
 
   const stageRef = useRef<Konva.Stage | null>(null)
   const contentGroupRef = useRef<Konva.Group | null>(null)
@@ -423,13 +577,45 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
 
     // 对每个选区应用淡彩工笔效果（使用当前滑块值）
     for (const region of gongbiRegions) {
-      applyGongbiOnCanvas(ctx, { ...region, ksize: gongbiKsize, alpha: gongbiAlpha }, image.naturalWidth, image.naturalHeight)
+      applyGongbiEffect(ctx, { ...region, ksize: gongbiKsize, alpha: gongbiAlpha, mode: gongbiMode }, image.naturalWidth, image.naturalHeight)
     }
 
     setGongbiPreviewImage(canvas)
 
     return () => { setGongbiPreviewImage(null) }
-  }, [image, gongbiRegions, gongbiKsize, gongbiAlpha])
+  }, [image, gongbiRegions, gongbiKsize, gongbiAlpha, gongbiMode])
+
+  // 人脸网格实时预览：当 regions 或参数变化时，生成预览图（含网格线）
+  useEffect(() => {
+    if (!image || faceGridRegions.length === 0) {
+      setFaceGridPreviewImage(null)
+      return
+    }
+
+    const canvas = document.createElement('canvas')
+    canvas.width = image.naturalWidth
+    canvas.height = image.naturalHeight
+    const ctx = canvas.getContext('2d')
+    if (!ctx) { setFaceGridPreviewImage(null); return }
+
+    ctx.drawImage(image, 0, 0)
+
+    // 对每个选区绘制人脸网格（使用当前滑块值）
+    for (const region of faceGridRegions) {
+      drawFaceGridOnCanvas(ctx, {
+        ...region,
+        opacity: gridOpacity,
+        gridSize,
+        angle: gridAngle,
+        color: gridColor,
+        lineWidth: gridLineWidth,
+      })
+    }
+
+    setFaceGridPreviewImage(canvas)
+
+    return () => { setFaceGridPreviewImage(null) }
+  }, [image, faceGridRegions, gridOpacity, gridSize, gridAngle, gridColor, gridLineWidth])
 
   useEffect(() => {
     const element = viewportRef.current
@@ -579,6 +765,7 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
           gridSize,
           angle: gridAngle,
           color: gridColor,
+          lineWidth: gridLineWidth,
         }
         setUndoStack(prev => [...prev, faceGridRegions])
         setRedoStack([])
@@ -596,6 +783,7 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
           ...draftGongbi,
           ksize: gongbiKsize,
           alpha: gongbiAlpha,
+          mode: gongbiMode,
         }
         setUndoStack(prev => [...prev, gongbiRegions])
         setRedoStack([])
@@ -624,7 +812,7 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
     setAnnotations(nextAnnotations)
     setSelectedId(createdItem.id)
     setDraft(null)
-  }, [annotations, buildDraftAnnotation, draft, draftFaceGrid, draftGongbi, faceGridRegions, gongbiAlpha, gongbiKsize, gongbiRegions, getImagePoint, gridAngle, gridColor, gridOpacity, gridSize, tool])
+  }, [annotations, buildDraftAnnotation, draft, draftFaceGrid, draftGongbi, faceGridRegions, gongbiAlpha, gongbiKsize, gongbiMode, gongbiRegions, getImagePoint, gridAngle, gridColor, gridLineWidth, gridOpacity, gridSize, tool])
 
   const handleDeleteSelected = useCallback(() => {
     if (!selectedId) return
@@ -700,7 +888,7 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
 
     // 先应用淡彩工笔效果（直接修改像素，使用当前滑块值）
     for (const region of gongbiRegions) {
-      applyGongbiOnCanvas(ctx, { ...region, ksize: gongbiKsize, alpha: gongbiAlpha }, image.naturalWidth, image.naturalHeight)
+      applyGongbiEffect(ctx, { ...region, ksize: gongbiKsize, alpha: gongbiAlpha, mode: gongbiMode }, image.naturalWidth, image.naturalHeight)
     }
 
     // 再绘制人脸网格
@@ -724,7 +912,7 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
 
     onClose()
     onSave(dataUrl)
-  }, [image, annotations, faceGridRegions, gongbiRegions, onSave, onClose])
+  }, [image, annotations, faceGridRegions, gongbiRegions, gongbiKsize, gongbiAlpha, gongbiMode, onSave, onClose])
 
   const handleCommitTextEditor = useCallback(() => {
     if (!textEditorState) return
@@ -869,8 +1057,13 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
             <div className="flex items-center gap-3 text-xs">
               <div className="flex items-center gap-1">
                 <span className="text-muted-foreground">密度</span>
-                <input type="range" min={2} max={20} step={1} value={gridSize} onChange={e => setGridSize(Number(e.target.value))} className="w-16" />
+                <input type="range" min={2} max={60} step={1} value={gridSize} onChange={e => setGridSize(Number(e.target.value))} className="w-16" />
                 <span className="text-muted-foreground w-6">{gridSize}px</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-muted-foreground">线粗</span>
+                <input type="range" min={0.2} max={5} step={0.1} value={gridLineWidth} onChange={e => setGridLineWidth(Number(e.target.value))} className="w-16" />
+                <span className="text-muted-foreground w-6">{gridLineWidth.toFixed(1)}</span>
               </div>
               <div className="flex items-center gap-1">
                 <span className="text-muted-foreground">透明度</span>
@@ -891,16 +1084,40 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
           {activeStyleKind === 'gongbi' && (
             <div className="flex items-center gap-3 text-xs">
               <div className="flex items-center gap-1">
-                <span className="text-muted-foreground">线条粗细</span>
+                <Button
+                  type="button"
+                  variant={gongbiMode === 'pencil' ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setGongbiMode('pencil')}
+                  title="纸张纹理 + 色彩量化 + 边缘笔触，手绘彩铅质感，保留人脸轮廓细节"
+                >
+                  彩铅
+                </Button>
+                <Button
+                  type="button"
+                  variant={gongbiMode === 'sketch' ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setGongbiMode('sketch')}
+                  title="经典线稿提取 + 色彩混合"
+                >
+                  线稿
+                </Button>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-muted-foreground">{gongbiMode === 'pencil' ? '笔触颗粒' : '线条粗细'}</span>
                 <input type="range" min={5} max={41} step={1} value={gongbiKsize} onChange={e => setGongbiKsize(Number(e.target.value))} className="w-20" />
                 <span className="text-muted-foreground w-6">{gongbiKsize}</span>
               </div>
               <div className="flex items-center gap-1">
-                <span className="text-muted-foreground">色彩浓度</span>
+                <span className="text-muted-foreground">{gongbiMode === 'pencil' ? '原图保留' : '色彩浓度'}</span>
                 <input type="range" min={0} max={100} step={1} value={Math.round(gongbiAlpha * 100)} onChange={e => setGongbiAlpha(Number(e.target.value) / 100)} className="w-20" />
                 <span className="text-muted-foreground w-8">{Math.round(gongbiAlpha * 100)}%</span>
               </div>
-              <span className="text-muted-foreground">框选区域应用淡彩工笔效果</span>
+              <span className="text-muted-foreground">
+                {gongbiMode === 'pencil' ? '框选区域应用彩铅效果（保留轮廓细节）' : '框选区域应用线稿提取效果'}
+              </span>
             </div>
           )}
           <Button variant="outline" size="sm" onClick={handleUndo} disabled={undoStack.length === 0}>
@@ -936,7 +1153,7 @@ export function ImageEditorDialog({ open, imageUrl, onClose, onSave }: ImageEdit
               <Group ref={contentGroupRef} x={0} y={0} scaleX={scale} scaleY={scale}>
                 {image && (
                   <KonvaImage
-                    image={gongbiPreviewImage || image}
+                    image={faceGridPreviewImage || gongbiPreviewImage || image}
                     x={0} y={0}
                     width={image.naturalWidth}
                     height={image.naturalHeight}

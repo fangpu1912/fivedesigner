@@ -47,9 +47,10 @@ export interface TTSModel {
 export interface VendorInput {
   key: string
   label: string
-  type: 'text' | 'password' | 'url'
+  type: 'text' | 'password' | 'url' | 'select'
   required: boolean
   placeholder?: string
+  options?: { label: string; value: string }[]
 }
 
 export interface VendorConfig {

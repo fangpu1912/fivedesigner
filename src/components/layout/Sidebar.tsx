@@ -153,7 +153,7 @@ export function Sidebar() {
       <div className="p-3 border-t border-border">
         {sidebarOpen ? (
           <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-            <span>v1.0.0</span>
+            <span>v1.0.6</span>
             <div className="flex items-center gap-1.5">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
               <span>就绪</span>

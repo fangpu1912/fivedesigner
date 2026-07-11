@@ -13,6 +13,8 @@ import {
   BarChart3,
   Scissors,
   Download,
+  Video,
+  Key,
 } from 'lucide-react'
 
 import AnalyzePage from '@/pages/AnalyzePage'
@@ -29,6 +31,8 @@ import { StoryboardDraw } from '@/pages/StoryboardDraw'
 import Support from '@/pages/Support'
 import VideoSceneExtraction from '@/pages/VideoSceneExtraction'
 import BrowserManager from '@/pages/BrowserManager'
+import DouyinDownload from '@/pages/DouyinDownload'
+import ActivationManager from '@/pages/ActivationManager'
 
 import type { LucideIcon } from 'lucide-react'
 
@@ -185,6 +189,24 @@ export const appPages: AppPageDefinition[] = [
     icon: Download,
     section: 'system',
     component: BrowserManager,
+  },
+  {
+    navPath: '/douyin-download',
+    routePaths: ['/douyin-download'],
+    label: '抖音下载',
+    description: '下载抖音主页图集和视频到素材库。',
+    icon: Video,
+    section: 'system',
+    component: DouyinDownload,
+  },
+  {
+    navPath: '/activation-manager',
+    routePaths: ['/activation-manager'],
+    label: '激活管理',
+    description: '批量生成激活码,管理激活码状态。',
+    icon: Key,
+    section: 'system',
+    component: ActivationManager,
   },
 ]
 

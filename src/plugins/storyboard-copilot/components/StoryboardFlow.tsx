@@ -1515,7 +1515,48 @@ export function StoryboardFlow({ className }: StoryboardFlowProps) {
       ctx.fillRect(0, 0, width, height)
       ctx.translate(-minX + padding, -minY + padding)
 
-      // 绘制节点
+      // 并发限制的图片预加载器
+      const imageCache = new Map<string, HTMLImageElement>()
+      const imageUrls = nodes
+        .filter(n => n.data?.imageUrl || n.data?.image)
+        .map(n => {
+          const url = n.data.imageUrl || n.data.image
+          return typeof url === 'string' ? (getImageUrl(url) || url) : null
+        })
+        .filter((url): url is string => url !== null)
+
+      // 并发限制加载图片(最多同时加载 5 张)
+      const loadImage = (url: string): Promise<HTMLImageElement | null> => {
+        return new Promise((resolve) => {
+          const img = new window.Image()
+          if (!url.startsWith('asset://') && !url.startsWith('data:')) {
+            img.crossOrigin = 'anonymous'
+          }
+          img.onload = () => resolve(img)
+          img.onerror = () => resolve(null)
+          img.src = url
+        })
+      }
+
+      const CONCURRENCY_LIMIT = 5
+      const loadImagesWithLimit = async (urls: string[]) => {
+        const results: (HTMLImageElement | null)[] = []
+        for (let i = 0; i < urls.length; i += CONCURRENCY_LIMIT) {
+          const batch = urls.slice(i, i + CONCURRENCY_LIMIT)
+          const batchResults = await Promise.all(batch.map(loadImage))
+          results.push(...batchResults)
+          batchResults.forEach((img, j) => {
+            const url = batch[j]
+            if (img && url) imageCache.set(url, img)
+          })
+        }
+        return results
+      }
+
+      // 预加载所有图片
+      await loadImagesWithLimit(imageUrls)
+
+      // 绘制节点(从缓存取图片)
       for (const node of nodes) {
         const x = node.position.x
         const y = node.position.y
@@ -1530,35 +1571,23 @@ export function StoryboardFlow({ className }: StoryboardFlowProps) {
         ctx.fill()
         ctx.stroke()
 
-        // 如果有图片，尝试绘制
+        // 如果有图片，从缓存绘制
         if (node.data?.imageUrl || node.data?.image) {
           const imgUrl = node.data.imageUrl || node.data.image
           if (typeof imgUrl === 'string') {
-            try {
-              const resolvedImgUrl = getImageUrl(imgUrl) || imgUrl
-              const img = new window.Image()
-              if (resolvedImgUrl && !resolvedImgUrl.startsWith('asset://') && !resolvedImgUrl.startsWith('data:')) {
-                img.crossOrigin = 'anonymous'
-              }
-              img.src = resolvedImgUrl
-              await new Promise<void>((resolve) => {
-                img.onload = () => {
-                  const imgW = w - 20
-                  const imgH = h - 60
-                  const imgX = x + 10
-                  const imgY = y + 50
-                  const ratio = Math.min(imgW / img.naturalWidth, imgH / img.naturalHeight)
-                  const drawW = img.naturalWidth * ratio
-                  const drawH = img.naturalHeight * ratio
-                  const drawX = imgX + (imgW - drawW) / 2
-                  const drawY = imgY + (imgH - drawH) / 2
-                  ctx.drawImage(img, drawX, drawY, drawW, drawH)
-                  resolve()
-                }
-                img.onerror = () => resolve()
-              })
-            } catch (e) {
-              // 图片加载失败，跳过
+            const resolvedImgUrl = getImageUrl(imgUrl) || imgUrl
+            const cachedImg = imageCache.get(resolvedImgUrl)
+            if (cachedImg) {
+              const imgW = w - 20
+              const imgH = h - 60
+              const imgX = x + 10
+              const imgY = y + 50
+              const ratio = Math.min(imgW / cachedImg.naturalWidth, imgH / cachedImg.naturalHeight)
+              const drawW = cachedImg.naturalWidth * ratio
+              const drawH = cachedImg.naturalHeight * ratio
+              const drawX = imgX + (imgW - drawW) / 2
+              const drawY = imgY + (imgH - drawH) / 2
+              ctx.drawImage(cachedImg, drawX, drawY, drawW, drawH)
             }
           }
         }
@@ -1905,19 +1934,7 @@ export function StoryboardFlow({ className }: StoryboardFlowProps) {
       }}
     >
       <ReactFlow<CanvasNode, Edge>
-        nodes={nodes.map(node => ({
-          ...node,
-          data: {
-            ...node.data,
-            _connectingNodeId: connectingNodeId,
-            _isConnecting: !!connectingNodeId,
-            // 为分镜拆分节点注入添加节点的回调和当前位置
-            ...(node.type === CANVAS_NODE_TYPES.storyboardSplit && {
-              onAddNode: handleAddNode,
-              nodePosition: node.position,
-            }),
-          } as CanvasNodeData,
-        } as CanvasNode))}
+        nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}

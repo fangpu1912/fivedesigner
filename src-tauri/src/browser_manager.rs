@@ -19,6 +19,7 @@ pub struct BrowserProfile {
     pub data_dir: String,
     pub extensions: Vec<String>,
     pub proxy: Option<String>,
+    pub cookies: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,6 +34,7 @@ pub struct BrowserSession {
 // 全局进程管理器
 lazy_static! {
     static ref BROWSER_PROCESSES: Mutex<HashMap<String, u32>> = Mutex::new(HashMap::new());
+    static ref BROWSER_DEBUG_PORTS: Mutex<HashMap<String, u16>> = Mutex::new(HashMap::new());
 }
 
 /// 检测系统默认浏览器路径
@@ -319,7 +321,23 @@ pub async fn create_browser_window(
     if let Ok(mut processes) = BROWSER_PROCESSES.lock() {
         processes.insert(profile.id.clone(), pid);
     }
+    if let Ok(mut ports) = BROWSER_DEBUG_PORTS.lock() {
+        ports.insert(profile.id.clone(), debug_port);
+    }
     
+    // 如果有 Cookie，通过 CDP 注入
+    if let Some(cookies_str) = &profile.cookies {
+        if !cookies_str.trim().is_empty() {
+            let cookies = cookies_str.clone();
+            let port = debug_port;
+            tokio::spawn(async move {
+                // 给浏览器一点时间启动
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                let _ = inject_cookies_cdp(port, &cookies).await;
+            });
+        }
+    }
+
     Ok(pid)
 }
 
@@ -369,6 +387,68 @@ pub async fn check_browser_running(pid: u32) -> Result<bool, String> {
             .output()
             .map_err(|e| format!("检查进程失败: {}", e))?;
         Ok(output.status.success())
+    }
+}
+
+/// 获取浏览器的 CDP 调试端口
+#[command]
+pub async fn get_browser_debug_port(account_id: String) -> Result<u16, String> {
+    if let Ok(ports) = BROWSER_DEBUG_PORTS.lock() {
+        ports.get(&account_id).copied().ok_or_else(|| "该账号未启动浏览器或调试端口未记录".to_string())
+    } else {
+        Err("无法读取调试端口信息".to_string())
+    }
+}
+
+/// 获取所有可用浏览器端口(供自动检测)
+pub fn get_available_ports() -> Vec<(String, u16)> {
+    if let Ok(ports) = BROWSER_DEBUG_PORTS.lock() {
+        ports.iter().map(|(k, v)| (k.clone(), *v)).collect()
+    } else {
+        vec![]
+    }
+}
+
+/// 获取账号对应的浏览器 PID
+pub fn get_browser_pid(account_id: &str) -> Option<u32> {
+    if let Ok(processes) = BROWSER_PROCESSES.lock() {
+        processes.get(account_id).copied()
+    } else {
+        None
+    }
+}
+
+/// 通过 CDP /json 端点获取 WebSocket debugger URL。
+/// 优先返回 URL 包含 url_hint 的 tab，找不到则返回第一个 tab。
+pub async fn get_cdp_ws_url(debug_port: u16, url_hint: Option<&str>) -> Result<String, String> {
+    let http_client = reqwest::Client::new();
+    let tabs_url = format!("http://localhost:{}/json", debug_port);
+    let mut attempts = 0;
+    loop {
+        if let Ok(resp) = http_client.get(&tabs_url).send().await {
+            if resp.status().is_success() {
+                if let Ok(tabs) = resp.json::<Vec<serde_json::Value>>().await {
+                    if let Some(hint) = url_hint {
+                        for tab in &tabs {
+                            let url = tab.get("url").and_then(|v| v.as_str()).unwrap_or("");
+                            if url.contains(hint) {
+                                if let Some(ws) = tab.get("webSocketDebuggerUrl").and_then(|v| v.as_str()) {
+                                    if !ws.is_empty() { return Ok(ws.to_string()); }
+                                }
+                            }
+                        }
+                    }
+                    if let Some(tab) = tabs.first() {
+                        if let Some(ws) = tab.get("webSocketDebuggerUrl").and_then(|v| v.as_str()) {
+                            if !ws.is_empty() { return Ok(ws.to_string()); }
+                        }
+                    }
+                }
+            }
+        }
+        attempts += 1;
+        if attempts > 60 { return Err("无法连接浏览器调试端口。请确保浏览器正在运行。".to_string()); }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 }
 
@@ -505,5 +585,81 @@ fn copy_dir_all(src: impl AsRef<std::path::Path>, dst: impl AsRef<std::path::Pat
         }
     }
     
+    Ok(())
+}
+
+/// 通过 CDP 连接浏览器并注入 Cookie
+async fn inject_cookies_cdp(debug_port: u16, cookies_str: &str) -> Result<(), String> {
+    use tokio_tungstenite::connect_async;
+    use futures_util::{SinkExt, StreamExt};
+
+    // 优先连接 doubao.com 所在的 tab
+    let ws_url = get_cdp_ws_url(debug_port, Some("doubao.com")).await?;
+
+    let (mut ws, _) = connect_async(&ws_url).await
+         .map_err(|e| format!("CDP 连接失败: {}", e))?;
+
+     let mut msg_id = 1u32;
+
+     // 启用 Network + Page
+     for method in ["Network.enable", "Page.enable"] {
+         let msg = serde_json::json!({"id": msg_id, "method": method, "params": {}}).to_string();
+         ws.send(tokio_tungstenite::tungstenite::Message::Text(msg.into())).await
+             .map_err(|e| format!("CDP {} 失败: {}", method, e))?;
+         msg_id += 1;
+     }
+     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+     while let Ok(Some(Ok(tokio_tungstenite::tungstenite::Message::Text(_)))) =
+         tokio::time::timeout(std::time::Duration::from_millis(50), ws.next()).await {}
+
+    // 解析并注入 Cookie
+    for pair in cookies_str.split(';') {
+        if let Some(eq_pos) = pair.find('=') {
+            let name = pair[..eq_pos].trim();
+            let value = pair[eq_pos + 1..].trim();
+            if !name.is_empty() {
+                let set_msg = serde_json::json!({
+                    "id": msg_id,
+                    "method": "Network.setCookie",
+                    "params": {
+                        "name": name, "value": value,
+                        "domain": ".doubao.com", "path": "/",
+                        "httpOnly": false, "secure": true,
+                    }
+                }).to_string();
+                let _ = ws.send(tokio_tungstenite::tungstenite::Message::Text(set_msg.into())).await;
+                msg_id += 1;
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        }
+    }
+
+    // 导航到目标页面
+    let nav_id = msg_id;
+    let nav_msg = serde_json::json!({
+        "id": nav_id,
+        "method": "Page.navigate",
+        "params": {"url": "https://www.doubao.com/chat/"}
+    }).to_string();
+    ws.send(tokio_tungstenite::tungstenite::Message::Text(nav_msg.into())).await
+        .map_err(|e| format!("CDP Page.navigate 失败: {}", e))?;
+
+    // 等待导航完成（最多 15 秒）
+    let nav_timeout = std::time::Duration::from_secs(15);
+    let nav_start = std::time::Instant::now();
+    while nav_start.elapsed() < nav_timeout {
+        match tokio::time::timeout(std::time::Duration::from_millis(500), ws.next()).await {
+            Ok(Some(Ok(tokio_tungstenite::tungstenite::Message::Text(text)))) => {
+                if let Ok(msg) = serde_json::from_str::<serde_json::Value>(&text) {
+                    let m = msg.get("method").and_then(|v| v.as_str()).unwrap_or("");
+                    if m == "Page.frameStoppedLoading" || m == "Page.domContentEventFired" {
+                        break;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     Ok(())
 }

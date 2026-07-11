@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { Grid } from 'react-window'
 
 import { join } from '@tauri-apps/api/path'
 import { open, confirm, save } from '@tauri-apps/plugin-dialog'
@@ -45,12 +46,233 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { useMediaAssets, useMediaCategories, useMediaAssetMutations, saveMediaCategory, deleteMediaCategory, mediaAssetKeys } from '@/hooks/useMediaAssets'
+import { useMediaAssets, useMediaCategories, useMediaCategoryCounts, useMediaAssetMutations, saveMediaCategory, deleteMediaCategory, mediaAssetKeys } from '@/hooks/useMediaAssets'
 import { useToast } from '@/hooks/useToast'
 import { cn } from '@/lib/utils'
 import { useQueryClient } from '@tanstack/react-query'
 import { workspaceService } from '@/services/workspace/WorkspaceService'
 import { getImageUrl, getVideoUrl } from '@/utils/asset'
+import type { MediaAsset } from '@/types'
+
+// 虚拟网格常量
+const CARD_WIDTH = 200
+const CARD_HEIGHT = 180
+const GAP = 16
+const ROW_HEIGHT = CARD_HEIGHT + GAP
+
+// 虚拟网格单元格组件
+interface AssetGridCellData {
+  assets: MediaAsset[]
+  columnCount: number
+  batchMode: boolean
+  filterTag: string | null
+  selectedIds: Set<string>
+  onPreviewImage: (url: string) => void
+  onPreviewVideo: (url: string) => void
+  onToggleSelect: (id: string) => void
+  onOpenEdit: (asset: MediaAsset) => void
+  onDelete: (id: string) => void
+  onSetFilterTag: (tag: string | null) => void
+}
+
+function AssetGridCell({ columnIndex, rowIndex, style, ...data }: { columnIndex: number; rowIndex: number; style: React.CSSProperties } & AssetGridCellData) {
+  const index = rowIndex * data.columnCount + columnIndex
+  if (index >= data.assets.length) return null
+  const asset = data.assets[index]
+  if (!asset) return null
+  const displayUrl = getImageUrl(asset.file_path) || getVideoUrl(asset.file_path)
+  const isSelected = data.selectedIds.has(asset.id)
+  return (
+    <div style={{ ...style, padding: 8 }}>
+      <AssetCard
+        asset={asset}
+        displayUrl={displayUrl}
+        isSelected={isSelected}
+        batchMode={data.batchMode}
+        filterTag={data.filterTag}
+        onPreviewImage={data.onPreviewImage}
+        onPreviewVideo={data.onPreviewVideo}
+        onToggleSelect={data.onToggleSelect}
+        onOpenEdit={data.onOpenEdit}
+        onDelete={data.onDelete}
+        onSetFilterTag={data.onSetFilterTag}
+      />
+    </div>
+  )
+}
+
+// Grid 包装组件(解决类型问题)
+function AssetGrid(allProps: AssetGridCellData & { columnCount: number; gridWidth: number }) {
+  const { gridWidth, ...cellData } = allProps
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const CellComponent = AssetGridCell as any
+  return (
+    <Grid
+      columnCount={cellData.columnCount}
+      columnWidth={CARD_WIDTH + GAP}
+      rowCount={Math.ceil(cellData.assets.length / cellData.columnCount)}
+      rowHeight={ROW_HEIGHT}
+      style={{ height: 600, width: gridWidth }}
+      cellComponent={CellComponent}
+      cellProps={cellData}
+    />
+  )
+}
+interface AssetCardProps {
+  asset: MediaAsset
+  displayUrl: string | null
+  isSelected: boolean
+  batchMode: boolean
+  filterTag: string | null
+  onPreviewImage: (url: string) => void
+  onPreviewVideo: (url: string) => void
+  onToggleSelect: (id: string) => void
+  onOpenEdit: (asset: MediaAsset) => void
+  onDelete: (id: string) => void
+  onSetFilterTag: (tag: string | null) => void
+}
+
+function AssetCard({
+  asset,
+  displayUrl,
+  isSelected,
+  batchMode,
+  filterTag,
+  onPreviewImage,
+  onPreviewVideo,
+  onToggleSelect,
+  onOpenEdit,
+  onDelete,
+  onSetFilterTag,
+}: AssetCardProps) {
+  return (
+    <div
+      className={cn(
+        'group relative rounded-lg border bg-card overflow-hidden hover:shadow-md transition-shadow',
+        isSelected && 'ring-2 ring-primary'
+      )}
+      style={{ width: '100%', height: '100%' }}
+    >
+      {batchMode && (
+        <div
+          className="absolute top-2 left-2 z-10 cursor-pointer"
+          onClick={() => onToggleSelect(asset.id)}
+        >
+          <div className={cn(
+            'w-5 h-5 rounded border-2 flex items-center justify-center',
+            isSelected ? 'bg-primary border-primary text-primary-foreground' : 'bg-background border-border'
+          )}>
+            {isSelected && <CheckSquare className="w-3 h-3" />}
+          </div>
+        </div>
+      )}
+      <div className="aspect-[4/3] bg-muted flex items-center justify-center overflow-hidden">
+        {asset.type === 'image' ? (
+          displayUrl ? (
+            <img
+              src={displayUrl}
+              alt={asset.name}
+              className="w-full h-full object-cover cursor-pointer"
+              loading="lazy"
+              onClick={() => !batchMode && onPreviewImage(displayUrl)}
+            />
+          ) : (
+            <Image className="h-8 w-8 text-muted-foreground/50" />
+          )
+        ) : displayUrl ? (
+          <div
+            className="relative w-full h-full cursor-pointer group/video"
+            onClick={() => !batchMode && onPreviewVideo(displayUrl)}
+          >
+            <video
+              src={displayUrl}
+              className="w-full h-full object-cover"
+              muted
+              preload="metadata"
+              onMouseEnter={e => (e.target as HTMLVideoElement).play()}
+              onMouseLeave={e => {
+                (e.target as HTMLVideoElement).pause()
+                ;(e.target as HTMLVideoElement).currentTime = 0
+              }}
+            />
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/video:opacity-100 transition-opacity bg-black/30">
+              <Film className="h-8 w-8 text-white" />
+            </div>
+          </div>
+        ) : (
+          <Video className="h-8 w-8 text-muted-foreground/50" />
+        )}
+        {!batchMode && (
+          <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={() => onOpenEdit(asset)}
+              className="h-7 w-7 rounded-full bg-background/90 flex items-center justify-center hover:bg-background shadow-sm"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => onDelete(asset.id)}
+              className="h-7 w-7 rounded-full bg-background/90 flex items-center justify-center hover:bg-background hover:text-destructive shadow-sm"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+        <div className="absolute top-2 left-2">
+          <div className={cn(
+            'flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium shadow-sm',
+            asset.type === 'image'
+              ? 'bg-sky-500/90 text-white'
+              : 'bg-violet-500/90 text-white'
+          )}>
+            {asset.type === 'image' ? (
+              <Image className="h-3 w-3" />
+            ) : (
+              <Film className="h-3 w-3" />
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="p-2.5 space-y-1.5">
+        <p className="text-xs font-medium truncate" title={asset.name}>
+          {asset.name}
+        </p>
+        {asset.prompt ? (
+          <p className="text-[10px] text-muted-foreground line-clamp-2 leading-relaxed">
+            {asset.prompt}
+          </p>
+        ) : (
+          <p className="text-[10px] text-muted-foreground/50 italic">无提示词</p>
+        )}
+        {asset.category && (
+          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-green-50 dark:bg-green-900/20">
+            {asset.category}
+          </Badge>
+        )}
+        {asset.tags && asset.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 pt-0.5">
+            {asset.tags.slice(0, 3).map((tag: string) => (
+              <Badge
+                key={tag}
+                variant="outline"
+                className={cn(
+                  'text-[9px] px-1 py-0 h-4 cursor-pointer',
+                  filterTag === tag && 'bg-primary text-primary-foreground'
+                )}
+                onClick={() => onSetFilterTag(filterTag === tag ? null : tag)}
+              >
+                {tag}
+              </Badge>
+            ))}
+            {asset.tags.length > 3 && (
+              <span className="text-[9px] text-muted-foreground">+{asset.tags.length - 3}</span>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 
 export default function MediaAssetManage() {
@@ -78,6 +300,26 @@ export default function MediaAssetManage() {
   const [showNewCategoryDialog, setShowNewCategoryDialog] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
 
+  // 响应式列数计算
+  const [columnCount, setColumnCount] = useState(6)
+  const [gridWidth, setGridWidth] = useState(800)
+  const gridRef = useRef<HTMLDivElement>(null)
+  // 根据容器宽度计算列数
+  useEffect(() => {
+    const updateColumnCount = () => {
+      if (gridRef.current) {
+        const width = gridRef.current.clientWidth
+        setGridWidth(width)
+        // 计算能容纳多少列: (width + gap) / (cardWidth + gap)
+        const cols = Math.max(2, Math.floor((width + GAP) / (CARD_WIDTH + GAP)))
+        setColumnCount(cols)
+      }
+    }
+    updateColumnCount()
+    window.addEventListener('resize', updateColumnCount)
+    return () => window.removeEventListener('resize', updateColumnCount)
+  }, [])
+
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const { data: assets = [], isLoading } = useMediaAssets({
@@ -87,6 +329,7 @@ export default function MediaAssetManage() {
     search: searchQuery || undefined,
   })
   const { data: categories = [] } = useMediaCategories()
+  const { data: categoryCounts = {} } = useMediaCategoryCounts()
   const assetsRef = useRef(assets)
   useEffect(() => { assetsRef.current = assets }, [assets])
   const mutations = useMediaAssetMutations()
@@ -456,7 +699,7 @@ export default function MediaAssetManage() {
             <span className="text-xs opacity-70">{assets.length}</span>
           </button>
           {categories.map(cat => {
-            const count = assets.filter(a => a.category === cat).length
+            const count = categoryCounts[cat] ?? 0
             return (
               <div
                 key={cat}
@@ -675,9 +918,10 @@ export default function MediaAssetManage() {
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+            <div ref={gridRef} className="h-full">
+              {/* 批量模式工具栏 */}
               {batchMode && (
-                <div className="col-span-full mb-2 flex items-center gap-2">
+                <div className="mb-2 flex items-center gap-2 px-2">
                   <Button variant="outline" size="sm" onClick={toggleSelectAll}>
                     {selectedIds.size === assets.length ? '取消全选' : '全选'}
                   </Button>
@@ -686,135 +930,21 @@ export default function MediaAssetManage() {
                   </span>
                 </div>
               )}
-              {assets.map(asset => {
-                const displayUrl = getImageUrl(asset.file_path) || getVideoUrl(asset.file_path)
-                const isSelected = selectedIds.has(asset.id)
-                return (
-                  <div
-                    key={asset.id}
-                    className={cn(
-                      'group relative rounded-lg border bg-card overflow-hidden hover:shadow-md transition-shadow',
-                      isSelected && 'ring-2 ring-primary'
-                    )}
-                  >
-                    {batchMode && (
-                      <div
-                        className="absolute top-2 left-2 z-10 cursor-pointer"
-                        onClick={() => toggleSelect(asset.id)}
-                      >
-                        <div className={cn(
-                          'w-5 h-5 rounded border-2 flex items-center justify-center',
-                          isSelected ? 'bg-primary border-primary text-primary-foreground' : 'bg-background border-border'
-                        )}>
-                          {isSelected && <CheckSquare className="w-3 h-3" />}
-                        </div>
-                      </div>
-                    )}
-                    <div className="aspect-[4/3] bg-muted flex items-center justify-center overflow-hidden">
-                      {asset.type === 'image' ? (
-                        displayUrl ? (
-                          <img
-                            src={displayUrl}
-                            alt={asset.name}
-                            className="w-full h-full object-cover cursor-pointer"
-                            onClick={() => !batchMode && setPreviewImage(displayUrl)}
-                          />
-                        ) : (
-                          <Image className="h-8 w-8 text-muted-foreground/50" />
-                        )
-                      ) : displayUrl ? (
-                        <div
-                          className="relative w-full h-full cursor-pointer group/video"
-                          onClick={() => !batchMode && setPreviewVideo(displayUrl)}
-                        >
-                          <video
-                            src={displayUrl}
-                            className="w-full h-full object-cover"
-                            muted
-                            onMouseEnter={e => (e.target as HTMLVideoElement).play()}
-                            onMouseLeave={e => {
-                              (e.target as HTMLVideoElement).pause()
-                              ;(e.target as HTMLVideoElement).currentTime = 0
-                            }}
-                          />
-                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/video:opacity-100 transition-opacity bg-black/30">
-                            <Film className="h-8 w-8 text-white" />
-                          </div>
-                        </div>
-                      ) : (
-                        <Video className="h-8 w-8 text-muted-foreground/50" />
-                      )}
-                      {!batchMode && (
-                        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => openEditDialog(asset)}
-                            className="h-7 w-7 rounded-full bg-background/90 flex items-center justify-center hover:bg-background shadow-sm"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(asset.id)}
-                            className="h-7 w-7 rounded-full bg-background/90 flex items-center justify-center hover:bg-background hover:text-destructive shadow-sm"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      )}
-                      <div className="absolute top-2 left-2">
-                        <div className={cn(
-                          'flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium shadow-sm',
-                          asset.type === 'image'
-                            ? 'bg-sky-500/90 text-white'
-                            : 'bg-violet-500/90 text-white'
-                        )}>
-                          {asset.type === 'image' ? (
-                            <Image className="h-3 w-3" />
-                          ) : (
-                            <Film className="h-3 w-3" />
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="p-2.5 space-y-1.5">
-                      <p className="text-xs font-medium truncate" title={asset.name}>
-                        {asset.name}
-                      </p>
-                      {asset.prompt ? (
-                        <p className="text-[10px] text-muted-foreground line-clamp-2 leading-relaxed">
-                          {asset.prompt}
-                        </p>
-                      ) : (
-                        <p className="text-[10px] text-muted-foreground/50 italic">无提示词</p>
-                      )}
-                      {asset.category && (
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-green-50 dark:bg-green-900/20">
-                          {asset.category}
-                        </Badge>
-                      )}
-                      {asset.tags && asset.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 pt-0.5">
-                          {asset.tags.slice(0, 3).map(tag => (
-                            <Badge
-                              key={tag}
-                              variant="outline"
-                              className={cn(
-                                'text-[9px] px-1 py-0 h-4 cursor-pointer',
-                                filterTag === tag && 'bg-primary text-primary-foreground'
-                              )}
-                              onClick={() => setFilterTag(filterTag === tag ? null : tag)}
-                            >
-                              {tag}
-                            </Badge>
-                          ))}
-                          {asset.tags.length > 3 && (
-                            <span className="text-[9px] text-muted-foreground">+{asset.tags.length - 3}</span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
+              {/* 虚拟网格 */}
+              <AssetGrid
+                assets={assets}
+                columnCount={columnCount}
+                gridWidth={gridWidth}
+                batchMode={batchMode}
+                filterTag={filterTag}
+                selectedIds={selectedIds}
+                onPreviewImage={setPreviewImage}
+                onPreviewVideo={setPreviewVideo}
+                onToggleSelect={toggleSelect}
+                onOpenEdit={openEditDialog}
+                onDelete={handleDelete}
+                onSetFilterTag={setFilterTag}
+              />
             </div>
           )}
         </div>

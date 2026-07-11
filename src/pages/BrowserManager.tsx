@@ -1,13 +1,26 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { confirm } from '@tauri-apps/plugin-dialog'
+import { listen } from '@tauri-apps/api/event'
+import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
 import {
   Plus,
   X,
   ExternalLink,
   Trash2,
-  Save,
+  ArrowLeft,
+  ArrowRight,
+  RotateCw,
+  Download,
+  Image,
+  Video,
+  Cookie,
   User,
-  AlertCircle,
+  Globe,
+  PanelRightClose,
+  PanelRightOpen,
+  Eye,
+  Play,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -19,8 +32,12 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
+import { ImagePreviewDialog } from '@/components/media/ImagePreviewDialog'
 import { useToast } from '@/hooks/useToast'
 import { cn } from '@/lib/utils'
+import { useEmbeddedBrowser } from '@/hooks/useEmbeddedBrowser'
+import { useMediaExtraction } from '@/hooks/useMediaExtraction'
+import type { ExtractedMedia } from '@/hooks/useMediaExtraction'
 
 interface BrowserAccount {
   id: string
@@ -28,9 +45,8 @@ interface BrowserAccount {
   platform: 'doubao' | 'jimeng' | 'kling' | 'other'
   url: string
   dataDir: string
-  pid?: number
-  isRunning: boolean
   proxy?: string
+  cookies?: string
 }
 
 const PLATFORM_URLS = {
@@ -47,18 +63,21 @@ const PLATFORM_NAMES = {
   other: '其他',
 }
 
-// 从 localStorage 加载账号
+const PLATFORM_COLORS = {
+  doubao: 'bg-blue-500',
+  jimeng: 'bg-purple-500',
+  kling: 'bg-orange-500',
+  other: 'bg-gray-500',
+}
+
 const loadAccounts = (): BrowserAccount[] => {
   try {
     const saved = localStorage.getItem('browser_accounts')
-    if (saved) {
-      return JSON.parse(saved)
-    }
+    if (saved) return JSON.parse(saved)
   } catch { /* ignore */ }
   return []
 }
 
-// 保存账号到 localStorage
 const saveAccounts = (accounts: BrowserAccount[]) => {
   try {
     localStorage.setItem('browser_accounts', JSON.stringify(accounts))
@@ -68,124 +87,267 @@ const saveAccounts = (accounts: BrowserAccount[]) => {
 export default function BrowserManager() {
   const { toast } = useToast()
   const [accounts, setAccounts] = useState<BrowserAccount[]>(loadAccounts)
+  const [activeAccountId, setActiveAccountId] = useState<string | null>(null)
+  const [runningAccounts, setRunningAccounts] = useState<Set<string>>(new Set())
+  const [urlInput, setUrlInput] = useState('')
+  const [downloadPanelOpen, setDownloadPanelOpen] = useState(true)
   const [showAddDialog, setShowAddDialog] = useState(false)
-  const [browserPath, setBrowserPath] = useState<string>('')
   const [newAccount, setNewAccount] = useState<Partial<BrowserAccount>>({
     platform: 'doubao',
   })
+  const [previewMedia, setPreviewMedia] = useState<ExtractedMedia | null>(null)
+  const [previewIndex, setPreviewIndex] = useState(0)
+  // 视频 blob URL 缓存：原始 URL → blob URL（解决 douyinvod.com 跨域/Referer 黑屏）
+  const [videoBlobUrls, setVideoBlobUrls] = useState<Record<string, string>>({})
+  const videoBlobUrlsRef = useRef<Record<string, string>>({})
+  videoBlobUrlsRef.current = videoBlobUrls
+  const fetchingRef = useRef<Set<string>>(new Set())
 
-  // 检测浏览器
-  useEffect(() => {
-    detectBrowser()
+  const browser = useEmbeddedBrowser()
+  const media = useMediaExtraction(activeAccountId)
+  const runningAccountsRef = useRef<Set<string>>(runningAccounts)
+  runningAccountsRef.current = runningAccounts
+
+  // 通过 Tauri HTTP 插件获取视频（绕过 CORS/Referer 限制），返回 blob URL
+  const fetchVideoBlobUrl = useCallback(async (originalUrl: string): Promise<string | null> => {
+    if (!originalUrl) return null
+    // 已缓存
+    const cached = videoBlobUrlsRef.current[originalUrl]
+    if (cached) return cached
+    // 正在获取
+    if (fetchingRef.current.has(originalUrl)) return null
+    fetchingRef.current.add(originalUrl)
+
+    try {
+      const response = await tauriFetch(originalUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'video/*,*/*',
+          'Referer': 'https://www.doubao.com/',
+        },
+      })
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+      const blob = await response.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      setVideoBlobUrls(prev => {
+        const next = { ...prev, [originalUrl]: blobUrl }
+        videoBlobUrlsRef.current = next
+        return next
+      })
+      return blobUrl
+    } catch (error) {
+      console.error('[fetchVideoBlobUrl] failed:', originalUrl, error)
+      // 失败时返回原始 URL，让浏览器直接尝试
+      return null
+    } finally {
+      fetchingRef.current.delete(originalUrl)
+    }
   }, [])
 
-  // 页面挂载时检查已保存的浏览器进程是否仍在运行
+  // 打开媒体预览时隐藏 WebView，关闭时恢复
+  const openPreview = useCallback(async (item: ExtractedMedia, index = 0) => {
+    if (activeAccountId) await browser.hideWebview(activeAccountId)
+    setPreviewMedia(item)
+    setPreviewIndex(index)
+    // 视频预览：预先获取 blob URL 解决黑屏
+    if (item.type === 'video' && item.noWatermarkUrl) {
+      fetchVideoBlobUrl(item.noWatermarkUrl)
+    }
+  }, [activeAccountId, browser.hideWebview, fetchVideoBlobUrl])
+
+  const closePreview = useCallback(() => {
+    setPreviewMedia(null)
+    if (activeAccountId) browser.showWebview(activeAccountId)
+  }, [activeAccountId, browser.showWebview])
+
+  // 组件卸载时释放所有 blob URL
   useEffect(() => {
-    const checkRunningStatus = async () => {
-      const savedAccounts = loadAccounts()
-      const updates: BrowserAccount[] = []
+    return () => {
+      Object.values(videoBlobUrlsRef.current).forEach(url => {
+        if (url.startsWith('blob:')) URL.revokeObjectURL(url)
+      })
+    }
+  }, [])
 
-      for (const account of savedAccounts) {
-        if (account.pid) {
-          try {
-            const isRunning = await invoke<boolean>('check_browser_running', { pid: account.pid })
-            if (!isRunning) {
-              updates.push({ ...account, pid: undefined, isRunning: false })
-            }
-          } catch {
-            updates.push({ ...account, pid: undefined, isRunning: false })
-          }
-        }
-      }
-
-      if (updates.length > 0) {
-        setAccounts(prev => prev.map(a => {
-          const update = updates.find(u => u.id === a.id)
-          return update || a
-        }))
+  // 视频列表变化时自动获取 blob URL（让缩略图直接显示首帧）
+  useEffect(() => {
+    const videos = media.videos
+    if (!videos.length) return
+    for (const v of videos) {
+      if (v.noWatermarkUrl && !videoBlobUrlsRef.current[v.noWatermarkUrl]) {
+        fetchVideoBlobUrl(v.noWatermarkUrl)
       }
     }
-
-    checkRunningStatus()
-  }, [])
+  }, [media.videos, fetchVideoBlobUrl])
 
   // 保存账号变化
   useEffect(() => {
     saveAccounts(accounts)
   }, [accounts])
 
-  const detectBrowser = async () => {
-    try {
-      const path = await invoke<string>('detect_browser')
-      setBrowserPath(path)
-    } catch (error) {
-      toast({
-        title: '未检测到 Chrome/Edge',
-        description: '请安装 Chrome 或 Edge 浏览器',
-        variant: 'destructive',
+  // 当下载面板或活动账号变化时，重新定位 webview
+  useEffect(() => {
+    if (activeAccountId) {
+      const timer = setTimeout(() => {
+        browser.updateWebviewPosition(activeAccountId)
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+    return undefined
+  }, [downloadPanelOpen, activeAccountId, browser.updateWebviewPosition])
+
+  // 页面离开时隐藏所有 webview（仅在卸载时执行）
+  useEffect(() => {
+    return () => {
+      runningAccountsRef.current.forEach(accountId => {
+        browser.hideWebview(accountId).catch(() => {})
       })
     }
-  }
+  }, [browser.hideWebview])
+
+  // 监听子 Webview URL 变化，同步到地址栏
+  useEffect(() => {
+    let unlisten: (() => void) | null = null
+    let pollTimer: ReturnType<typeof setInterval> | null = null
+
+    const setup = async () => {
+      unlisten = await listen<{ url: string }>('webview-url-changed', (event) => {
+        const url = event.payload.url
+        if (url) setUrlInput(url)
+      })
+
+      // 每 3 秒轮询子 webview 的 URL（触发 report_url 事件）
+      pollTimer = setInterval(async () => {
+        if (activeAccountId) {
+          try {
+            await invoke('get_webview_url', { accountId: activeAccountId })
+          } catch {}
+        }
+      }, 3000)
+    }
+
+    setup()
+
+    return () => {
+      if (unlisten) unlisten()
+      if (pollTimer) clearInterval(pollTimer)
+    }
+  }, [activeAccountId])
 
   // 打开账号
   const openAccount = useCallback(async (accountId: string) => {
-    if (!browserPath) {
-      toast({ title: '请先安装 Chrome 或 Edge', variant: 'destructive' })
-      return
-    }
-
     const account = accounts.find(a => a.id === accountId)
     if (!account) return
 
-    // 如果已经在运行，提示用户
-    if (account.isRunning && account.pid) {
-      toast({ title: '该账号已在运行中' })
+    if (runningAccounts.has(accountId)) {
+      // 已运行，切换到该账号
+      if (activeAccountId && activeAccountId !== accountId) {
+        await browser.hideWebview(activeAccountId)
+      }
+      await browser.showWebview(accountId)
+      setActiveAccountId(accountId)
+      setUrlInput(account.url)
       return
     }
 
     try {
-      const pid = await invoke<number>('create_browser_window', {
-        sessionId: accountId,
-        profile: {
-          id: accountId,
-          name: account.name,
-          data_dir: account.dataDir,
-          proxy: account.proxy || null,
-          viewport_width: 0,
-          viewport_height: 0,
-          locale: 'zh-CN',
-          timezone: 'Asia/Shanghai',
-          color_scheme: 'light',
-          extensions: [],
-        },
-        url: account.url,
+      if (activeAccountId) {
+        await browser.hideWebview(activeAccountId)
+      }
+
+      await browser.createWebview(accountId, account.url, {
+        proxy: account.proxy,
+        cookies: account.cookies,
       })
 
-      setAccounts(prev => prev.map(a =>
-        a.id === accountId ? { ...a, pid, isRunning: true } : a
-      ))
+      setRunningAccounts(prev => new Set(prev).add(accountId))
+      setActiveAccountId(accountId)
+      setUrlInput(account.url)
 
       toast({ title: '已打开', description: account.name })
     } catch (error) {
       toast({ title: '打开失败', description: String(error), variant: 'destructive' })
     }
-  }, [browserPath, accounts, toast])
+  }, [accounts, runningAccounts, activeAccountId, browser, toast])
 
   // 关闭账号
   const closeAccount = useCallback(async (accountId: string) => {
-    const account = accounts.find(a => a.id === accountId)
-    if (account?.pid) {
+    try {
+      await browser.closeWebview(accountId)
+    } catch (error) {
+      console.error('关闭失败:', error)
+    }
+
+    const newRunning = new Set(runningAccounts)
+    newRunning.delete(accountId)
+    setRunningAccounts(newRunning)
+
+    if (activeAccountId === accountId) {
+      const nextAccount = Array.from(newRunning)[0] || null
+      if (nextAccount) {
+        await browser.showWebview(nextAccount)
+        setActiveAccountId(nextAccount)
+        const acc = accounts.find(a => a.id === nextAccount)
+        setUrlInput(acc?.url || '')
+      } else {
+        setActiveAccountId(null)
+        setUrlInput('')
+      }
+    }
+  }, [runningAccounts, activeAccountId, browser, accounts])
+
+  // 删除账号
+  const deleteAccount = useCallback(async (accountId: string) => {
+    const acc = accounts.find(a => a.id === accountId)
+    const confirmed = await confirm(
+      `确定要删除账号「${acc?.name || accountId}」吗？浏览数据和 Cookie 将被清除，此操作不可恢复。`,
+      { title: '删除确认', kind: 'warning', okLabel: '确定删除', cancelLabel: '取消' }
+    )
+    if (!confirmed) return
+
+    // 临时隐藏 webview 以防遮住后续操作
+    if (activeAccountId === accountId) {
+      await browser.hideWebview(accountId)
+    }
+
+    if (runningAccounts.has(accountId)) {
       try {
-        await invoke('close_browser_window', { pid: account.pid })
+        await browser.closeWebview(accountId)
       } catch (error) {
         console.error('关闭失败:', error)
       }
+      const newRunning = new Set(runningAccounts)
+      newRunning.delete(accountId)
+      setRunningAccounts(newRunning)
     }
 
-    setAccounts(prev => prev.map(a =>
-      a.id === accountId ? { ...a, pid: undefined, isRunning: false } : a
-    ))
-  }, [accounts])
+    try {
+      await invoke('clear_browser_data', { profileId: accountId })
+    } catch (error) {
+      console.error('清理数据失败:', error)
+    }
+
+    setAccounts(prev => prev.filter(a => a.id !== accountId))
+
+    if (activeAccountId === accountId) {
+      const remaining = accounts.filter(a => a.id !== accountId)
+      const runningRemaining = Array.from(runningAccounts).filter(id => id !== accountId)
+      const nextAccount = runningRemaining[0] || null
+      if (nextAccount) {
+        await browser.showWebview(nextAccount)
+        setActiveAccountId(nextAccount)
+        const nextAcc = remaining.find(a => a.id === nextAccount)
+        setUrlInput(nextAcc?.url || '')
+      } else {
+        setActiveAccountId(null)
+        setUrlInput('')
+      }
+    }
+
+    toast({ title: '账号已删除' })
+  }, [accounts, runningAccounts, activeAccountId, browser, toast])
 
   // 添加新账号
   const addAccount = useCallback(() => {
@@ -206,143 +368,470 @@ export default function BrowserManager() {
       url,
       dataDir: `profile_${Date.now()}`,
       proxy: newAccount.proxy || undefined,
-      isRunning: false,
+      cookies: newAccount.cookies || undefined,
     }
 
     setAccounts(prev => [...prev, account])
     setShowAddDialog(false)
     setNewAccount({ platform: 'doubao' })
     toast({ title: '账号已添加', description: account.name })
-  }, [newAccount, toast])
 
-  // 删除账号
-  const deleteAccount = useCallback(async (accountId: string) => {
-    const account = accounts.find(a => a.id === accountId)
-    if (account?.isRunning) {
-      await closeAccount(accountId)
+    // 恢复 webview 显示
+    if (activeAccountId) {
+      browser.showWebview(activeAccountId)
     }
+  }, [newAccount, toast, activeAccountId, browser])
 
-    // 清理数据目录
+  // URL 导航
+  const handleNavigate = useCallback(async () => {
+    if (!activeAccountId || !urlInput.trim()) return
     try {
-      await invoke('clear_browser_data', { profileId: accountId })
+      await browser.navigateWebview(activeAccountId, urlInput.trim())
     } catch (error) {
-      console.error('清理数据失败:', error)
+      toast({ title: '导航失败', description: String(error), variant: 'destructive' })
+    }
+  }, [activeAccountId, urlInput, browser, toast])
+
+  // 后退/前进
+  const handleGoBack = useCallback(async () => {
+    if (!activeAccountId) return
+    await browser.evalWebviewJs(activeAccountId, 'history.back()')
+  }, [activeAccountId, browser])
+
+  const handleGoForward = useCallback(async () => {
+    if (!activeAccountId) return
+    await browser.evalWebviewJs(activeAccountId, 'history.forward()')
+  }, [activeAccountId, browser])
+
+  const handleReload = useCallback(async () => {
+    if (!activeAccountId) return
+    await browser.evalWebviewJs(activeAccountId, 'location.reload()')
+  }, [activeAccountId, browser])
+
+  // 下载媒体项
+  const handleDownload = useCallback(async (item: ExtractedMedia) => {
+    if (item.type === 'video' && !item.noWatermarkUrl) {
+      // 触发视频解析，结果会通过 media-extracted 事件自动更新到列表
+      try {
+        await media.resolveVideoUrl(item)
+        toast({ title: '正在解析视频链接', description: '解析完成后可点击下载' })
+      } catch (error) {
+        toast({ title: '触发解析失败', description: String(error), variant: 'destructive' })
+      }
+      return
     }
 
-    setAccounts(prev => prev.filter(a => a.id !== accountId))
-    toast({ title: '账号已删除' })
-  }, [accounts, closeAccount, toast])
-
-  // 应用退出时清理所有运行中的浏览器（不在页面切换时关闭）
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      accounts.forEach(account => {
-        if (account.pid) {
-          invoke('close_browser_window', { pid: account.pid }).catch(() => {})
-        }
-      })
-    }
-    window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload)
-    }
-  }, [accounts])
+    await media.downloadMedia(item)
+  }, [media, toast])
 
   return (
-    <div className="flex h-full flex-col bg-background">
-      {/* 顶部 */}
-      <div className="flex items-center justify-between border-b px-4 py-3">
-        <div>
-          <h1 className="text-lg font-semibold">账号多开管理</h1>
-          <p className="text-xs text-muted-foreground">
-            {browserPath ? `浏览器: ${browserPath}` : '未检测到浏览器'}
-          </p>
-        </div>
-        <Button onClick={() => setShowAddDialog(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          添加账号
-        </Button>
-      </div>
-
-      {/* 账号列表 */}
-      <div className="flex-1 overflow-auto p-4">
-        {accounts.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-4 text-muted-foreground">
-            <User className="w-16 h-16 opacity-20" />
-            <p>还没有保存的账号</p>
-            <p className="text-sm">点击"添加账号"创建，登录一次后会自动保存</p>
+    <div className="flex h-[calc(100vh-4rem)]">
+      {/* 左栏：账号列表 */}
+      <div className="w-60 border-r bg-muted/20 flex flex-col">
+        <div className="p-3 border-b bg-background">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-semibold text-sm">账号管理</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={async () => {
+                // 原生 webview 会遮住 HTML 对话框，临时隐藏
+                if (activeAccountId) {
+                  await browser.hideWebview(activeAccountId)
+                }
+                setShowAddDialog(true)
+              }}
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {accounts.map(account => (
+        </div>
+
+        <div className="flex-1 overflow-auto p-2 space-y-1">
+          {accounts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
+              <User className="w-10 h-10 opacity-20" />
+              <p className="text-sm">没有账号</p>
+              <p className="text-xs">点击 + 添加</p>
+            </div>
+          ) : (
+            accounts.map(account => (
               <div
                 key={account.id}
                 className={cn(
-                  'p-4 border rounded-lg space-y-3 transition-colors',
-                  account.isRunning ? 'border-primary bg-primary/5' : 'hover:border-primary/50'
+                  'p-2.5 rounded-lg cursor-pointer transition-colors border',
+                  activeAccountId === account.id
+                    ? 'border-primary bg-primary/5'
+                    : 'border-transparent hover:bg-accent',
+                  runningAccounts.has(account.id) && 'border-l-2 border-l-green-500'
                 )}
+                onClick={() => openAccount(account.id)}
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className={cn(
-                      'w-2 h-2 rounded-full',
-                      account.isRunning ? 'bg-green-500' : 'bg-gray-300'
-                    )} />
-                    <span className="font-medium">{account.name}</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <div className={cn(
+                    'w-2 h-2 rounded-full shrink-0',
+                    runningAccounts.has(account.id) ? 'bg-green-500' : 'bg-gray-300'
+                  )} />
+                  <span className="text-sm font-medium truncate flex-1">{account.name}</span>
+                  <span className={cn(
+                    'text-[10px] px-1.5 py-0.5 rounded text-white',
+                    PLATFORM_COLORS[account.platform]
+                  )}>
                     {PLATFORM_NAMES[account.platform]}
                   </span>
                 </div>
-
-                <div className="text-xs text-muted-foreground truncate">
-                  {account.url}
-                </div>
-
-                {account.proxy && (
-                  <div className="text-xs text-blue-500 truncate">
-                    代理: {account.proxy}
+                {account.cookies && (
+                  <div className="text-[10px] text-amber-600 mt-1 flex items-center gap-1">
+                    <Cookie className="w-3 h-3" />
+                    已配置 Cookie
                   </div>
                 )}
-
-                <div className="flex gap-2">
-                  {account.isRunning ? (
+                <div className="flex gap-1 mt-1.5">
+                  {runningAccounts.has(account.id) ? (
                     <Button
                       variant="outline"
                       size="sm"
-                      className="flex-1"
-                      onClick={() => closeAccount(account.id)}
+                      className="h-6 text-[11px] flex-1"
+                      onClick={async (e) => {
+                        e.stopPropagation()
+                        const confirmed = await confirm(
+                          `确定关闭「${account.name}」的浏览器？当前页面状态将丢失。`,
+                          { title: '关闭浏览器', kind: 'warning', okLabel: '关闭', cancelLabel: '取消' }
+                        )
+                        if (confirmed) closeAccount(account.id)
+                      }}
                     >
-                      <X className="w-4 h-4 mr-1" />
+                      <X className="w-3 h-3 mr-1" />
                       关闭
                     </Button>
                   ) : (
                     <Button
                       size="sm"
-                      className="flex-1"
-                      onClick={() => openAccount(account.id)}
+                      className="h-6 text-[11px] flex-1"
+                      onClick={(e) => { e.stopPropagation(); openAccount(account.id) }}
                     >
-                      <ExternalLink className="w-4 h-4 mr-1" />
+                      <ExternalLink className="w-3 h-3 mr-1" />
                       打开
                     </Button>
                   )}
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="text-destructive"
-                    onClick={() => deleteAccount(account.id)}
+                    className="h-6 w-6 text-destructive"
+                    onClick={(e) => { e.stopPropagation(); deleteAccount(account.id) }}
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-3 h-3" />
                   </Button>
                 </div>
               </div>
-            ))}
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* 中间栏：浏览器区域 */}
+      <div className="flex flex-col min-w-0 flex-1 border-r">
+        {/* Tab 栏 */}
+        <div className="flex items-center border-b bg-muted/30 h-9">
+          <div className="flex items-center gap-0.5 px-2 flex-1 overflow-x-auto">
+            {Array.from(runningAccounts).map(accountId => {
+              const acc = accounts.find(a => a.id === accountId)
+              if (!acc) return null
+              return (
+                <button
+                  key={accountId}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1 text-xs rounded-t transition-colors whitespace-nowrap',
+                    activeAccountId === accountId
+                      ? 'bg-background border border-b-background -mb-px'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                  onClick={() => openAccount(accountId)}
+                >
+                  <div className={cn('w-1.5 h-1.5 rounded-full', PLATFORM_COLORS[acc.platform])} />
+                  <span>{acc.name}</span>
+                  <span
+                    className="ml-1 hover:bg-muted rounded p-0.5"
+                    onClick={async (e) => {
+                      e.stopPropagation()
+                      const confirmed = await confirm(
+                        `确定关闭「${acc.name}」的浏览器标签？当前页面状态将丢失。`,
+                        { title: '关闭标签', kind: 'warning', okLabel: '关闭', cancelLabel: '取消' }
+                      )
+                      if (confirmed) closeAccount(accountId)
+                    }}
+                  >
+                    <X className="w-3 h-3" />
+                  </span>
+                </button>
+              )
+            })}
           </div>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 mr-1"
+            onClick={() => setDownloadPanelOpen(!downloadPanelOpen)}
+          >
+            {downloadPanelOpen ? (
+              <PanelRightClose className="h-4 w-4" />
+            ) : (
+              <PanelRightOpen className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+
+        {/* URL 栏 */}
+        <div className="flex items-center gap-1 px-2 py-1.5 border-b bg-background">
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleGoBack} disabled={!activeAccountId}>
+            <ArrowLeft className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleGoForward} disabled={!activeAccountId}>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleReload} disabled={!activeAccountId}>
+            <RotateCw className="h-3.5 w-3.5" />
+          </Button>
+          <div className="flex-1 flex items-center">
+            <Globe className="w-3.5 h-3.5 mr-2 text-muted-foreground shrink-0" />
+            <Input
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleNavigate()}
+              placeholder="输入网址..."
+              className="h-7 text-xs"
+              disabled={!activeAccountId}
+            />
+          </div>
+        </div>
+
+        {/* 浏览器容器 */}
+        <div
+          ref={browser.containerRef}
+          className="flex-1 bg-white relative"
+        >
+          {!activeAccountId && (
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
+              <Globe className="w-16 h-16 opacity-15" />
+              <p>选择账号或输入网址开始浏览</p>
+              <p className="text-xs">左侧添加账号，点击打开内嵌浏览器</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 右栏：下载面板 */}
+      <div
+        className={cn(
+          'border-l bg-background transition-all duration-300 flex flex-col',
+          downloadPanelOpen ? 'w-80' : 'w-0 overflow-hidden'
         )}
+      >
+        <div className="p-3 border-b bg-muted/30">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-semibold text-sm">下载面板</span>
+            <div className="flex items-center gap-1">
+              {media.mediaItems.length > 0 && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[11px]"
+                    onClick={() => media.batchDownload(media.mediaItems.filter(m => !m.downloaded))}
+                    disabled={media.mediaItems.every(m => m.downloaded)}
+                  >
+                    <Download className="w-3 h-3 mr-1" />
+                    全部下载
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[11px] text-destructive"
+                    onClick={media.clearMedia}
+                  >
+                    清空
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-1">
+            <Button
+              variant={media.activeTab === 'images' ? 'default' : 'ghost'}
+              size="sm"
+              className="flex-1 text-xs h-7"
+              onClick={() => media.setActiveTab('images')}
+            >
+              <Image className="w-3 h-3 mr-1" />
+              图片 ({media.images.length})
+            </Button>
+            <Button
+              variant={media.activeTab === 'videos' ? 'default' : 'ghost'}
+              size="sm"
+              className="flex-1 text-xs h-7"
+              onClick={() => media.setActiveTab('videos')}
+            >
+              <Video className="w-3 h-3 mr-1" />
+              视频 ({media.videos.length})
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-auto p-2">
+          {media.activeTab === 'images' ? (
+            media.images.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <Image className="w-10 h-10 opacity-20 mb-2" />
+                <p className="text-sm">暂无图片</p>
+                <p className="text-xs">在豆包页面生成图片后自动捕获</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {media.images.map(item => (
+                  <div
+                    key={item.id}
+                    className="group relative border rounded-lg overflow-hidden bg-muted cursor-pointer"
+                    onClick={() => openPreview(item, media.images.indexOf(item))}
+                  >
+                    <img
+                      src={item.thumbnailUrl || item.noWatermarkUrl}
+                      alt=""
+                      className="w-full aspect-video object-cover"
+                      loading="lazy"
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => { e.stopPropagation(); openPreview(item, media.images.indexOf(item)) }}
+                        title="预览"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-8 text-xs px-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => { e.stopPropagation(); handleDownload(item) }}
+                        disabled={item.downloaded}
+                      >
+                        {item.downloaded ? '已下载' : (
+                          <>
+                            <Download className="w-3.5 h-3.5 mr-1" />
+                            下载
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    {item.width && item.height && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] px-1.5 py-0.5">
+                        {item.width}x{item.height}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
+          ) : (
+            media.videos.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <Video className="w-10 h-10 opacity-20 mb-2" />
+                <p className="text-sm">暂无视频</p>
+                <p className="text-xs">在豆包页面生成视频后自动捕获</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {media.videos.map(item => (
+                  <div
+                    key={item.id}
+                    className="group relative border rounded-lg overflow-hidden bg-muted"
+                  >
+                    <div
+                      className="relative aspect-video bg-black/80 flex items-center justify-center cursor-pointer"
+                      onClick={() => {
+                        if (item.noWatermarkUrl) {
+                          openPreview(item, 0)
+                        }
+                      }}
+                    >
+                      {item.noWatermarkUrl ? (
+                        <>
+                          {videoBlobUrls[item.noWatermarkUrl] ? (
+                            <video
+                              src={videoBlobUrls[item.noWatermarkUrl]}
+                              className="w-full h-full object-contain"
+                              muted
+                              preload="metadata"
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center text-white/60 gap-1">
+                              <RotateCw className="w-6 h-6 animate-spin" />
+                              <span className="text-[10px]">加载中</span>
+                            </div>
+                          )}
+                          {videoBlobUrls[item.noWatermarkUrl] ? (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 group-hover:bg-black/20 transition-colors pointer-events-none">
+                              <div className="w-12 h-12 rounded-full bg-white/80 flex items-center justify-center opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all">
+                                <Play className="w-6 h-6 text-black ml-0.5" fill="currentColor" />
+                              </div>
+                            </div>
+                          ) : null}
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center text-muted-foreground">
+                          <Video className="w-8 h-8 mb-1" />
+                          <span className="text-xs">解析中...</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 p-1.5 bg-background">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11px] font-medium truncate">
+                          {item.noWatermarkUrl
+                            ? (item.width && item.height ? `${item.width}x${item.height}` : '视频')
+                            : '等待解析'}
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[11px] shrink-0"
+                        onClick={(e) => { e.stopPropagation(); handleDownload(item) }}
+                        disabled={item.downloaded || !item.noWatermarkUrl || item.downloading}
+                      >
+                        {item.downloaded ? '已下载' : item.downloading ? (
+                          <>
+                            <RotateCw className="w-3 h-3 mr-1 animate-spin" />
+                            下载中
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-3 h-3 mr-1" />
+                            下载
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          )}
+        </div>
       </div>
 
       {/* 添加账号对话框 */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+      <Dialog open={showAddDialog} onOpenChange={async (open) => {
+        if (!open && activeAccountId) {
+          // 关闭对话框时恢复 webview 显示
+          await browser.showWebview(activeAccountId)
+        }
+        setShowAddDialog(open)
+      }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>添加账号</DialogTitle>
@@ -367,7 +856,7 @@ export default function BrowserManager() {
                 {Object.entries(PLATFORM_NAMES).map(([key, name]) => (
                   <button
                     key={key}
-                    onClick={() => setNewAccount({ ...newAccount, platform: key as any })}
+                    onClick={() => setNewAccount({ ...newAccount, platform: key as BrowserAccount['platform'] })}
                     className={cn(
                       'px-3 py-2 text-sm border rounded-md transition-colors',
                       newAccount.platform === key
@@ -394,6 +883,18 @@ export default function BrowserManager() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">
+                Cookie <span className="text-muted-foreground font-normal">（可选，粘贴后打开即可自动登录）</span>
+              </label>
+              <textarea
+                className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                value={newAccount.cookies || ''}
+                onChange={(e) => setNewAccount({ ...newAccount, cookies: e.target.value })}
+                placeholder="Cookie header string，打开浏览器时自动注入"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
                 代理 IP <span className="text-muted-foreground font-normal">（可选，防多账号关联）</span>
               </label>
               <Input
@@ -401,26 +902,76 @@ export default function BrowserManager() {
                 onChange={(e) => setNewAccount({ ...newAccount, proxy: e.target.value })}
                 placeholder="http://127.0.0.1:8080"
               />
-              <p className="text-xs text-muted-foreground">
-                不填则使用本机 IP。多开同平台账号建议每个配不同代理。
-              </p>
-            </div>
-
-            <div className="flex items-start gap-2 p-3 bg-muted rounded-md text-xs text-muted-foreground">
-              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-              <p>
-                添加后点击"打开"，在浏览器中完成登录，关闭后下次可直接打开使用，无需重新登录。
-                指纹（UA/Canvas/WebGL）自动随机，无需手动配置。
-              </p>
             </div>
 
             <Button onClick={addAccount} className="w-full">
-              <Save className="w-4 h-4 mr-2" />
               添加账号
             </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* 媒体预览对话框 */}
+      {previewMedia && previewMedia.type === 'image' && (
+        <ImagePreviewDialog
+          src={previewMedia.noWatermarkUrl || previewMedia.thumbnailUrl || ''}
+          alt="预览图片"
+          isOpen={!!previewMedia && previewMedia.type === 'image'}
+          onClose={closePreview}
+          title="图片预览"
+          images={media.images.map(img => img.noWatermarkUrl || img.thumbnailUrl || '')}
+          currentIndex={previewIndex}
+          onIndexChange={setPreviewIndex}
+        />
+      )}
+      {previewMedia && previewMedia.type === 'video' && previewMedia.noWatermarkUrl && (
+        <Dialog open={!!previewMedia && previewMedia.type === 'video'} onOpenChange={(open) => {
+          if (!open) closePreview()
+        }}>
+          <DialogContent className="max-w-5xl p-0 overflow-hidden gap-0">
+            <DialogHeader className="sr-only">
+              <DialogTitle>视频预览</DialogTitle>
+            </DialogHeader>
+            <div className="bg-black flex items-center justify-center relative" style={{ minHeight: 500, maxHeight: '85vh' }}>
+              {videoBlobUrls[previewMedia.noWatermarkUrl] ? (
+                <video
+                  key={videoBlobUrls[previewMedia.noWatermarkUrl]}
+                  src={videoBlobUrls[previewMedia.noWatermarkUrl]}
+                  controls
+                  autoPlay
+                  loop
+                  className="max-w-full max-h-[85vh] w-full"
+                  style={{ aspectRatio: '16/9' }}
+                />
+              ) : (
+                <div className="flex flex-col items-center text-white/80 gap-3 py-20">
+                  <RotateCw className="w-10 h-10 animate-spin" />
+                  <span className="text-sm">正在加载视频...</span>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-between px-4 py-2 bg-background border-t gap-2">
+              <div className="text-xs text-muted-foreground truncate flex-1">
+                {previewMedia.width && previewMedia.height
+                  ? `${previewMedia.width}x${previewMedia.height}`
+                  : '视频'}
+              </div>
+              <Button
+                size="sm"
+                onClick={() => handleDownload(previewMedia)}
+                disabled={previewMedia.downloaded}
+              >
+                {previewMedia.downloaded ? '已下载' : (
+                  <>
+                    <Download className="w-4 h-4 mr-1" />
+                    下载
+                  </>
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }

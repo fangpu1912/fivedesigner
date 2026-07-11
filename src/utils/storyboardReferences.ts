@@ -1,5 +1,4 @@
 import { characterDB, sceneDB, propDB, storyboardDB } from '@/db'
-import { getImageUrl } from '@/utils/asset'
 import type { Storyboard, Character, Scene, Prop } from '@/types'
 
 export interface CollectedReference {
@@ -26,7 +25,7 @@ export async function collectStoryboardReferences(
     try {
       const scene = await sceneDB.getById(storyboard.scene_id)
       if (scene) {
-        const url = scene.image ? (getImageUrl(scene.image) || scene.image) : ''
+        const url = scene.image || ''
         addRef({
           url,
           type: 'scene',
@@ -43,7 +42,7 @@ export async function collectStoryboardReferences(
       try {
         const character = await characterDB.getById(charId)
         if (character) {
-          const url = character.image ? (getImageUrl(character.image) || character.image) : ''
+          const url = character.image || ''
           addRef({
             url,
             type: 'character',
@@ -61,7 +60,7 @@ export async function collectStoryboardReferences(
       try {
         const prop = await propDB.getById(propId)
         if (prop) {
-          const url = prop.image ? (getImageUrl(prop.image) || prop.image) : ''
+          const url = prop.image || ''
           addRef({
             url,
             type: 'prop',

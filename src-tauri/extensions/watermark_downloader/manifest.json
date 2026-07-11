@@ -1,0 +1,85 @@
+{
+  "manifest_version": 3,
+  "name": "豆包&千问下载器",
+  "version": "13.0",
+  "description": "豆包、千问生成的视频、图片无水印直接下载",
+  "author": "mr_dadong",
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon.png",
+      "32": "icon.png",
+      "48": "icon.png",
+      "64": "icon.png",
+      "128": "icon.png"
+    }
+  },
+  "icons": {
+    "16": "icon.png",
+    "32": "icon.png",
+    "48": "icon.png",
+    "64": "icon.png",
+    "128": "icon.png"
+  },
+  "permissions": [
+    "downloads",
+    "storage",
+    "tabs",
+    "activeTab",
+    "scripting",
+    "debugger"
+  ],
+  "host_permissions": [
+    "https://*.doubao.com/*",
+    "https://*.qianwen.com/*",
+    "https://*.dola.com/*",
+    "http://106.53.206.145/*",
+    "https://api-normal.doubao.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.doubao.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://www.doubao.com/*"],
+      "js": ["forwarder.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["*://*.doubao.com/*"],
+      "js": ["directory.js"],
+      "css": ["directory.css"]
+    },
+    {
+      "matches": ["https://www.qianwen.com/*"],
+      "js": ["qianwen_content.js"],
+      "run_at": "document_end"
+    },
+    {
+      "matches": ["https://www.doubao.com/*", "https://doubao.com/*"],
+      "js": ["loader.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["*://*.doubao.com/*", "*://*.dola.com/*"],
+      "js": ["content-panel.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["page.js"],
+      "matches": ["https://www.doubao.com/*", "https://doubao.com/*"]
+    },
+    {
+      "resources": ["doubao-skill-pack-response.json", "dola-skill-pack-response.json"],
+      "matches": ["*://*.doubao.com/*", "*://*.dola.com/*"]
+    }
+  ]
+}

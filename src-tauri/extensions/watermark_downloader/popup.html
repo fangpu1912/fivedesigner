@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>豆包&千问下载器</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <img src="icon.png" class="logo" alt="logo" />
+      <div class="header-info">
+        <h1 class="title">豆包&千问无水印下载</h1>
+        <p class="subtitle">AI 图片/视频无水印下载工具</p>
+      </div>
+    </div>
+
+<!-- ========== 激活码功能已禁用 ==========-->
+    <!--<div id="activationPanel" class="section">
+      <div class="status-badge inactive">
+        <span class="dot"></span>
+        未激活
+      </div>
+      <div class="info-box">
+        <p class="info-text">请输入激活码激活扩展，激活后可无限次下载无水印图片/视频。<br>支持豆包、通义千问两个平台。</p>
+      </div>
+      <div class="form-group">
+        <label class="label">激活码</label>
+        <input type="text" id="cardKey" class="input" placeholder="请输入激活码" autocomplete="off">
+        <div id="activationHint" class="hint"></div>
+      </div>
+      <button id="activateBtn" class="btn btn-primary">激活</button>
+    </div>-->
+
+<!-- ========== 激活码功能已禁用 ==========-->
+    <!--<div id="activatingPanel" class="section hidden">
+      <div class="info-box">
+        <p class="info-text">正在验证激活码...</p>
+      </div>
+    </div>-->
+
+    <div id="activatedPanel" class="section hidden">
+<!-- ========== 激活码功能已禁用 ==========-->
+      <!--<div class="status-badge active">
+        <span class="dot"></span>
+        已激活
+      </div>-->
+
+      <!--<div class="info-box" id="activationInfoBox">
+        <p class="info-text" id="activationInfo">激活状态：有效</p>
+      </div>-->
+
+      <div class="stats">
+        <div class="stat-item">
+          <span class="stat-value" id="imageCount">0</span>
+          <span class="stat-label">豆包图片</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <span class="stat-value" id="videoCount">0</span>
+          <span class="stat-label">豆包视频</span>
+        </div>
+      </div>
+      
+      <div class="info-tips" style="margin: 12px 0; padding: 8px; background: #f0f9ff; border-radius: 8px; font-size: 12px; color: #0369a1;">
+        📌 通义千问：页面右下角有独立的悬浮按钮，点击可批量管理图片/视频
+      </div>
+      
+      <div id="versionWarning" class="warning-box hidden">
+        <p class="warning-text" id="warningText"></p>
+        <button class="btn btn-update-action" id="updateActionBtn">前往更新</button>
+      </div>
+      
+      <div class="actions">
+        <button id="refreshBtn" class="btn btn-ghost">刷新统计</button>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p class="version-text">版本 <span id="versionText">13.0</span></p>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

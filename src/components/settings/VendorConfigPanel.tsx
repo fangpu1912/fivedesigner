@@ -109,7 +109,12 @@ function VendorEditForm({
                     <div className="text-sm font-medium">{input.label}</div>
                     <div className="text-xs text-muted-foreground mt-1">
                       {vendor.inputValues[input.key]
-                        ? (input.type === 'password' ? '••••••••' : vendor.inputValues[input.key])
+                        ? (input.type === 'password'
+                          ? '••••••••'
+                          : input.type === 'select'
+                            ? (input.options?.find(o => o.value === vendor.inputValues[input.key])?.label || vendor.inputValues[input.key])
+                            : vendor.inputValues[input.key]
+                        )
                         : '未配置'
                       }
                     </div>
@@ -202,20 +207,41 @@ function VendorEditForm({
               {formData.inputs.map(input => (
                 <div key={input.key} className="space-y-1">
                   <Label className="text-xs text-muted-foreground">{input.label}</Label>
-                  <Input
-                    type={input.type === 'password' ? 'password' : 'text'}
-                    placeholder={input.placeholder || `输入${input.label}`}
-                    value={formData.inputValues[input.key] || ''}
-                    onChange={e =>
-                      setFormData({
-                        ...formData,
-                        inputValues: {
-                          ...formData.inputValues,
-                          [input.key]: e.target.value,
-                        },
-                      })
-                    }
-                  />
+                  {input.type === 'select' ? (
+                    <select
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                      value={formData.inputValues[input.key] || ''}
+                      onChange={e =>
+                        setFormData({
+                          ...formData,
+                          inputValues: {
+                            ...formData.inputValues,
+                            [input.key]: e.target.value,
+                          },
+                        })
+                      }
+                    >
+                      <option value="">{input.placeholder || `选择${input.label}`}</option>
+                      {(input.options || []).map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Input
+                      type={input.type === 'password' ? 'password' : 'text'}
+                      placeholder={input.placeholder || `输入${input.label}`}
+                      value={formData.inputValues[input.key] || ''}
+                      onChange={e =>
+                        setFormData({
+                          ...formData,
+                          inputValues: {
+                            ...formData.inputValues,
+                            [input.key]: e.target.value,
+                          },
+                        })
+                      }
+                    />
+                  )}
                 </div>
               ))}
             </div>

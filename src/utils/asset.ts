@@ -117,6 +117,12 @@ export function getAssetUrl(path: string | null | undefined): string | null {
     return decodedPath
   }
 
+  // Vite public/ 目录的静态资源路径（如 /get-cookie.png）
+  // 这类路径在非 Windows 上也是绝对路径，但不需要文件系统转换
+  if (decodedPath.startsWith('/') && !/^\/[a-zA-Z]:\//.test(decodedPath)) {
+    return decodedPath
+  }
+
   // Tauri 环境：本地路径转换
   if (isTauriEnv()) {
     if (isAbsolutePath(decodedPath)) {

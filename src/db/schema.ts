@@ -292,4 +292,18 @@ CREATE INDEX IF NOT EXISTS idx_generation_tasks_type ON generation_tasks(type);
 CREATE INDEX IF NOT EXISTS idx_generation_tasks_project_id ON generation_tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_generation_tasks_created_at ON generation_tasks(created_at);
 CREATE INDEX IF NOT EXISTS idx_task_log_entries_task_id ON task_log_entries(task_id);
+
+-- 激活码表
+CREATE TABLE IF NOT EXISTS activation_codes (
+  code TEXT PRIMARY KEY,
+  valid_days INTEGER NOT NULL,
+  used INTEGER DEFAULT 0,
+  machine_id TEXT,
+  activated_at TEXT,
+  expires_at TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_activation_codes_used ON activation_codes(used);
+CREATE INDEX IF NOT EXISTS idx_activation_codes_machine_id ON activation_codes(machine_id);
 `

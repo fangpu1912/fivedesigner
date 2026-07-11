@@ -768,3 +768,22 @@ export const IMAGE_ASPECT_RATIOS = [
 ] as const
 
 export type ImageAspectRatio = typeof IMAGE_ASPECT_RATIOS[number]
+
+// 激活码相关类型
+export interface ActivationCode {
+  code: string
+  valid_days: number
+  used: number // 0=未使用, 1=已使用
+  machine_id?: string
+  activated_at?: string
+  expires_at?: string
+  created_at: string
+}
+
+export interface ActivationStatus {
+  activated: boolean
+  code?: string
+  machine_id?: string
+  activated_at?: string
+  expires_at?: string
+}

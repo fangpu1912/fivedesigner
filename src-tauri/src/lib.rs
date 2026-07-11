@@ -13,6 +13,7 @@ use image::GenericImageView;
 mod modelscope;
 mod video_scene_detection;
 mod browser_manager;
+mod embedded_browser;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct HttpRequest {
@@ -435,6 +436,12 @@ async fn http_request(request: HttpRequestArgs) -> Result<HttpRequestResult, Str
             })
         }
     }
+}
+
+/// 获取机器码(用于激活码绑定)
+#[tauri::command]
+fn get_machine_id() -> Result<String, String> {
+    machine_uid::get().map_err(|e| format!("Failed to get machine ID: {}", e))
 }
 
 #[tauri::command]
@@ -978,6 +985,7 @@ async fn download_video(
     project_id: Option<String>,
     episode_id: Option<String>,
     cookies: Option<String>,
+    media_type: Option<String>,
 ) -> Result<String, String> {
     use std::io::Write;
     use tauri::Emitter;
@@ -986,10 +994,16 @@ async fn download_video(
         .map_err(|e| format!("Failed to get workspace path: {}", e))?;
 
     let base_dir = PathBuf::from(&workspace_path);
+    let type_dir = match media_type.as_deref().unwrap_or("video") {
+        "image" => "images",
+        _ => "videos",
+    };
     let save_dir = if let (Some(proj_id), Some(ep_id)) = (&project_id, &episode_id) {
-        base_dir.join("projects").join(proj_id).join(ep_id).join("videos")
+        base_dir.join("projects").join(proj_id).join(ep_id).join(type_dir)
+    } else if let Some(proj_id) = &project_id {
+        base_dir.join("projects").join(proj_id).join("_unassigned").join(type_dir)
     } else {
-        base_dir.join("temp").join("videos")
+        base_dir.join("temp").join(type_dir)
     };
 
     fs::create_dir_all(&save_dir)
@@ -1009,6 +1023,8 @@ async fn download_video(
         request = request.header("Referer", "https://jimeng.jianying.com/");
     } else if url.contains("doubao") {
         request = request.header("Referer", "https://www.doubao.com/");
+    } else if url.contains("douyin") || url.contains("bytecdn") || url.contains("byteimg") || url.contains("douyinpic") {
+        request = request.header("Referer", "https://www.douyin.com/");
     }
 
     if let Some(ref cookie_str) = cookies {
@@ -2273,9 +2289,98 @@ pub fn run() {
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .register_asynchronous_uri_scheme_protocol("dyproxy", |_app, request, responder| {
+            let uri = request.uri().to_string();
+            eprintln!("[dyproxy] request uri = {}", uri);
+            let range = request.headers().get("range").cloned();
+
+            let video_url = url::Url::parse(&uri)
+                .ok()
+                .and_then(|u| {
+                    u.query_pairs()
+                        .find(|(k, _)| k == "url")
+                        .map(|(_, v)| v.into_owned())
+                });
+
+            match video_url {
+                None => {
+                    eprintln!("[dyproxy] missing url param");
+                    let resp = tauri::http::Response::builder()
+                        .status(400)
+                        .body(b"missing url param".to_vec())
+                        .unwrap();
+                    responder.respond(resp);
+                }
+                Some(url) => {
+                    eprintln!("[dyproxy] proxying url = {}", url);
+                    tauri::async_runtime::spawn(async move {
+                        let client = match reqwest::Client::builder()
+                            .timeout(std::time::Duration::from_secs(60))
+                            .build()
+                        {
+                            Ok(c) => c,
+                            Err(e) => {
+                                eprintln!("[dyproxy] client build error = {}", e);
+                                responder.respond(
+                                    tauri::http::Response::builder()
+                                        .status(502)
+                                        .body(b"client build failed".to_vec())
+                                        .unwrap(),
+                                );
+                                return;
+                            }
+                        };
+                        let ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
+                        let mut req = client
+                            .get(&url)
+                            .header("Referer", "https://www.douyin.com/")
+                            .header("User-Agent", ua);
+                        if let Some(r) = range {
+                            req = req.header("Range", r);
+                        }
+                        match req.send().await {
+                            Ok(resp) => {
+                                let status = resp.status();
+                                eprintln!(
+                                    "[dyproxy] upstream status = {} content-type = {:?}",
+                                    status,
+                                    resp.headers().get("content-type")
+                                );
+                                let mut builder =
+                                    tauri::http::Response::builder().status(status);
+                                for key in &[
+                                    "content-type",
+                                    "content-length",
+                                    "content-range",
+                                    "accept-ranges",
+                                ] {
+                                    if let Some(v) = resp.headers().get(*key) {
+                                        builder = builder.header(*key, v);
+                                    }
+                                }
+                                let body = resp.bytes().await.map(|b| b.to_vec()).unwrap_or_default();
+                                eprintln!("[dyproxy] body length = {}", body.len());
+                                let response = builder.body(body).unwrap();
+                                responder.respond(response);
+                            }
+                            Err(e) => {
+                                eprintln!("[dyproxy] upstream error = {}", e);
+                                responder.respond(
+                                    tauri::http::Response::builder()
+                                        .status(502)
+                                        .body(b"proxy fetch failed".to_vec())
+                                        .unwrap(),
+                                );
+                            }
+                        }
+                    });
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             http_proxy,
             http_request,
+            get_machine_id,
             get_app_data_dir,
             ensure_data_dir,
             save_file,
@@ -2315,6 +2420,24 @@ pub fn run() {
             browser_manager::install_browser_extension,
             browser_manager::uninstall_browser_extension,
             browser_manager::clear_browser_data,
+            browser_manager::get_browser_debug_port,
+            embedded_browser::create_embedded_webview,
+            embedded_browser::position_webview,
+            embedded_browser::show_webview,
+            embedded_browser::hide_webview,
+            embedded_browser::navigate_webview,
+            embedded_browser::close_embedded_webview,
+            embedded_browser::eval_webview_js,
+            embedded_browser::inject_dewatermark_script,
+            embedded_browser::list_active_webviews,
+            embedded_browser::inject_cookies_to_webview,
+            embedded_browser::report_extracted_media,
+            embedded_browser::poll_extracted_media,
+            embedded_browser::get_webview_url,
+            embedded_browser::report_url,
+            embedded_browser::report_scan_result,
+            embedded_browser::set_scan_url,
+            embedded_browser::take_scan_url,
             generate_jianying_draft,
             restart_capcut,
             download_image_to_base64

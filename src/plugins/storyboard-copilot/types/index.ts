@@ -280,17 +280,27 @@ export interface ImageToPromptNodeData extends NodeDisplayData {
 }
 
 // RunningHub 工作流节点数据
+export interface RhParamValue {
+  value: string
+  sourceFromUpstream?: boolean
+  sourceMaterialId?: string
+  sourceRhNodeId?: string
+}
+
 export interface RunningHubNodeData extends NodeDisplayData {
   webappId: string
   status: 'idle' | 'submitting' | 'polling' | 'success' | 'error'
   taskId?: string
   errorMessage?: string
   appInfo?: Record<string, unknown>
-  paramValues: Record<string, { value: string; sourceFromUpstream?: boolean }>
+  paramValues: Record<string, RhParamValue>
   imageUrl: string | null
   videoUrl: string | null
   audioUrl: string | null
   useWallet: boolean
+  instanceType?: string
+  urls?: string[]
+  rhCode?: number
 }
 
 // 文本注释节点数据（别名，用于 CanvasNodeData 联合类型）

@@ -34,6 +34,7 @@ import {
   FileJson,
   Settings2,
   Download,
+  Shield,
 } from 'lucide-react'
 
 import { VendorConfigPanel } from '@/components/settings/VendorConfigPanel'
@@ -59,6 +60,7 @@ import {
   getAIConfigsWithSecrets,
   saveAIConfig,
 } from '@/services/configService'
+import { secureStorage } from '@/services/secureStorage'
 import {
   getWorkflowConfigs,
   saveWorkflowConfig,
@@ -238,6 +240,13 @@ export function Settings() {
   // 剪映路径配置
   const [capcutPath, setCapcutPath] = useState<string>('')
 
+  // 管理员密码设置
+  const [adminPassword, setAdminPassword] = useState<string>('')
+  const [newAdminPassword, setNewAdminPassword] = useState<string>('')
+  const [confirmAdminPassword, setConfirmAdminPassword] = useState<string>('')
+  const [loadingAdminPassword, setLoadingAdminPassword] = useState(false)
+  const ADMIN_PASSWORD_KEY = 'activation_admin_password'
+
   const [workflows, setWorkflows] = useState<WorkflowConfig[]>([])
   const [newWorkflow, setNewWorkflow] = useState({
     name: '',
@@ -288,6 +297,17 @@ export function Settings() {
       }
     }
     loadCapcutPath()
+  }, [])
+
+  // 加载管理员密码
+  useEffect(() => {
+    const loadAdminPassword = async () => {
+      const saved = await secureStorage.get(ADMIN_PASSWORD_KEY)
+      if (saved) {
+        setAdminPassword(saved)
+      }
+    }
+    loadAdminPassword()
   }, [])
 
   const [language, setLanguage] = useState(() => {
@@ -1018,6 +1038,39 @@ export function Settings() {
     toast({ title: '剪映路径已清除，将使用自动检测' })
   }
 
+  // 保存管理员密码
+  const handleSaveAdminPassword = async () => {
+    if (!newAdminPassword.trim()) {
+      toast({ title: '请输入新密码', variant: 'destructive' })
+      return
+    }
+    if (newAdminPassword !== confirmAdminPassword) {
+      toast({ title: '两次密码不一致', variant: 'destructive' })
+      return
+    }
+    if (newAdminPassword.length < 6) {
+      toast({ title: '密码长度至少 6 位', variant: 'destructive' })
+      return
+    }
+
+    setLoadingAdminPassword(true)
+    try {
+      await secureStorage.set(ADMIN_PASSWORD_KEY, newAdminPassword)
+      setAdminPassword(newAdminPassword)
+      setNewAdminPassword('')
+      setConfirmAdminPassword('')
+      toast({ title: '管理员密码已更新' })
+    } catch (error) {
+      toast({
+        title: '保存失败',
+        description: error instanceof Error ? error.message : '未知错误',
+        variant: 'destructive',
+      })
+    } finally {
+      setLoadingAdminPassword(false)
+    }
+  }
+
   const handleClearCache = async () => {
     const confirmed = await confirm('确定要清理缓存吗？', {
       title: '清理缓存',
@@ -1060,7 +1113,7 @@ export function Settings() {
       const update = await checkUpdate()
       setUpdateInfo(update ?? null)
       if (!update) {
-        toast({ title: '已是最新版本', description: `v1.0.4` })
+        toast({ title: '已是最新版本', description: `v1.0.6` })
       }
     } catch (error) {
       toast({ title: '检查更新失败', description: String(error), variant: 'destructive' })
@@ -2051,7 +2104,7 @@ export function Settings() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium">当前版本</p>
-                    <p className="text-xs text-muted-foreground">v1.0.4</p>
+                    <p className="text-xs text-muted-foreground">v1.0.6</p>
                   </div>
                   <div className="flex gap-2">
                     {updateInfo ? (
@@ -2113,6 +2166,82 @@ export function Settings() {
                     例如：C:\Program Files\JianyingPro\JianyingPro.exe
                   </p>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* 管理员密码设置 */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  管理员密码
+                </CardTitle>
+                <CardDescription>
+                  设置激活管理页面的管理员密码,保护激活码生成权限
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* 当前密码状态 */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">当前密码状态</label>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={adminPassword ? 'default' : 'secondary'}>
+                      {adminPassword ? '已设置' : '未设置'}
+                    </Badge>
+                    {adminPassword && (
+                      <span className="text-xs text-muted-foreground">
+                        (密码已加密存储)
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* 新密码输入 */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">新密码</label>
+                  <Input
+                    type="password"
+                    value={newAdminPassword}
+                    onChange={(e) => setNewAdminPassword(e.target.value)}
+                    placeholder="输入新密码(至少 6 位)"
+                    className="max-w-xs"
+                  />
+                </div>
+
+                {/* 确认密码 */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">确认密码</label>
+                  <Input
+                    type="password"
+                    value={confirmAdminPassword}
+                    onChange={(e) => setConfirmAdminPassword(e.target.value)}
+                    placeholder="再次输入新密码"
+                    className="max-w-xs"
+                  />
+                </div>
+
+                {/* 保存按钮 */}
+                <div className="flex items-center gap-4">
+                  <Button
+                    onClick={handleSaveAdminPassword}
+                    disabled={
+                      loadingAdminPassword ||
+                      !newAdminPassword.trim() ||
+                      !confirmAdminPassword.trim()
+                    }
+                  >
+                    {loadingAdminPassword ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
+                    {loadingAdminPassword ? '保存中...' : '保存新密码'}
+                  </Button>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  提示:此密码用于激活管理页面的管理员验证,请妥善保管
+                </p>
               </CardContent>
             </Card>
 

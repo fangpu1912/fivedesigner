@@ -16,9 +16,11 @@ import type {
   MediaAsset,
   GenerationTask,
   TaskLogEntry,
+  ActivationCode,
 } from '@/types'
 import { deleteMediaFile } from '@/utils/mediaStorage'
 import { CREATE_TABLES_SQL } from '@/db/schema'
+import seedActivationCodes from '@/db/seed-activation-codes.json'
 
 let dbInstance: Database | null = null
 let dbInitPromise: Promise<Database> | null = null
@@ -275,6 +277,23 @@ class SQLiteDatabase {
       console.log('[DB Migration] All migrations completed successfully')
     } catch (error) {
       console.error('[DB Migration] Migration failed:', error)
+    }
+
+    // 首次初始化：导入种子激活码（仅当表为空时）
+    try {
+      const existingCount = await db.select<{ count: number }[]>('SELECT COUNT(*) as count FROM activation_codes')
+      if (existingCount[0]?.count === 0 && Array.isArray(seedActivationCodes)) {
+        console.log('[DB Seed] Inserting activation codes...')
+        for (const item of seedActivationCodes) {
+          await db.execute(
+            'INSERT OR IGNORE INTO activation_codes (code, valid_days, created_at) VALUES ($1, $2, $3)',
+            [item.code, item.valid_days, new Date().toISOString()]
+          )
+        }
+        console.log(`[DB Seed] Inserted ${seedActivationCodes.length} activation codes`)
+      }
+    } catch (seedError) {
+      console.error('[DB Seed] Failed to seed activation codes:', seedError)
     }
   }
 
@@ -1278,6 +1297,20 @@ class SQLiteDatabase {
     }
   }
 
+  async getMediaCategoryCounts(): Promise<{ category: string | null; count: number }[]> {
+    await this.initialize()
+    const db = await getDb()
+    try {
+      const rows = await db.select<{ category: string | null; count: number }[]>(
+        'SELECT category, COUNT(*) as count FROM media_assets GROUP BY category'
+      )
+      return rows
+    } catch (error) {
+      console.error('[DB] Failed to get media category counts:', error)
+      return []
+    }
+  }
+
   // ==================== Generation Tasks ====================
 
   async getGenerationTasks(filters?: {
@@ -1474,6 +1507,110 @@ class SQLiteDatabase {
     const rows = await db.select<Record<string, unknown>[]>(sql, params)
     return rows.map(rowToTaskLogEntry)
   }
+
+  // ==================== 激活码相关 ====================
+
+  async getActivationCode(code: string): Promise<ActivationCode | null> {
+    await this.initialize()
+    const db = await getDb()
+    const rows = await db.select<Record<string, unknown>[]>(
+      'SELECT * FROM activation_codes WHERE code = $1',
+      [code]
+    )
+    if (rows.length === 0) return null
+    const row = rows[0]
+    if (!row) return null
+    return {
+      code: row.code as string,
+      valid_days: row.valid_days as number,
+      used: row.used as number,
+      machine_id: row.machine_id as string | undefined,
+      activated_at: row.activated_at as string | undefined,
+      expires_at: row.expires_at as string | undefined,
+      created_at: row.created_at as string,
+    }
+  }
+
+  async createActivationCode(code: Omit<ActivationCode, 'created_at'>): Promise<ActivationCode> {
+    await this.initialize()
+    const db = await getDb()
+    const now = new Date().toISOString()
+    await db.execute(
+      'INSERT INTO activation_codes (code, valid_days, used, machine_id, activated_at, expires_at, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [code.code, code.valid_days, code.used ?? 0, code.machine_id ?? null, code.activated_at ?? null, code.expires_at ?? null, now]
+    )
+    return { ...code, created_at: now }
+  }
+
+  async updateActivationCode(code: string, data: Partial<ActivationCode>): Promise<void> {
+    await this.initialize()
+    const db = await getDb()
+    const fields: string[] = []
+    const params: unknown[] = []
+    if (data.used !== undefined) {
+      fields.push(`used = $${params.length + 1}`)
+      params.push(data.used)
+    }
+    if (data.machine_id !== undefined) {
+      fields.push(`machine_id = $${params.length + 1}`)
+      params.push(data.machine_id)
+    }
+    if (data.activated_at !== undefined) {
+      fields.push(`activated_at = $${params.length + 1}`)
+      params.push(data.activated_at)
+    }
+    if (data.expires_at !== undefined) {
+      fields.push(`expires_at = $${params.length + 1}`)
+      params.push(data.expires_at)
+    }
+    if (fields.length === 0) return
+    params.push(code)
+    await db.execute(
+      `UPDATE activation_codes SET ${fields.join(', ')} WHERE code = $${params.length}`,
+      params
+    )
+  }
+
+  async batchCreateActivationCodes(codes: Array<{ code: string; valid_days: number }>): Promise<ActivationCode[]> {
+    await this.initialize()
+    const db = await getDb()
+    const now = new Date().toISOString()
+    const results: ActivationCode[] = []
+    for (const c of codes) {
+      await db.execute(
+        'INSERT INTO activation_codes (code, valid_days, used, created_at) VALUES ($1, $2, 0, $3)',
+        [c.code, c.valid_days, now]
+      )
+      results.push({ ...c, used: 0, created_at: now })
+    }
+    return results
+  }
+
+  async getAllActivationCodes(): Promise<ActivationCode[]> {
+    await this.initialize()
+    const db = await getDb()
+    const rows = await db.select<Record<string, unknown>[]>(
+      'SELECT * FROM activation_codes ORDER BY created_at DESC'
+    )
+    return rows.map((row) => {
+      if (!row) throw new Error('Invalid row in activation_codes')
+      return {
+        code: row.code as string,
+        valid_days: row.valid_days as number,
+        used: row.used as number,
+        machine_id: row.machine_id as string | undefined,
+        activated_at: row.activated_at as string | undefined,
+        expires_at: row.expires_at as string | undefined,
+        created_at: row.created_at as string,
+      }
+    })
+  }
+
+  async deleteActivationCode(code: string): Promise<void> {
+    await this.initialize()
+    const db = await getDb()
+    await db.execute('DELETE FROM activation_codes WHERE code = $1', [code])
+  }
 }
 
 export const localDB = new SQLiteDatabase()
@@ -1623,6 +1760,7 @@ export const mediaAssetDB = {
   batchAddTags: (ids: string[], tags: string[]) =>
     db.batchAddMediaAssetTags(ids, tags),
   getCategories: () => db.getAllMediaCategories(),
+  getCategoryCounts: () => db.getMediaCategoryCounts(),
 }
 
 export const taskDB = {
@@ -1651,4 +1789,13 @@ export const taskDB = {
   deleteLogs: (taskId: string) => db.deleteTaskLogs(taskId),
   getRecentLogs: (limit?: number, filters?: { taskId?: string; level?: string }) =>
     db.getRecentTaskLogs(limit, filters),
+}
+
+export const activationDB = {
+  get: (code: string) => db.getActivationCode(code),
+  create: (code: Omit<ActivationCode, 'created_at'>) => db.createActivationCode(code),
+  update: (code: string, data: Partial<ActivationCode>) => db.updateActivationCode(code, data),
+  batchCreate: (codes: Array<{ code: string; valid_days: number }>) => db.batchCreateActivationCodes(codes),
+  getAll: () => db.getAllActivationCodes(),
+  delete: (code: string) => db.deleteActivationCode(code),
 }
