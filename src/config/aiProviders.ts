@@ -409,7 +409,7 @@ export const deepseekConfig: ProviderConfig = {
     stream: false,
   },
   buildRequestBody: (model, prompt, params) => ({
-    model: model || 'deepseek-chat',
+    model: model || 'deepseek-v4-flash',
     messages: [{ role: 'user', content: prompt }],
     temperature: params.temperature ?? 1.0,
     max_tokens: params.maxTokens ?? 4096,

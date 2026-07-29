@@ -1,11 +1,12 @@
 /**
  * 角色肖像生成 Agent
- * 为角色生成一致的肖像图片
+ * 为角色生成主肖像 + 按 outfit 分别图生图换装
  */
 
 import type {
   AgentConfig,
   ViMaxCharacterInScene,
+  ViMaxCharacterOutfit,
 } from '@/plugins/vimax/types';
 import { AI } from '@/services/vendor';
 import { saveGeneratedImage } from '@/utils/mediaStorage';
@@ -13,7 +14,7 @@ import { saveGeneratedImage } from '@/utils/mediaStorage';
 export const characterPortraitAgentConfig: AgentConfig = {
   type: 'characterPortrait',
   name: '角色肖像 Agent',
-  description: '为角色生成一致的肖像图片',
+  description: '为角色生成主肖像，并按 outfit 分别生成对应状态图',
   systemPrompt: `你是一位专业的角色肖像设计师，擅长为影视角色设计一致的视觉形象。
 
 你的任务：
@@ -36,21 +37,25 @@ export interface CharacterPortraitInput {
   projectId: string;
   episodeId?: string;
   style?: string;
+  /** 需要按 outfit 分别生成图片的服装状态列表 */
+  outfits?: ViMaxCharacterOutfit[];
 }
 
 export interface CharacterPortraitOutput {
   character: ViMaxCharacterInScene;
   portraitUrl: string;
+  outfits: ViMaxCharacterOutfit[];
   rawResponse: string;
 }
 
 export async function runCharacterPortraitAgent(
-  input: CharacterPortraitInput,
+  input: CharacterPortraitInput
 ): Promise<CharacterPortraitOutput> {
-  const { character, projectId, episodeId, style } = input;
+  const { character, projectId, episodeId, style, outfits } = input;
 
   const portraitPrompt = buildPortraitPrompt(character, style);
 
+  // 1. 生成主肖像（基于精简后的 character.prompt + appearance）
   const imageUrl = await AI.Image.generate(
     {
       prompt: portraitPrompt,
@@ -66,14 +71,53 @@ export async function runCharacterPortraitAgent(
 
   const savedPath = await saveGeneratedImage(imageUrl, projectId, episodeId || '');
 
+  // 2. 按 outfit 分别图生图（以主肖像为参考图）
+  const generatedOutfits: ViMaxCharacterOutfit[] = [];
+  if (outfits && outfits.length > 0) {
+    for (const outfit of outfits) {
+      try {
+        const outfitImageUrl = await AI.Image.generate(
+          {
+            prompt: outfit.prompt,
+            imageUrls: [savedPath],
+            aspectRatio: '1:1',
+          },
+          characterPortraitAgentConfig.model || 'official:claude-sonnet-4-6',
+          0
+        );
+
+        if (outfitImageUrl) {
+          const savedOutfitPath = await saveGeneratedImage(
+            outfitImageUrl,
+            projectId,
+            episodeId || ''
+          );
+          generatedOutfits.push({
+            ...outfit,
+            imageUrl: savedOutfitPath,
+          });
+        } else {
+          // 生成失败时保留原 outfit（不含 imageUrl），不阻断流程
+          console.warn(`[characterPortraitAgent] outfit "${outfit.name}" 生成失败，跳过`);
+          generatedOutfits.push(outfit);
+        }
+      } catch (err) {
+        console.warn(`[characterPortraitAgent] outfit "${outfit.name}" 生成异常:`, err);
+        generatedOutfits.push(outfit);
+      }
+    }
+  }
+
   const updatedCharacter: ViMaxCharacterInScene = {
     ...character,
     portraitUrl: savedPath,
+    outfits: generatedOutfits,
   };
 
   return {
     character: updatedCharacter,
     portraitUrl: savedPath,
+    outfits: generatedOutfits,
     rawResponse: portraitPrompt,
   };
 }
@@ -87,7 +131,8 @@ function buildPortraitPrompt(
   if (character.age) prompt += `${character.age}，`;
   if (character.gender) prompt += `${character.gender}，`;
   if (character.appearance) prompt += `${character.appearance}，`;
-  if (character.clothing) prompt += `穿着${character.clothing}，`;
+  // 注意：精简后的 character.prompt 不再含服装，但若 agent 旧格式仍含服装也不影响
+  if (character.prompt) prompt += `${character.prompt}，`;
 
   prompt += `清晰的面部特征，中性表情，纯色背景，专业肖像照`;
 

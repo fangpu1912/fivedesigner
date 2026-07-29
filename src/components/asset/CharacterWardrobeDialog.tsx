@@ -14,6 +14,7 @@ import {
   X,
   Image as ImageIcon,
   Save,
+  Wand2,
 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
@@ -33,6 +34,7 @@ import {
   useOutfitMutations,
 } from '@/hooks/useOutfits'
 import type { CharacterOutfit } from '@/types'
+import { OutfitGenerationDialog } from './OutfitGenerationDialog'
 
 interface CharacterWardrobeDialogProps {
   open: boolean
@@ -68,6 +70,7 @@ export function CharacterWardrobeDialog({
   const [outfitImage, setOutfitImage] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [generatingOutfit, setGeneratingOutfit] = useState<CharacterOutfit | null>(null)
 
   const resetForm = () => {
     setFormData({ name: '', description: '', prompt: '', tags: '' })
@@ -214,6 +217,7 @@ export function CharacterWardrobeDialog({
   }
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={v => { if (!v) resetForm(); onOpenChange(v) }}>
       <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader>
@@ -401,6 +405,18 @@ export function CharacterWardrobeDialog({
                             variant="secondary"
                             size="sm"
                             className="h-7 text-xs"
+                            title="AI 换装"
+                            onClick={e => {
+                              e.stopPropagation()
+                              setGeneratingOutfit(outfit)
+                            }}
+                          >
+                            <Wand2 className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="h-7 text-xs"
                             onClick={e => {
                               e.stopPropagation()
                               handleStartEdit(outfit)
@@ -474,5 +490,14 @@ export function CharacterWardrobeDialog({
         </div>
       </DialogContent>
     </Dialog>
+    <OutfitGenerationDialog
+      open={!!generatingOutfit}
+      onOpenChange={v => !v && setGeneratingOutfit(null)}
+      characterId={characterId}
+      outfit={generatingOutfit}
+      projectId={projectId}
+      episodeId={episodeId}
+    />
+    </>
   )
 }

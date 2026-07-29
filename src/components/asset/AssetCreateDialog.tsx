@@ -51,7 +51,7 @@ export interface AssetCreateData {
   jsonItems?: AssetCreateData[]
   characters?: string[]
   props?: string[]
-  scene_id?: string
+  scene?: string
   shot_type?: string
   duration?: number
 }
@@ -105,7 +105,7 @@ const getDefaultJsonTemplate = (cat: AssetCreateCategory): string => {
       videoPrompt: '视频提示词',
       characters: ['角色名'],
       props: ['道具名'],
-      scene_id: '场景名',
+      scene: '场景名',
       shot_type: '全景·固定',
       duration: 10,
     }], null, 2)
@@ -260,7 +260,7 @@ export function AssetCreateDialog({
           tags: item.tags || [],
           characters: item.characters || [],
           props: item.props || [],
-          scene_id: item.scene_id || '',
+          scene: item.scene || '',
           shot_type: item.shot_type || '',
           duration: item.duration || 10,
           insertPosition: insertPosition,

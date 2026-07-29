@@ -108,10 +108,10 @@ export function ActivationDialog({ open, onOpenChange, onActivated }: Activation
             onActivated({ 
               activated: true, 
               machine_id: machineId,
-              expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+              expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
             })
           }} className="text-muted-foreground">
-            试用 30 天
+            试用 365 天
           </Button>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>

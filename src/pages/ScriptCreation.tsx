@@ -33,7 +33,6 @@ import {
   X,
 } from 'lucide-react'
 
-import { AutoPipelinePanel } from '@/components/ai/AutoPipelinePanel'
 import { RichTextEditor } from '@/components/editor'
 import { MarkdownPreview } from '@/components/editor/MarkdownPreview'
 import { Button } from '@/components/ui/button'
@@ -42,7 +41,6 @@ import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import { useScenes, useProps } from '@/hooks/useAssetManager'
-import { useAutoPipeline } from '@/hooks/useAutoPipeline'
 import { useCharacters } from '@/hooks/useCharacters'
 import { useDubbingByEpisode } from '@/hooks/useDubbing'
 import { useEpisodeQuery } from '@/hooks/useEpisodes'
@@ -50,6 +48,7 @@ import { useNovelPipeline } from '@/hooks/useNovelPipeline'
 import { useScriptQuery, useUpdateScriptMutation, useCreateScriptMutation } from '@/hooks/useScript'
 import { useStoryboardMutations, useStoryboards } from '@/hooks/useStoryboards'
 import { useToast } from '@/hooks/useToast'
+import { buildFullPrompt } from '@/hooks/useVendorGeneration'
 import { cn } from '@/lib/utils'
 import { getActivePrompt } from '@/services/promptConfigService'
 import { AI } from '@/services/vendor'
@@ -84,7 +83,7 @@ interface Attachment {
 }
 
 export const ScriptCreation: React.FC = () => {
-  const { currentEpisodeId } = useUIStore()
+  const { currentEpisodeId, currentProjectId } = useUIStore()
   const { toast } = useToast()
   const { data: episode } = useEpisodeQuery(currentEpisodeId || '')
   const { data: script } = useScriptQuery(currentEpisodeId || '')
@@ -95,7 +94,6 @@ export const ScriptCreation: React.FC = () => {
   const { data: dbProps = [] } = useProps(episode?.project_id || '', currentEpisodeId || '')
   const { data: dbDubbing = [] } = useDubbingByEpisode(currentEpisodeId || '')
   const novelPipeline = useNovelPipeline()
-  const autoPipeline = useAutoPipeline()
   const updateScriptMutation = useUpdateScriptMutation()
   const createScriptMutation = useCreateScriptMutation()
   const resetEpisodeScopedState = useCallback(() => {
@@ -244,48 +242,70 @@ export const ScriptCreation: React.FC = () => {
 
   const handleExportImagePrompts = async () => {
     const prompts: string[] = []
-    
+
     if (dbCharacters.length > 0) {
       prompts.push('========== 角色提示词 ==========')
-      dbCharacters.forEach(char => {
+      for (const char of dbCharacters) {
         if (char.prompt) {
-          prompts.push(`【${char.name}】${char.prompt}`)
+          // 角色之间空行
+          if (prompts.length > 1) prompts.push('')
+          const fullPrompt = currentProjectId
+            ? await buildFullPrompt(currentProjectId, char.prompt)
+            : char.prompt
+          prompts.push(`【${char.name}】${fullPrompt}`)
         }
-      })
+      }
     }
-    
+
     if (dbScenes.length > 0) {
+      prompts.push('')
       prompts.push('========== 场景提示词 ==========')
-      dbScenes.forEach(scene => {
+      for (const scene of dbScenes) {
         if (scene.prompt) {
-          prompts.push(`【${scene.name}】${scene.prompt}`)
+          if (prompts.length > 1 && prompts[prompts.length - 1] !== '') prompts.push('')
+          const fullPrompt = currentProjectId
+            ? await buildFullPrompt(currentProjectId, scene.prompt)
+            : scene.prompt
+          prompts.push(`【${scene.name}】${fullPrompt}`)
         }
-      })
+      }
     }
-    
+
     if (dbProps.length > 0) {
+      prompts.push('')
       prompts.push('========== 道具提示词 ==========')
-      dbProps.forEach(prop => {
+      for (const prop of dbProps) {
         if (prop.prompt) {
-          prompts.push(`【${prop.name}】${prop.prompt}`)
+          if (prompts.length > 1 && prompts[prompts.length - 1] !== '') prompts.push('')
+          const fullPrompt = currentProjectId
+            ? await buildFullPrompt(currentProjectId, prop.prompt)
+            : prop.prompt
+          prompts.push(`【${prop.name}】${fullPrompt}`)
         }
-      })
+      }
     }
-    
+
+    prompts.push('')
     prompts.push('========== 分镜图片提示词 ==========')
-    
+
     if (dbStoryboards.length > 0) {
-      dbStoryboards
-        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-        .forEach((sb, idx) => {
-          if (sb.prompt) {
-            prompts.push(`【分镜 ${idx + 1}】${sb.prompt}`)
-          }
-        })
+      const sorted = [...dbStoryboards].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      for (const [idx, sb] of sorted.entries()) {
+        if (sb.prompt) {
+          // 分镜之间空行，分镜内部紧凑显示
+          if (prompts.length > 1) prompts.push('')
+          const fullPrompt = currentProjectId
+            ? await buildFullPrompt(currentProjectId, sb.prompt)
+            : sb.prompt
+          // 压缩分镜内部的空行为单行换行
+          const compactPrompt = fullPrompt.replace(/\n{2,}/g, '\n')
+          prompts.push(`【分镜 ${idx + 1}】${compactPrompt}`)
+        }
+      }
     }
-    
+
     const content = prompts.join('\n')
-    
+
     const savePath = await save({
       defaultPath: `图片提示词_${title}.txt`,
       filters: [
@@ -294,28 +314,34 @@ export const ScriptCreation: React.FC = () => {
       ],
       title: '保存图片提示词',
     })
-    
+
     if (!savePath) return
-    
+
     const encoder = new TextEncoder()
     await writeFile(savePath, encoder.encode(content))
-    
+
     toast({ title: '导出成功', description: `已保存到 ${savePath}` })
   }
 
   const handleExportVideoPrompts = async () => {
     const prompts: string[] = []
-    
+
     prompts.push('========== 分镜视频提示词 ==========')
-    
+
     if (dbStoryboards.length > 0) {
-      dbStoryboards
-        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-        .forEach((sb, idx) => {
-          if (sb.video_prompt) {
-            prompts.push(`【分镜 ${idx + 1}】${sb.video_prompt}`)
-          }
-        })
+      const sorted = [...dbStoryboards].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      for (const [idx, sb] of sorted.entries()) {
+        if (sb.video_prompt) {
+          // 分镜之间空行，分镜内镜头之间不空行
+          if (prompts.length > 1) prompts.push('')
+          const fullPrompt = currentProjectId
+            ? await buildFullPrompt(currentProjectId, sb.video_prompt)
+            : sb.video_prompt
+          // 压缩分镜内部的空行为单行换行
+          const compactPrompt = fullPrompt.replace(/\n{2,}/g, '\n')
+          prompts.push(`【分镜 ${idx + 1}】${compactPrompt}`)
+        }
+      }
     }
     
     const content = prompts.join('\n')
@@ -511,25 +537,7 @@ export const ScriptCreation: React.FC = () => {
               <Sparkles className="h-3 w-3 mr-2" />
               {novelPipeline.running ? '生成中...' : '一键生成分镜'}
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={() => autoPipeline.start(content)}
-              disabled={autoPipeline.isRunning || isGenerating || !content.trim()}
-            >
-              <Film className="h-3 w-3 mr-2" />
-              {autoPipeline.isRunning ? '流水线中...' : '全自动'}
-            </Button>
           </div>
-
-          <AutoPipelinePanel
-            state={autoPipeline.state}
-            isRunning={autoPipeline.isRunning}
-            isWaitingForReview={autoPipeline.isWaitingForReview}
-            onApprove={autoPipeline.approve}
-            onCancel={autoPipeline.cancel}
-          />
 
           {novelPipeline.running && novelPipeline.progress && (
             <div className="space-y-2 p-2 rounded bg-muted/50">

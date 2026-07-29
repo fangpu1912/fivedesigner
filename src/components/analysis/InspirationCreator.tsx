@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react'
 
-import { Sparkles, Loader2, Wand2, Save, AlertCircle, CheckCircle2, History, Trash2, ChevronRight, Clock, Play } from 'lucide-react'
+import { Sparkles, Loader2, Wand2, Save, AlertCircle, CheckCircle2, History, Trash2, ChevronRight, Clock, Play, RefreshCw } from 'lucide-react'
 
 import { ContentResultDisplay, ContentResultEmpty } from '@/components/analysis/ContentResultDisplay'
 import type { ContentData } from '@/components/analysis/ContentResultDisplay'
@@ -54,7 +54,7 @@ interface InspirationShot {
   prompt: string
   videoPrompt: string
   characters: string[]
-  scene_id: string
+  scene: string
   props: string[]
   shot_type: string
   duration: number
@@ -107,6 +107,23 @@ function saveHistory(history: HistoryItem[]) {
   }
 }
 
+/** 通用精修调用：取精修提示词 → 调用AI → 解析JSON */
+async function runRefinement<T>(type: string, inputData: T): Promise<T> {
+  // 检查精修开关
+  try {
+    const { settingsDB } = await import('@/db')
+    const settings = await settingsDB.get()
+    if (settings.refinement_enabled === false) {
+      return inputData
+    }
+  } catch {
+    // 加载失败则默认执行精修
+  }
+  const prompt = getActivePrompt(type as any, { inputData: JSON.stringify(inputData, null, 2) })
+  const result = await callAI(prompt, { maxTokens: 16384 })
+  return parseJSON<T>(result)
+}
+
 export function InspirationCreator() {
   const { toast } = useToast()
   const [topic, setTopic] = useState('')
@@ -119,6 +136,11 @@ export function InspirationCreator() {
   const [continueDirection, setContinueDirection] = useState('')
   const [continuing, setContinuing] = useState(false)
   const [pipelineStep, setPipelineStep] = useState<PipelineStepInfo | null>(null)
+  // 中间状态（用于分步重试）
+  const [currentScenes, setCurrentScenes] = useState<InspirationScene[]>([])
+  const [currentAssets, setCurrentAssets] = useState<InspirationAsset | null>(null)
+  const [, setCurrentShots] = useState<InspirationShot[]>([])
+  const [isRetrying, setIsRetrying] = useState({ story: false, storyboard: false, dubbing: false })
 
   // 获取当前项目和剧集
   const { currentProjectId, currentEpisodeId } = useUIStore()
@@ -150,10 +172,10 @@ export function InspirationCreator() {
     }
 
     setGenerating(true)
-    setPipelineStep({ step: 1, totalSteps: 4, label: '生成故事' })
+    setPipelineStep({ step: 1, totalSteps: 7, label: '生成故事' })
     try {
       // ====== Step 1: 生成完整故事 + 场景划分 ======
-      setPipelineStep({ step: 1, totalSteps: 4, label: '生成故事与场景划分' })
+      setPipelineStep({ step: 1, totalSteps: 7, label: '生成故事与场景划分' })
       const storyPrompt = getActivePrompt('inspiration_story_generation', { topic: topic.trim(), duration })
       const storyResult = await callAI(storyPrompt, { temperature: 0.9, maxTokens: 16384 })
       const storyData = parseJSON<{ title?: string; storySummary?: string; scenes: InspirationScene[] }>(storyResult)
@@ -165,7 +187,7 @@ export function InspirationCreator() {
       }
 
       // ====== Step 2: 全局资产提取 ======
-      setPipelineStep({ step: 2, totalSteps: 4, label: '提取角色、场景、道具' })
+      setPipelineStep({ step: 2, totalSteps: 7, label: '提取角色、场景、道具' })
       const fullStoryText = scenes.map((s, i) =>
         `--- 场景${i + 1}: ${s.name} ---\n${s.storyText || s.summary}`
       ).join('\n\n')
@@ -181,8 +203,10 @@ export function InspirationCreator() {
       const assets = parseJSON<InspirationAsset>(assetResult)
       logger.info(`[Inspiration] 提取了 ${assets.characters?.length || 0} 角色, ${assets.scenes?.length || 0} 场景, ${assets.props?.length || 0} 道具`)
 
-      // ====== Step 3: 逐场景串行分镜拆解 ======
-      setPipelineStep({ step: 3, totalSteps: 4, label: '分镜拆解 (0/' + scenes.length + ')' })
+      // ====== Step 3: 分镜拆解（3场景一批） ======
+      const BATCH_SIZE = 3
+      const totalBatches = Math.ceil(scenes.length / BATCH_SIZE)
+      setPipelineStep({ step: 3, totalSteps: 7, label: '分镜拆解 (0/' + scenes.length + ')' })
       const allShots: InspirationShot[] = []
       let previousShotDesc = '（这是第一个场景，没有上一场景）'
 
@@ -205,39 +229,56 @@ export function InspirationCreator() {
         `道具: ${(assets.props || []).map(p => p.name).join(', ')}`,
       ].join('\n')
 
-      for (let sceneIdx = 0; sceneIdx < scenes.length; sceneIdx++) {
-        const scene = scenes[sceneIdx]!
+      for (let batchStart = 0; batchStart < scenes.length; batchStart += BATCH_SIZE) {
+        const batchEnd = Math.min(batchStart + BATCH_SIZE, scenes.length)
+        const batchScenes = scenes.slice(batchStart, batchEnd)
+
+        // 拼接本次批次所有场景的信息
+        const batchScenesStr = batchScenes.map((scene, idx) => {
+          const globalIdx = batchStart + idx
+          const sceneCharacterNames = [...new Set(scene.characters)]
+          const characterPromptsStr = sceneCharacterNames
+            .map(name => `${name}: ${characterPromptMap.get(name) || '未知角色'}`)
+            .join('\n')
+
+          return [
+            `=== 场景${globalIdx + 1}: ${scene.name} ===`,
+            `地点: ${scene.location}`,
+            `时间: ${scene.time}`,
+            `氛围: ${scene.mood}`,
+            `出场角色: ${scene.characters.join(', ')}`,
+            `叙事功能: ${scene.narrativeFunction}`,
+            `概要: ${scene.summary}`,
+            ``,
+            `【原文片段】`,
+            scene.storyText || scene.summary,
+            ``,
+            `【角色视觉描述】`,
+            characterPromptsStr,
+            ``,
+            `【场景视觉描述】`,
+            `${scene.name}: ${scenePromptMap.get(scene.name) || '未知场景'}`,
+            ``,
+            `【道具视觉描述】`,
+            (assets.props || []).map(p => `${p.name}: ${propPromptMap.get(p.name) || ''}`).join('\n'),
+          ].join('\n')
+        }).join('\n\n---\n\n')
+
         setPipelineStep({
           step: 3,
-          totalSteps: 4,
-          label: `分镜拆解 (${sceneIdx + 1}/${scenes.length}): ${scene.name}`,
+          totalSteps: 7,
+          label: `分镜拆解 (${Math.min(batchEnd, scenes.length)}/${scenes.length})`,
         })
 
-        const sceneInfo = `--- 场景${sceneIdx + 1}: ${scene.name} ---\n地点: ${scene.location}\n时间: ${scene.time}\n氛围: ${scene.mood}\n出场角色: ${scene.characters.join(', ')}\n叙事功能: ${scene.narrativeFunction}\n概要: ${scene.summary}`
-        const sceneOriginalText = scene.storyText || scene.summary
-
-        const sceneCharacterNames = [...new Set(scene.characters)]
-        const characterPromptsStr = sceneCharacterNames
-          .map(name => `${name}: ${characterPromptMap.get(name) || '未知角色'}`)
-          .join('\n')
-        const scenePromptsStr = `${scene.name}: ${scenePromptMap.get(scene.name) || '未知场景'}`
-        const propPromptsStr = (assets.props || [])
-          .map(p => `${p.name}: ${p.prompt}`)
-          .join('\n')
-
         try {
-          const breakdownPrompt = getActivePrompt('pipeline_storyboard_breakdown', {
-            sceneContent: sceneOriginalText,
-            sceneInfo,
+          const breakdownPrompt = getActivePrompt('pipeline_storyboard_breakdown_batch', {
+            batchScenes: batchScenesStr,
             previousShot: previousShotDesc,
             assetList: assetListStr,
-            characterPrompts: characterPromptsStr,
-            scenePrompts: scenePromptsStr,
-            propPrompts: propPromptsStr,
           })
           const breakdownResult = await callAI(breakdownPrompt, { maxTokens: 16384 })
           const shots = parseJSON<InspirationShot[]>(breakdownResult)
-          logger.info(`[Inspiration] 场景${sceneIdx + 1} "${scene.name}" 拆解了 ${shots.length} 个镜头`)
+          logger.info(`[Inspiration] 批次 ${batchStart / BATCH_SIZE + 1}/${totalBatches} 拆解了 ${shots.length} 个镜头`)
 
           if (shots.length > 0) {
             allShots.push(...shots)
@@ -249,19 +290,58 @@ export function InspirationCreator() {
             ].join('\n')
           }
         } catch (e) {
-          logger.error(`[Inspiration] 分镜拆解失败，场景${sceneIdx + 1} "${scene.name}"`, e)
+          logger.error(`[Inspiration] 分镜拆解失败，批次${batchStart / BATCH_SIZE + 1}`, e)
         }
       }
 
-      // ====== Step 4: 配音生成 ======
-      setPipelineStep({ step: 4, totalSteps: 4, label: '生成配音提示词' })
+      // ====== Step 4: 摄影方案精修（精修 prompt 首帧描述） ======
+      if (allShots.length > 0) {
+        setPipelineStep({ step: 4, totalSteps: 7, label: '精修摄影方案' })
+        try {
+          const refined = await runRefinement<typeof allShots>('refinement_cinematography', allShots)
+          if (refined && refined.length === allShots.length) {
+            allShots.splice(0, allShots.length, ...refined)
+          }
+        } catch (e) {
+          logger.error('[Inspiration] 摄影精修失败', e)
+        }
+      }
+
+      // ====== Step 5: 表演精修（精修 videoPrompt 表演描述） ======
+      if (allShots.length > 0) {
+        setPipelineStep({ step: 5, totalSteps: 7, label: '精修表演细节' })
+        try {
+          const refined = await runRefinement<typeof allShots>('refinement_performance', allShots)
+          if (refined && refined.length === allShots.length) {
+            allShots.splice(0, allShots.length, ...refined)
+          }
+        } catch (e) {
+          logger.error('[Inspiration] 表演精修失败', e)
+        }
+      }
+
+      // ====== Step 6: 剪辑节奏精修 ======
+      if (allShots.length > 0) {
+        setPipelineStep({ step: 6, totalSteps: 7, label: '精修剪辑节奏' })
+        try {
+          const refined = await runRefinement<typeof allShots>('refinement_editing', allShots)
+          if (refined && refined.length === allShots.length) {
+            allShots.splice(0, allShots.length, ...refined)
+          }
+        } catch (e) {
+          logger.error('[Inspiration] 剪辑精修失败', e)
+        }
+      }
+
+      // ====== Step 7: 配音生成 ======
+      setPipelineStep({ step: 7, totalSteps: 7, label: '生成配音提示词' })
       const allDubbing: Array<{ character: string; line: string; emotion: string; audio_prompt: string }> = []
 
       const shotsDescription = allShots.map((shot, i) => {
         const parts = [
           `镜头${i + 1}:`,
           `  画面: ${shot.description}`,
-          `  场景: ${shot.scene_id}`,
+          `  场景: ${shot.scene}`,
           `  景别运镜: ${shot.shot_type}`,
           `  时长: ${shot.duration}秒`,
           `  出场角色: ${shot.characters.join(', ')}`,
@@ -287,6 +367,24 @@ export function InspirationCreator() {
         logger.error('[Inspiration] 配音生成失败', e)
       }
 
+      // 配音精修
+      if (allDubbing.length > 0) {
+        setPipelineStep({ step: 7, totalSteps: 7, label: '精修配音方案' })
+        try {
+          const refined = await runRefinement<typeof allDubbing>('refinement_dubbing', allDubbing)
+          if (refined && refined.length === allDubbing.length) {
+            allDubbing.splice(0, allDubbing.length, ...refined)
+          }
+        } catch (e) {
+          logger.error('[Inspiration] 配音精修失败', e)
+        }
+      }
+
+      // 保存中间状态（用于分步重试）
+      setCurrentScenes(scenes)
+      setCurrentAssets(assets)
+      setCurrentShots([...allShots])
+
       // ====== 组装结果 ======
       const content: GeneratedContent = {
         characters: (assets.characters || []).map(c => ({
@@ -309,7 +407,7 @@ export function InspirationCreator() {
           description: sb.description,
           prompt: sb.prompt,
           videoPrompt: sb.videoPrompt,
-          scene_id: sb.scene_id ? String(sb.scene_id) : undefined,
+          scene: sb.scene ? String(sb.scene) : undefined,
           characters: normalizeStringArray(sb.characters),
           props: normalizeStringArray(sb.props),
           shotType: sb.shot_type ? String(sb.shot_type) : undefined,
@@ -359,30 +457,39 @@ export function InspirationCreator() {
     }
 
     setContinuing(true)
-    setPipelineStep({ step: 1, totalSteps: 3, label: '延伸故事' })
+    setPipelineStep({ step: 1, totalSteps: 6, label: '延伸故事' })
     try {
-      const existingNames = {
-        characters: generatedContent.characters.map(c => c.name),
-        scenes: generatedContent.scenes.map(s => s.name),
-        props: generatedContent.props.map(p => p.name),
-      }
-      const lastStoryboards = generatedContent.storyboards.slice(-3).map(sb => ({
-        description: sb.description,
-        videoPrompt: sb.videoPrompt,
-      }))
+      const lastScene = generatedContent.scenes[generatedContent.scenes.length - 1]
+      const lastStoryboards = generatedContent.storyboards.slice(-3).map(sb => {
+        const parts = [`画面: ${sb.description || sb.prompt || ''}`]
+        if (sb.videoPrompt) parts.push(`动态: ${sb.videoPrompt}`)
+        if (sb.shotType) parts.push(`景别: ${sb.shotType}`)
+        if (sb.duration) parts.push(`时长: ${sb.duration}s`)
+        return parts.join(' | ')
+      }).join('\n')
 
       const direction = continueDirection.trim() || '自然延续剧情,推动故事发展'
       const topicInput = `【延伸剧情模式】
-已有角色（请勿重复生成）：${existingNames.characters.join('、') || '无'}
-已有场景（请勿重复生成）：${existingNames.scenes.join('、') || '无'}
-已有道具（请勿重复生成）：${existingNames.props.join('、') || '无'}
-最近分镜：${JSON.stringify(lastStoryboards)}
-延伸方向：${direction}
-请只生成新的场景和后续分镜，已有资产不要重复出现在输出中。`
+已有资产（请勿重复生成新的角色、场景、道具，直接使用已有资产）：
+- 角色：${generatedContent.characters.map(c => c.name).join('、') || '无'}
+- 场景：${generatedContent.scenes.map(s => s.name).join('、') || '无'}
+- 道具：${generatedContent.props.map(p => p.name).join('、') || '无'}
+
+【上一个场景结尾（请从此处继续）】
+场景名：${lastScene?.name || '无'}
+场景描述：${lastScene?.description || '无'}
+
+【最近分镜结局】
+${lastStoryboards || '无'}
+
+【延伸方向】
+${direction}
+
+重要：必须紧接上一个场景的结尾继续叙事，保证故事线的连续性。不要重新开始一个独立故事，不要重复已有场景/角色/道具。只生成全新的场景。`
 
       // ====== Step 1: 延伸故事 ======
-      setPipelineStep({ step: 1, totalSteps: 3, label: '延伸故事与场景划分' })
-      const storyPrompt = getActivePrompt('inspiration_story_generation', { topic: topicInput })
+      setPipelineStep({ step: 1, totalSteps: 6, label: '延伸故事与场景划分' })
+      const storyPrompt = getActivePrompt('inspiration_story_continuation', { topic: topicInput, duration })
       const storyResult = await callAI(storyPrompt, { temperature: 0.9, maxTokens: 16384 })
       const storyData = parseJSON<{ title?: string; storySummary?: string; scenes: InspirationScene[] }>(storyResult)
       const newScenes = storyData.scenes || []
@@ -393,7 +500,7 @@ export function InspirationCreator() {
       }
 
       // ====== Step 2: 资产提取（仅新增） ======
-      setPipelineStep({ step: 2, totalSteps: 3, label: '提取新角色、场景、道具' })
+      setPipelineStep({ step: 2, totalSteps: 6, label: '提取新角色、场景、道具' })
       const newStoryText = newScenes.map((s, i) =>
         `--- 场景${i + 1}: ${s.name} ---\n${s.storyText || s.summary}`
       ).join('\n\n')
@@ -416,8 +523,8 @@ export function InspirationCreator() {
       const addedScenes = (newAssets.scenes || []).filter(s => !existingSceneNames.has(s.name))
       const addedProps = (newAssets.props || []).filter(p => !existingPropNames.has(p.name))
 
-      // ====== Step 3: 逐场景分镜拆解 ======
-      setPipelineStep({ step: 3, totalSteps: 3, label: '分镜拆解 (0/' + newScenes.length + ')' })
+      // ====== Step 3: 分镜拆解（3场景一批） ======
+      setPipelineStep({ step: 3, totalSteps: 6, label: '分镜拆解 (0/' + newScenes.length + ')' })
 
       const allCharacterPrompts = new Map<string, string>()
       for (const c of generatedContent.characters) allCharacterPrompts.set(c.name, c.prompt)
@@ -440,36 +547,55 @@ export function InspirationCreator() {
         ? `景别: ${lastExistingShot.shotType || '固定'}\n画面: ${lastExistingShot.prompt || ''}\n动态: ${lastExistingShot.videoPrompt || ''}`
         : '（这是第一个场景，没有上一场景）'
 
+      const allPropsForBatch = [...generatedContent.props, ...addedProps]
+      const BATCH_SIZE_EXT = 3
       const newShots: InspirationShot[] = []
-      for (let sceneIdx = 0; sceneIdx < newScenes.length; sceneIdx++) {
-        const scene = newScenes[sceneIdx]!
+
+      for (let batchStart = 0; batchStart < newScenes.length; batchStart += BATCH_SIZE_EXT) {
+        const batchEnd = Math.min(batchStart + BATCH_SIZE_EXT, newScenes.length)
+        const batchScenes = newScenes.slice(batchStart, batchEnd)
+
+        const batchScenesStr = batchScenes.map((scene, idx) => {
+          const globalIdx = batchStart + idx
+          const sceneCharacterNames = [...new Set(scene.characters)]
+          const characterPromptsStr = sceneCharacterNames
+            .map(name => `${name}: ${allCharacterPrompts.get(name) || '未知角色'}`)
+            .join('\n')
+
+          return [
+            `=== 场景${globalIdx + 1}: ${scene.name} ===`,
+            `地点: ${scene.location}`,
+            `时间: ${scene.time}`,
+            `氛围: ${scene.mood}`,
+            `出场角色: ${scene.characters.join(', ')}`,
+            `叙事功能: ${scene.narrativeFunction}`,
+            `概要: ${scene.summary}`,
+            ``,
+            `【原文片段】`,
+            scene.storyText || scene.summary,
+            ``,
+            `【角色视觉描述】`,
+            characterPromptsStr,
+            ``,
+            `【场景视觉描述】`,
+            `${scene.name}: ${allScenePrompts.get(scene.name) || '未知场景'}`,
+            ``,
+            `【道具视觉描述】`,
+            allPropsForBatch.map(p => `${p.name}: ${allPropPrompts.get(p.name) || ''}`).join('\n'),
+          ].join('\n')
+        }).join('\n\n---\n\n')
+
         setPipelineStep({
           step: 3,
-          totalSteps: 3,
-          label: `分镜拆解 (${sceneIdx + 1}/${newScenes.length}): ${scene.name}`,
+          totalSteps: 6,
+          label: `分镜拆解 (${Math.min(batchEnd, newScenes.length)}/${newScenes.length})`,
         })
 
-        const sceneInfo = `--- 场景${sceneIdx + 1}: ${scene.name} ---\n地点: ${scene.location}\n时间: ${scene.time}\n氛围: ${scene.mood}\n出场角色: ${scene.characters.join(', ')}\n叙事功能: ${scene.narrativeFunction}\n概要: ${scene.summary}`
-        const sceneOriginalText = scene.storyText || scene.summary
-
-        const sceneCharacterNames = [...new Set(scene.characters)]
-        const characterPromptsStr = sceneCharacterNames
-          .map(name => `${name}: ${allCharacterPrompts.get(name) || '未知角色'}`)
-          .join('\n')
-        const scenePromptsStr = `${scene.name}: ${allScenePrompts.get(scene.name) || '未知场景'}`
-        const propPromptsStr = [...generatedContent.props, ...addedProps]
-          .map(p => `${p.name}: ${allPropPrompts.get(p.name) || ''}`)
-          .join('\n')
-
         try {
-          const breakdownPrompt = getActivePrompt('pipeline_storyboard_breakdown', {
-            sceneContent: sceneOriginalText,
-            sceneInfo,
+          const breakdownPrompt = getActivePrompt('pipeline_storyboard_breakdown_batch', {
+            batchScenes: batchScenesStr,
             previousShot: previousShotDesc,
             assetList: allAssetListStr,
-            characterPrompts: characterPromptsStr,
-            scenePrompts: scenePromptsStr,
-            propPrompts: propPromptsStr,
           })
           const breakdownResult = await callAI(breakdownPrompt, { maxTokens: 16384 })
           const shots = parseJSON<InspirationShot[]>(breakdownResult)
@@ -484,7 +610,46 @@ export function InspirationCreator() {
             ].join('\n')
           }
         } catch (e) {
-          logger.error(`[Inspiration] 延伸分镜拆解失败，场景${sceneIdx + 1}`, e)
+          logger.error(`[Inspiration] 延伸分镜拆解失败，批次${batchStart / BATCH_SIZE_EXT + 1}`, e)
+        }
+      }
+
+      // ====== Step 4: 摄影方案精修 ======
+      if (newShots.length > 0) {
+        setPipelineStep({ step: 4, totalSteps: 6, label: '精修摄影方案' })
+        try {
+          const refined = await runRefinement<typeof newShots>('refinement_cinematography', newShots)
+          if (refined && refined.length === newShots.length) {
+            newShots.splice(0, newShots.length, ...refined)
+          }
+        } catch (e) {
+          logger.error('[Inspiration] 延伸摄影精修失败', e)
+        }
+      }
+
+      // ====== Step 5: 表演精修 ======
+      if (newShots.length > 0) {
+        setPipelineStep({ step: 5, totalSteps: 6, label: '精修表演细节' })
+        try {
+          const refined = await runRefinement<typeof newShots>('refinement_performance', newShots)
+          if (refined && refined.length === newShots.length) {
+            newShots.splice(0, newShots.length, ...refined)
+          }
+        } catch (e) {
+          logger.error('[Inspiration] 延伸表演精修失败', e)
+        }
+      }
+
+      // ====== Step 6: 剪辑节奏精修 ======
+      if (newShots.length > 0) {
+        setPipelineStep({ step: 6, totalSteps: 6, label: '精修剪辑节奏' })
+        try {
+          const refined = await runRefinement<typeof newShots>('refinement_editing', newShots)
+          if (refined && refined.length === newShots.length) {
+            newShots.splice(0, newShots.length, ...refined)
+          }
+        } catch (e) {
+          logger.error('[Inspiration] 延伸剪辑精修失败', e)
         }
       }
 
@@ -503,7 +668,7 @@ export function InspirationCreator() {
           description: sb.description,
           prompt: sb.prompt,
           videoPrompt: sb.videoPrompt,
-          scene_id: sb.scene_id ? String(sb.scene_id) : undefined,
+          scene: sb.scene ? String(sb.scene) : undefined,
           characters: normalizeStringArray(sb.characters),
           props: normalizeStringArray(sb.props),
           shotType: sb.shot_type ? String(sb.shot_type) : undefined,
@@ -552,6 +717,138 @@ export function InspirationCreator() {
     const updated = history.filter(h => h.id !== id)
     setHistory(updated)
     saveHistory(updated)
+  }
+
+  /** 重试：重新生成故事 */
+  const handleRetryStory = async () => {
+    if (!topic.trim() || !currentAssets) return
+    setIsRetrying(r => ({ ...r, story: true }))
+    setPipelineStep({ step: 1, totalSteps: 1, label: '重新生成故事' })
+    try {
+      const storyPrompt = getActivePrompt('inspiration_story_generation', { topic: topic.trim(), duration })
+      const result = await callAI(storyPrompt, { temperature: 0.9, maxTokens: 16384 })
+      const storyData = parseJSON<{ title?: string; storySummary?: string; scenes: InspirationScene[] }>(result)
+      const newScenes = storyData.scenes || []
+      if (newScenes.length === 0) throw new Error('故事为空')
+      setCurrentScenes(newScenes)
+
+      // 重新跑后面所有步骤
+      const fullStoryText = newScenes.map((s, i) =>
+        `--- 场景${i + 1}: ${s.name} ---\n${s.storyText || s.summary}`
+      ).join('\n\n')
+      const scenesSummary = newScenes.map((s, i) =>
+        `场景${i + 1}: ${s.name} - ${s.summary} (角色: ${s.characters.join(', ')})`
+      ).join('\n')
+      const assetPrompt = getActivePrompt('pipeline_asset_extraction', { content: fullStoryText, scenes: scenesSummary })
+      const assetResult = await callAI(assetPrompt, { maxTokens: 16384 })
+      const newAssets = parseJSON<InspirationAsset>(assetResult)
+      setCurrentAssets(newAssets)
+
+      // 重新拆解分镜
+      await handleRegenerateShots(newScenes, newAssets)
+
+      toast({ title: '故事已重新生成' })
+    } catch (error) {
+      toast({ title: '重试失败', description: (error as Error).message, variant: 'destructive' })
+    } finally {
+      setIsRetrying(r => ({ ...r, story: false }))
+      setPipelineStep(null)
+    }
+  }
+
+  /** 重试：重新生成分镜 + 配音 */
+  const handleRetryStoryboard = async () => {
+    if (!currentScenes.length || !currentAssets) return
+    setIsRetrying(r => ({ ...r, storyboard: true }))
+    setPipelineStep({ step: 1, totalSteps: 1, label: '重新生成分镜' })
+    try {
+      await handleRegenerateShots(currentScenes, currentAssets)
+      toast({ title: '分镜已重新生成' })
+    } catch (error) {
+      toast({ title: '重试失败', description: (error as Error).message, variant: 'destructive' })
+    } finally {
+      setIsRetrying(r => ({ ...r, storyboard: false }))
+      setPipelineStep(null)
+    }
+  }
+
+  /** 重新生成分镜+配音（被重试函数复用） */
+  const handleRegenerateShots = async (scenes: InspirationScene[], assets: InspirationAsset) => {
+    const BATCH = 3
+    const allShots: InspirationShot[] = []
+    let prevShot = '（首场景，无上一场景）'
+
+    const charMap = new Map(assets.characters?.map(c => [c.name, c.prompt]) || [])
+    const sceneMap = new Map(assets.scenes?.map(s => [s.name, s.prompt]) || [])
+    const propMap = new Map(assets.props?.map(p => [p.name, p.prompt]) || [])
+    const assetListStr = [
+      `角色: ${(assets.characters || []).map(c => c.name).join(', ')}`,
+      `场景: ${(assets.scenes || []).map(s => s.name).join(', ')}`,
+      `道具: ${(assets.props || []).map(p => p.name).join(', ')}`,
+    ].join('\n')
+
+    for (let start = 0; start < scenes.length; start += BATCH) {
+      const end = Math.min(start + BATCH, scenes.length)
+      const batch = scenes.slice(start, end)
+      const batchStr = batch.map((scene, idx) => {
+        const gIdx = start + idx
+        const chars = [...new Set(scene.characters)]
+        return [
+          `=== 场景${gIdx + 1}: ${scene.name} ===`,
+          `地点: ${scene.location}`, `时间: ${scene.time}`, `氛围: ${scene.mood}`,
+          `出场角色: ${scene.characters.join(', ')}`, `叙事功能: ${scene.narrativeFunction}`,
+          `概要: ${scene.summary}`, ``, `【原文片段】`, scene.storyText || scene.summary, ``,
+          `【角色视觉描述】`, chars.map(n => `${n}: ${charMap.get(n) || '未知'}`).join('\n'), ``,
+          `【场景视觉描述】`, `${scene.name}: ${sceneMap.get(scene.name) || '未知'}`, ``,
+          `【道具视觉描述】`, (assets.props || []).map(p => `${p.name}: ${propMap.get(p.name) || ''}`).join('\n'),
+        ].join('\n')
+      }).join('\n\n---\n\n')
+
+      const prompt = getActivePrompt('pipeline_storyboard_breakdown_batch', {
+        batchScenes: batchStr, previousShot: prevShot, assetList: assetListStr,
+      })
+      const result = await callAI(prompt, { maxTokens: 16384 })
+      const shots = parseJSON<InspirationShot[]>(result)
+      if (shots.length > 0) {
+        allShots.push(...shots)
+        const last = shots[shots.length - 1]!
+        prevShot = `景别: ${last.shot_type || '固定'}\n画面: ${last.prompt || ''}\n动态: ${last.videoPrompt || ''}`
+      }
+    }
+
+    // 精修
+    if (allShots.length > 0) {
+      for (const refinementType of ['refinement_cinematography', 'refinement_performance', 'refinement_editing']) {
+        try {
+          const refined = await runRefinement<typeof allShots>(refinementType, allShots)
+          if (refined && refined.length === allShots.length) allShots.splice(0, allShots.length, ...refined)
+        } catch {}
+      }
+    }
+
+    setCurrentShots([...allShots])
+    handleUpdateGeneratedContent(scenes, assets, allShots)
+  }
+
+  /** 更新最终展示结果 */
+  const handleUpdateGeneratedContent = (
+    _scenes: InspirationScene[], assets: InspirationAsset, shots: InspirationShot[],
+  ) => {
+    const content: GeneratedContent = {
+      characters: (assets.characters || []).map(c => ({
+        name: c.name, description: c.description, prompt: c.prompt, wardrobeVariants: c.wardrobeVariants,
+      })),
+      scenes: (assets.scenes || []).map(s => ({ name: s.name, description: s.description, prompt: s.prompt })),
+      props: (assets.props || []).map(p => ({ name: p.name, description: p.description, prompt: p.prompt })),
+      storyboards: shots.map(sb => ({
+        description: sb.description, prompt: sb.prompt, videoPrompt: sb.videoPrompt,
+        scene: sb.scene ? String(sb.scene) : undefined, characters: normalizeStringArray(sb.characters),
+        props: normalizeStringArray(sb.props), shotType: sb.shot_type ? String(sb.shot_type) : undefined,
+        duration: sb.duration ? String(sb.duration) : undefined,
+      })),
+      dubbing: [],
+    }
+    setGeneratedContent(content)
   }
 
   const handleSaveToEpisode = async () => {
@@ -735,12 +1032,12 @@ export function InspirationCreator() {
                 <Label>目标时长</Label>
                 <div className="flex flex-wrap gap-2">
                   {[
-                    { value: '30秒以内', label: '30秒以内', desc: '2-3场景' },
-                    { value: '30秒-1分钟', label: '30秒-1分钟', desc: '3-4场景' },
-                    { value: '1-2分钟', label: '1-2分钟', desc: '5-7场景' },
-                    { value: '3-5分钟', label: '3-5分钟', desc: '8-12场景' },
-                    { value: '5-10分钟', label: '5-10分钟', desc: '12-20场景' },
-                    { value: '10分钟以上', label: '10分钟+', desc: '20+场景' },
+                    { value: '30秒以内', label: '30秒以内', desc: '1场景' },
+                    { value: '30秒-1分钟', label: '30秒-1分钟', desc: '2-3场景' },
+                    { value: '1-2分钟', label: '1-2分钟', desc: '3-5场景' },
+                    { value: '3-5分钟', label: '3-5分钟', desc: '5-8场景' },
+                    { value: '5-10分钟', label: '5-10分钟', desc: '8-12场景' },
+                    { value: '10分钟以上', label: '10分钟+', desc: '12+场景' },
                   ].map(opt => (
                     <button
                       key={opt.value}
@@ -860,6 +1157,7 @@ export function InspirationCreator() {
               content={generatedContent}
               title="创作结果"
               showExport
+              projectId={currentProjectId || undefined}
               actions={
                 <Button
                   onClick={handleSaveToEpisode}
@@ -880,6 +1178,38 @@ export function InspirationCreator() {
                 </Button>
               }
               extraSections={
+                <>
+                {/* 重试按钮区 */}
+                {currentScenes.length > 0 && currentAssets && (
+                  <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 space-y-2">
+                    <div className="flex items-center gap-2 text-sm text-amber-800">
+                      <RefreshCw className="w-4 h-4" />
+                      <span className="font-medium">不满意？可选择性重新生成</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRetryStory}
+                        disabled={isRetrying.story}
+                        className="text-xs border-amber-300 hover:bg-amber-100"
+                      >
+                        {isRetrying.story ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+                        重新生成故事
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRetryStoryboard}
+                        disabled={isRetrying.storyboard}
+                        className="text-xs border-amber-300 hover:bg-amber-100"
+                      >
+                        {isRetrying.storyboard ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+                        重新生成分镜
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 <div className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-100 space-y-3">
                   <div className="flex items-center gap-2">
                     <Play className="w-4 h-4 text-indigo-600" />
@@ -913,6 +1243,7 @@ export function InspirationCreator() {
                     </Button>
                   </div>
                 </div>
+              </>
               }
             />
           ) : (

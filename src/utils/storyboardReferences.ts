@@ -21,9 +21,20 @@ export async function collectStoryboardReferences(
     refs.push(ref)
   }
 
-  if (storyboard.scene_id) {
+  if (storyboard.scene) {
     try {
-      const scene = await sceneDB.getById(storyboard.scene_id)
+      let scene: Scene | null = null
+      // 1. 先按数据库 ID 查找
+      try {
+        scene = await sceneDB.getById(storyboard.scene)
+      } catch {}
+      // 2. ID 查找失败时，按场景名称在 episode 下模糊匹配
+      if (!scene && storyboard.episode_id) {
+        try {
+          const allScenes = await sceneDB.getByEpisode(storyboard.episode_id)
+          scene = allScenes.find(s => isNameMatch(storyboard.scene!, s.name)) || null
+        } catch {}
+      }
       if (scene) {
         const url = scene.image || ''
         addRef({
@@ -84,11 +95,11 @@ export function getPlaceholderRefs(refs: CollectedReference[]): CollectedReferen
   return refs.filter(r => !r.hasImage)
 }
 
-function normalizeName(name: string): string {
+export function normalizeName(name: string): string {
   return name.trim().toLowerCase().replace(/[\s\-_·•]/g, '')
 }
 
-function isNameMatch(a: string, b: string): boolean {
+export function isNameMatch(a: string, b: string): boolean {
   const na = normalizeName(a)
   const nb = normalizeName(b)
   if (!na || !nb) return false
@@ -214,7 +225,7 @@ export async function updateStoryboardRefImages(
 
     if (assetType === 'character' && sb.character_ids?.includes(assetId)) {
       needsUpdate = true
-    } else if (assetType === 'scene' && sb.scene_id === assetId) {
+    } else if (assetType === 'scene' && sb.scene === assetId) {
       needsUpdate = true
     } else if (assetType === 'prop' && sb.prop_ids?.includes(assetId)) {
       needsUpdate = true

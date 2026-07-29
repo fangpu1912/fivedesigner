@@ -6,6 +6,7 @@ import { useTaskQueueStore } from '@/store/useTaskQueueStore'
 import { imagePathToBase64 } from '@/utils/imageUtils'
 import logger from '@/utils/logger'
 import { taskLog } from '@/utils/logBuffer'
+import { ART_STYLES, type Project } from '@/types'
 import type { ProgressInfo } from '@/types/generation'
 import type { GenerationTaskType } from '@/types'
 
@@ -15,6 +16,32 @@ function getImageSize(width?: number, height?: number): '1K' | '2K' | '4K' {
   if (maxDim <= 1024) return '1K'
   if (maxDim <= 2048) return '2K'
   return '4K'
+}
+
+/** 将精确像素宽高转换为最接近的标准比例 */
+function normalizeAspectRatio(width?: number, height?: number): string | undefined {
+  if (!width || !height) return undefined
+  const ratio = width / height
+  const standardRatios = [
+    { ratio: '1:1', value: 1 },
+    { ratio: '16:9', value: 16 / 9 },
+    { ratio: '9:16', value: 9 / 16 },
+    { ratio: '4:3', value: 4 / 3 },
+    { ratio: '3:4', value: 3 / 4 },
+    { ratio: '3:2', value: 3 / 2 },
+    { ratio: '2:3', value: 2 / 3 },
+    { ratio: '21:9', value: 21 / 9 },
+  ]
+  let closest = standardRatios[0]!
+  let minDiff = Math.abs(ratio - closest.value)
+  for (const r of standardRatios) {
+    const diff = Math.abs(ratio - r.value)
+    if (diff < minDiff) {
+      minDiff = diff
+      closest = r
+    }
+  }
+  return closest.ratio
 }
 
 function getVideoResolution(width?: number, height?: number): string {
@@ -105,17 +132,59 @@ export interface TextGenerationRequest {
 }
 
 /**
+ * 解析项目的风格提示词
+ *
+ * visual_style 存的是风格 ID（如 "anime_default"），需要查 ART_STYLES 表拿到完整 prompt；
+ * 若为 "custom"，则使用 custom_style.prompt；
+ * 兼容历史数据：直接存的 JSON 字符串或纯 prompt 字符串。
+ */
+function resolveStylePrompt(project: Project): string {
+  let stylePrompt = ''
+
+  if (project.visual_style) {
+    // 优先按风格 ID 查 ART_STYLES 表
+    const matched = ART_STYLES.find(s => s.id === project.visual_style)
+    if (matched && matched.prompt) {
+      stylePrompt = matched.prompt
+    } else if (project.visual_style === 'custom') {
+      // 自定义风格：使用 custom_style.prompt
+      stylePrompt = project.custom_style?.prompt || ''
+    } else {
+      // 历史数据兼容：可能是 JSON 字符串或纯 prompt
+      try {
+        const parsed = JSON.parse(project.visual_style)
+        if (parsed && typeof parsed.prompt === 'string') {
+          stylePrompt = parsed.prompt
+        } else if (typeof parsed === 'string') {
+          stylePrompt = parsed
+        }
+      } catch {
+        // 纯字符串
+        stylePrompt = project.visual_style
+      }
+    }
+  }
+
+  return stylePrompt
+}
+
+/**
  * 构建完整提示词（添加项目风格和质量词）
+ *
+ * 拼接顺序：[风格词], [基础提示词], [质量词]
+ * - 风格词：从 visual_style（风格 ID）查 ART_STYLES，或从 custom_style 取
+ * - 质量词：直接使用 quality_prompt
  */
 export async function buildFullPrompt(projectId: string, basePrompt: string): Promise<string> {
   try {
     const project = await projectDB.getById(projectId)
     if (!project) return basePrompt
 
-    let parts: string[] = []
+    const parts: string[] = []
 
-    if (project.visual_style) {
-      parts.push(project.visual_style)
+    const stylePrompt = resolveStylePrompt(project)
+    if (stylePrompt) {
+      parts.push(stylePrompt)
     }
 
     parts.push(basePrompt)
@@ -124,7 +193,7 @@ export async function buildFullPrompt(projectId: string, basePrompt: string): Pr
       parts.push(project.quality_prompt)
     }
 
-    return parts.join(', ')
+    return parts.filter(Boolean).join(', ')
   } catch (error) {
     logger.error('构建完整提示词失败:', error)
     return basePrompt
@@ -263,9 +332,7 @@ export function useImageGeneration() {
           size: request.width && request.height
             ? getImageSize(request.width, request.height)
             : '1K' as const,
-          aspectRatio: request.width && request.height 
-            ? `${request.width}:${request.height}` as `${number}:${number}`
-            : (request.aspectRatio || '16:9') as `${number}:${number}`,
+          aspectRatio: (normalizeAspectRatio(request.width, request.height) || request.aspectRatio || '16:9') as `${number}:${number}`,
         }
 
         const numericProjectId = request.projectId ? parseInt(request.projectId) : 0
@@ -468,7 +535,8 @@ export function useVideoGeneration() {
           taskLog(dbTaskId, 'info', '发送视频生成请求（异步轮询模式）')
         }
 
-        const modelName = model.split(':')[1] || model
+        const modelColonIndex = model.indexOf(':')
+        const modelName = modelColonIndex > 0 ? model.substring(modelColonIndex + 1) : model
         const corrected = correctModelParams(modelName, {
           duration: request.duration || 5,
           width: request.width,

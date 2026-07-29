@@ -92,7 +92,7 @@ export interface AssetItem {
   fileSize?: number
   fileType?: string
   metadata?: Record<string, unknown>
-  scene_id?: string
+  scene?: string
   character_ids?: string[]
   prop_ids?: string[]
   scene_name?: string
@@ -280,7 +280,7 @@ export function AssetManagerPanel({ projectId, episodeId }: AssetManagerPanelPro
         })
         .filter((name): name is string => !!name)
 
-      const sceneName = sb.scene_id ? scenes.find(s => s.id === sb.scene_id)?.name : undefined
+      const sceneName = sb.scene ? scenes.find(s => s.id === sb.scene)?.name : undefined
 
       const propNames = (sb.prop_ids || [])
         .map((id: string) => {
@@ -299,7 +299,7 @@ export function AssetManagerPanel({ projectId, episodeId }: AssetManagerPanelPro
         tags: [],
         thumbnail: sb.image,
         image: sb.image,
-        scene_id: sb.scene_id,
+        scene: sb.scene,
         character_ids: sb.character_ids,
         prop_ids: sb.prop_ids,
         scene_name: sceneName,
@@ -688,7 +688,7 @@ export function AssetManagerPanel({ projectId, episodeId }: AssetManagerPanelPro
       "prompt": "镜头组首帧静态定格画面描述",
       "videoPrompt": "整合时长、运镜、动作、台词、剪辑节奏的完整镜头文案",
       "characters": ["角色名1", "角色名2"],
-      "scene_id": "匹配既定场景名称",
+      "scene": "匹配既定场景名称",
       "props": ["道具名1", "道具名2"],
       "shot_type": "多景别连贯切换 / 单景别固定镜头",
       "duration": 15

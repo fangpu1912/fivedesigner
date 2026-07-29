@@ -100,8 +100,8 @@ const PRESET_PROVIDERS: Record<
     baseUrl: 'https://api.deepseek.com',
     endpoint: '/v1/chat/completions',
     models: [
-      { id: 'deepseek-v4', name: 'DeepSeek-V4' },
-      { id: 'deepseek-chat', name: 'DeepSeek Chat' },
+      { id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash' },
+      { id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro' },
     ],
   },
   anthropic: {

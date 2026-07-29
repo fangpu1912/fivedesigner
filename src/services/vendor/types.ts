@@ -66,7 +66,7 @@ export interface VendorConfig {
   createTime: number
 }
 
-export type AiType = 'scriptAgent' | 'productionAgent' | 'universalAi' | 'vlAgent' | 'ttsDubbing'
+export type AiType = 'productionAgent' | 'universalAi' | 'vlAgent' | 'ttsDubbing'
 
 export interface AgentDeploy {
   id: string

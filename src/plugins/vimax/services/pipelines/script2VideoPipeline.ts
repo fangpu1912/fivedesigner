@@ -163,9 +163,12 @@ export async function runScript2VideoPipeline(
           character: char,
           projectId,
           episodeId,
+          outfits: char.outfits,
         });
 
         portraits[char.name] = result.portraitUrl;
+        // 回填含 outfit imageUrl 的 character，确保后续 saveScriptToDatabase 能写入 outfitDB
+        script.characters[i] = result.character;
 
         const progress = ((i + 1) / script.characters.length) * 100;
         updateStepProgress(state, 1, progress);

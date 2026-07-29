@@ -3,10 +3,14 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { check as checkUpdate } from '@tauri-apps/plugin-updater'
+import { FolderOpen, Plus } from 'lucide-react'
 
 import { AppErrorBoundary } from '@/components/app/AppErrorBoundary'
 import { Layout } from '@/components/layout/Layout'
 import { ThemeProvider } from '@/components/theme/ThemeProvider'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Toaster } from '@/components/ui/toaster'
 import { ActivationDialog } from '@/components/ActivationDialog'
 import { appPages } from '@/config/appPages'
@@ -15,6 +19,7 @@ import { workspaceService } from '@/services/workspace'
 import { startTaskProcessor, stopTaskProcessor, registerDefaultExecutors } from '@/services/taskQueue'
 import { useTaskResume } from '@/hooks/useTaskResume'
 import { checkAndRestoreActivation } from '@/services/activationService'
+import { projectDB } from '@/db'
 import logger from '@/utils/logger'
 import type { ActivationStatus } from '@/types'
 
@@ -24,6 +29,8 @@ function AppContent() {
   const [activationStatus, setActivationStatus] = useState<ActivationStatus | null>(null)
   const [showActivationDialog, setShowActivationDialog] = useState(false)
   const [activationChecked, setActivationChecked] = useState(false)
+  const [showFirstRunGuide, setShowFirstRunGuide] = useState(false)
+  const [guideStep, setGuideStep] = useState(0)
 
   useTaskResume()
 
@@ -59,6 +66,20 @@ function AppContent() {
 
       try {
         await workspaceService.initialize()
+
+        // 首次运行检测：无项目时弹出引导
+        try {
+          const projects = await projectDB.getAll()
+          if (projects.length === 0) {
+            const isCustom = workspaceService.isCustomWorkspace()
+            if (!isCustom) {
+              setGuideStep(0)
+              setShowFirstRunGuide(true)
+            }
+          }
+        } catch {
+          // 数据库查询失败不阻塞
+        }
       } catch (error) {
         logger.error('[App] Failed to initialize workspace:', error)
       }
@@ -132,24 +153,108 @@ function AppContent() {
   }
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          {appPages.flatMap(page =>
-            page.routePaths.map(routePath => {
-              const PageComponent = page.component
-              const key = `${page.navPath}:${routePath}`
+    <>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            {appPages.flatMap(page =>
+              page.routePaths.map(routePath => {
+                const PageComponent = page.component
+                const key = `${page.navPath}:${routePath}`
 
-              if (routePath === '/') {
-                return <Route key={key} index element={<PageComponent />} />
+                if (routePath === '/') {
+                  return <Route key={key} index element={<PageComponent />} />
+                }
+
+                return <Route key={key} path={routePath.slice(1)} element={<PageComponent />} />
+              })
+            )}
+          </Route>
+        </Routes>
+      </BrowserRouter>
+
+      {/* 首次运行引导 */}
+      <Dialog open={showFirstRunGuide} onOpenChange={setShowFirstRunGuide}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-xl">欢迎使用 FiveDesigner 🎉</DialogTitle>
+            <DialogDescription>
+              为了正常使用，请先完成以下两步设置，避免数据存到系统盘。
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* 步骤1 */}
+            <Card className={guideStep === 0 ? 'border-primary' : ''}>
+              <CardContent className="p-4 flex items-start gap-3">
+                <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-sm font-bold text-primary">1</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">设置工作目录</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    软件默认使用系统 AppData 目录存储文件，请设置到有足够空间的自定义目录（如 D:\FiveDesigner），避免 C 盘爆满。
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 h-7 text-xs"
+                    onClick={() => {
+                      window.open('/settings', '_self')
+                    }}
+                  >
+                    <FolderOpen className="w-3 h-3 mr-1" />
+                    前往设置工作目录
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 步骤2 */}
+            <Card className={guideStep === 1 ? 'border-primary' : ''}>
+              <CardContent className="p-4 flex items-start gap-3">
+                <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-sm font-bold text-primary">2</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">新建项目与剧集</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    所有创作内容都归属于项目和剧集，请先创建一个项目，再在项目中创建剧集。
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 h-7 text-xs"
+                    onClick={() => {
+                      setShowFirstRunGuide(false)
+                      window.open('/projects', '_self')
+                    }}
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    前往新建项目
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setShowFirstRunGuide(false)}>
+              稍后设置
+            </Button>
+            <Button size="sm" onClick={() => {
+              if (guideStep === 0) {
+                setGuideStep(1)
+              } else {
+                setShowFirstRunGuide(false)
               }
-
-              return <Route key={key} path={routePath.slice(1)} element={<PageComponent />} />
-            })
-          )}
-        </Route>
-      </Routes>
-    </BrowserRouter>
+            }}>
+              {guideStep === 0 ? '下一步' : '我知道了'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 

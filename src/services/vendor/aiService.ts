@@ -32,15 +32,15 @@ function resolveModelName(value: AiType | `${string}:${string}`): {
   modelName: string
 } {
   // 检查是否是Agent类型
-  const agentTypes: AiType[] = ['scriptAgent', 'productionAgent', 'universalAi', 'vlAgent', 'ttsDubbing']
+  const agentTypes: AiType[] = ['productionAgent', 'universalAi', 'vlAgent', 'ttsDubbing']
   if (agentTypes.includes(value as AiType)) {
     return { vendorId: null, modelName: value as string }
   }
 
-  // 解析 vendorId:modelName 格式
-  const parts = value.split(':')
-  if (parts.length === 2) {
-    return { vendorId: parts[0]!, modelName: parts[1]! }
+  // 解析 vendorId:modelName 格式（modelName 可能包含冒号，如 wan2.6-i2v:1280*720）
+  const colonIndex = value.indexOf(':')
+  if (colonIndex > 0) {
+    return { vendorId: value.substring(0, colonIndex), modelName: value.substring(colonIndex + 1) }
   }
 
   // 默认格式

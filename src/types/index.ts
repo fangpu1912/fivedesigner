@@ -422,7 +422,7 @@ export interface ExtractedDubbing {
 // 提取的分镜类型
 export interface ExtractedShot {
   id: string
-  scene_id: string
+  scene: string
   description: string
   duration?: string
   shot_type?: string
@@ -451,7 +451,6 @@ export interface Storyboard {
   name: string
   shot_type?: string
   scene?: string
-  scene_id?: string
   location?: string
   time?: string
   description?: string

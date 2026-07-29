@@ -522,7 +522,7 @@ export const analysisService = {
             description: String(sb.description || sb.desc || sb.voiceover || sb.content || ''),
             prompt: String(sb.prompt || sb.image_prompt || sb.imagePrompt || ''),
             videoPrompt: String(sb.videoPrompt || sb.video_prompt || sb.videoPrompt || sb.motion_prompt || ''),
-            scene_id: sb.scene_id ? String(sb.scene_id) : undefined,
+            scene: sb.scene ? String(sb.scene) : undefined,
             characters: Array.isArray(sb.characters) ? sb.characters.map(String) : undefined,
             props: Array.isArray(sb.props) ? sb.props.map(String) : undefined,
             transition: String(sb.transition || ''),
@@ -699,7 +699,6 @@ export const analysisService = {
       })) as ExtractedDubbing[],
       extracted_shots: result.storyboards.map(s => ({
         id: `shot_${s.storyboard_id}`,
-        scene_id: '',
         scene: `分镜${s.storyboard_id}`,
         description: s.description,
         duration: `${s.duration}秒`,
@@ -734,11 +733,11 @@ export const analysisService = {
         }
       }
 
-      // 尝试从分镜描述中匹配场景
-      let sceneId: string | undefined
-      for (const [sceneName, sid] of sceneMap) {
-        if (sb.description.includes(sceneName)) {
-          sceneId = sid
+      // 尝试从分镜描述中匹配场景名（直接存场景名，便于下游按名称查找资产）
+      let sceneName: string | undefined
+      for (const name of sceneMap.keys()) {
+        if (sb.description.includes(name)) {
+          sceneName = name
           break
         }
       }
@@ -753,7 +752,7 @@ export const analysisService = {
         duration: sb.duration,
         sort_order: i,
         status: 'pending',
-        scene_id: sceneId,
+        scene: sceneName,
         character_ids: characterIds,
         prop_ids: propIds,
         reference_images: [],

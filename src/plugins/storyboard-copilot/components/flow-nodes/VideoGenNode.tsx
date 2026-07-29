@@ -77,7 +77,10 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
   // 根据当前选择的模型获取模型配置
   const currentModelConfig = useMemo(() => {
     if (!model) return null
-    const [vendorId, modelName] = model.split(':')
+    const colonIndex = model.indexOf(':')
+    if (colonIndex <= 0) return null
+    const vendorId = model.substring(0, colonIndex)
+    const modelName = model.substring(colonIndex + 1)
     if (!vendorId || !modelName) return null
     const vendor = vendors.find(v => v.id === vendorId)
     if (!vendor) return null
@@ -86,7 +89,7 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
 
   // 获取可用的时长列表
   const availableDurations = useMemo(() => {
-    if (!currentModelConfig || !('durationResolutionMap' in currentModelConfig)) return [5, 10, 15, 30]
+    if (!currentModelConfig || !('durationResolutionMap' in currentModelConfig)) return [5, 8, 10, 12, 15]
     const durations = new Set<number>()
     for (const map of currentModelConfig.durationResolutionMap) {
       for (const d of map.duration) {
@@ -98,7 +101,7 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
 
   // 获取可用的分辨率列表
   const availableResolutions = useMemo(() => {
-    if (!currentModelConfig || !('durationResolutionMap' in currentModelConfig)) return ['720p']
+    if (!currentModelConfig || !('durationResolutionMap' in currentModelConfig)) return ['480p', '540p', '720p', '1080p']
     const resolutions = new Set<string>()
     for (const map of currentModelConfig.durationResolutionMap) {
       for (const r of map.resolution) {
@@ -107,6 +110,21 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
     }
     return Array.from(resolutions)
   }, [currentModelConfig])
+
+  // 模型是否支持音频生成
+  const modelSupportsAudio = useMemo(() => {
+    if (!currentModelConfig || !('audio' in currentModelConfig)) return true
+    return currentModelConfig.audio === true || currentModelConfig.audio === 'optional'
+  }, [currentModelConfig])
+
+  // 当切换模型时，自动修正音频参数
+  useEffect(() => {
+    if (!modelSupportsAudio && generateAudio) {
+      setGenerateAudio(false)
+    } else if (currentModelConfig && 'audio' in currentModelConfig && currentModelConfig.audio === true && !generateAudio) {
+      setGenerateAudio(true)
+    }
+  }, [modelSupportsAudio, currentModelConfig, generateAudio])
 
   // 当切换模型时，自动调整时长和分辨率为可用值
   useEffect(() => {
@@ -454,7 +472,7 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
           </Select>
         </div>
 
-        {/* 第二行：分辨率 + 时长 */}
+        {/* 第二行：分辨率 + 时长 + 音频 + 生成 */}
         <div className="flex items-center gap-2">
           <Select value={resolution} onValueChange={v => setResolution(v)}>
             <SelectTrigger className="h-7 w-20 text-[10px] shrink-0">
@@ -477,10 +495,12 @@ export const VideoGenNode = memo(({ id, data, selected }: VideoGenNodeProps) => 
             </SelectContent>
           </Select>
           <div className="flex-1" />
-          <label className="flex items-center gap-1 text-[10px] text-muted-foreground nodrag shrink-0">
-            <input type="checkbox" checked={generateAudio} onChange={e => setGenerateAudio(e.target.checked)} className="rounded" />
-            音频
-          </label>
+          {modelSupportsAudio && (
+            <label className="flex items-center gap-1 text-[10px] text-muted-foreground nodrag shrink-0">
+              <input type="checkbox" checked={generateAudio} onChange={e => setGenerateAudio(e.target.checked)} className="rounded" />
+              音频
+            </label>
+          )}
           <Button
             className="h-7 px-3 text-[10px] shrink-0"
             onClick={isRunning ? handleStop : handleStart}

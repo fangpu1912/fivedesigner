@@ -36,7 +36,19 @@ class VendorConfigService {
             vendor.inputs = defaultVendor.inputs
             needSave = true
           }
-          if (vendor.models === undefined && defaultVendor.models) {
+          // 始终用 defaultVendor 的 models 覆盖，确保预定义模型配置（durationResolutionMap、audio 等）同步更新
+          // 保留用户自定义的模型（defaultVendor 中不存在的 modelName）
+          if (defaultVendor.models) {
+            const customModels = (vendor.models || []).filter(
+              m => !defaultVendor.models.some(dm => dm.modelName === m.modelName && dm.type === m.type)
+            )
+            const beforeJson = JSON.stringify(vendor.models)
+            vendor.models = [...defaultVendor.models, ...customModels]
+            const afterJson = JSON.stringify(vendor.models)
+            if (beforeJson !== afterJson) {
+              needSave = true
+            }
+          } else if (vendor.models === undefined && defaultVendor.models) {
             vendor.models = defaultVendor.models
             needSave = true
           }

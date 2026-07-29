@@ -272,7 +272,7 @@ export const nodeDefinitions: NodeDefinition[] = [
     type: CANVAS_NODE_TYPES.sceneDirector,
     label: '场景编排',
     category: 'storyboard',
-    description: '在360°全景场景中布置人物，调整相机角度截图',
+    description: '上传360°全景图，调整相机视角并截图',
     inputs: [
       { id: 'target', name: 'target', type: 'image', label: '全景图', required: false },
     ],
@@ -280,7 +280,6 @@ export const nodeDefinitions: NodeDefinition[] = [
     defaultProperties: {
       panoramaUrl: null,
       imageUrl: null,
-      characters: [],
       camera: {
         position: { x: 0, y: 5, z: 10 },
         target: { x: 0, y: 0, z: 0 },

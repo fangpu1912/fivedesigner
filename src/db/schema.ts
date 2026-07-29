@@ -43,7 +43,6 @@ CREATE TABLE IF NOT EXISTS storyboards (
   name TEXT NOT NULL,
   shot_type TEXT,
   scene TEXT,
-  scene_id TEXT,
   location TEXT,
   time TEXT,
   description TEXT,

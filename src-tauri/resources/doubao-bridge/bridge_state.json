@@ -1,0 +1,10 @@
+{
+  "nextAccountIndex": 4,
+  "cooldowns": [
+    {
+      "accountId": "9e189bea-0fda-4749-822c-3a3594a194ae",
+      "until": 1785010369681,
+      "reason": "AUTH_REQUIRED"
+    }
+  ]
+}

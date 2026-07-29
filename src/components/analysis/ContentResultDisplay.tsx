@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/hooks/useToast'
+import { buildFullPrompt } from '@/hooks/useVendorGeneration'
 
 export interface ContentCharacter {
   name: string
@@ -35,7 +36,7 @@ export interface ContentStoryboard {
   description: string
   prompt: string
   videoPrompt: string
-  scene_id?: string
+  scene?: string
   characters?: string[]
   props?: string[]
   shotType?: string
@@ -63,6 +64,7 @@ interface ContentResultDisplayProps {
   actions?: ReactNode
   extraSections?: ReactNode
   showExport?: boolean
+  projectId?: string
 }
 
 export function ContentResultDisplay({
@@ -71,37 +73,54 @@ export function ContentResultDisplay({
   actions,
   extraSections,
   showExport = false,
+  projectId,
 }: ContentResultDisplayProps) {
   const { toast } = useToast()
 
   const handleExportImagePrompts = async () => {
     const lines: string[] = []
     lines.push('========== 角色提示词 ==========')
-    content.characters.forEach((char, index) => {
+    for (const [index, char] of content.characters.entries()) {
+      // 角色/场景/道具之间空行，内部紧凑显示
+      if (index > 0) lines.push('')
+      const fullPrompt = projectId ? await buildFullPrompt(projectId, char.prompt) : char.prompt
       lines.push(`【角色 ${index + 1}】${char.name}`)
-      lines.push(`${char.prompt}`)
+      lines.push(`${fullPrompt}`)
       if (char.wardrobeVariants) {
-        lines.push(`${char.wardrobeVariants}`)
+        const fullWardrobe = projectId ? await buildFullPrompt(projectId, char.wardrobeVariants) : char.wardrobeVariants
+        lines.push(`${fullWardrobe}`)
       }
-    })
+    }
 
+    lines.push('')
     lines.push('========== 场景提示词 ==========')
-    content.scenes.forEach((scene, index) => {
+    for (const [index, scene] of content.scenes.entries()) {
+      if (index > 0) lines.push('')
+      const fullPrompt = projectId ? await buildFullPrompt(projectId, scene.prompt) : scene.prompt
       lines.push(`【场景 ${index + 1}】${scene.name}`)
-      lines.push(`${scene.prompt}`)
-    })
+      lines.push(`${fullPrompt}`)
+    }
 
+    lines.push('')
     lines.push('========== 道具提示词 ==========')
-    content.props.forEach((prop, index) => {
+    for (const [index, prop] of content.props.entries()) {
+      if (index > 0) lines.push('')
+      const fullPrompt = projectId ? await buildFullPrompt(projectId, prop.prompt) : prop.prompt
       lines.push(`【道具 ${index + 1}】${prop.name}`)
-      lines.push(`${prop.prompt}`)
-    })
+      lines.push(`${fullPrompt}`)
+    }
 
+    lines.push('')
     lines.push('========== 分镜图片提示词 ==========')
-    content.storyboards.forEach((sb, index) => {
+    for (const [index, sb] of content.storyboards.entries()) {
+      // 分镜之间空行，分镜内部紧凑显示
+      if (index > 0) lines.push('')
+      const fullPrompt = projectId ? await buildFullPrompt(projectId, sb.prompt) : sb.prompt
+      // 压缩分镜内部的空行为单行换行
+      const compactPrompt = fullPrompt.replace(/\n{2,}/g, '\n')
       lines.push(`【分镜 ${index + 1}】`)
-      lines.push(`${sb.prompt}`)
-    })
+      lines.push(`${compactPrompt}`)
+    }
 
     const fileContent = lines.join('\n')
     const defaultName = `生图提示词_${new Date().toISOString().slice(0, 10)}.txt`
@@ -121,9 +140,14 @@ export function ContentResultDisplay({
 
   const handleExportVideoPrompts = async () => {
     const lines: string[] = []
-    content.storyboards.forEach((sb, index) => {
-      lines.push(`【分镜 ${index + 1}】${sb.videoPrompt}`)
-    })
+    for (const [index, sb] of content.storyboards.entries()) {
+      // 分镜之间空行，分镜内镜头之间不空行
+      if (index > 0) lines.push('')
+      const fullPrompt = projectId ? await buildFullPrompt(projectId, sb.videoPrompt) : sb.videoPrompt
+      // 压缩分镜内部的空行为单行换行
+      const compactPrompt = fullPrompt.replace(/\n{2,}/g, '\n')
+      lines.push(`【分镜 ${index + 1}】${compactPrompt}`)
+    }
 
     if (lines.length === 0) {
       toast({ title: '没有视频提示词可导出' })
@@ -242,9 +266,9 @@ export function ContentResultDisplay({
               分镜脚本
             </h3>
             {content.storyboards.map((sb, index) => {
-              const hasRefs = (sb.scene_id) || (sb.characters && sb.characters.length > 0) || (sb.props && sb.props.length > 0)
+              const hasRefs = (sb.scene) || (sb.characters && sb.characters.length > 0) || (sb.props && sb.props.length > 0)
               return (
-                <div key={`sb-${index}-${sb.scene_id || 'no-scene'}`} className="p-4 bg-muted/30 rounded-lg space-y-3">
+                <div key={`sb-${index}-${sb.scene || 'no-scene'}`} className="p-4 bg-muted/30 rounded-lg space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="font-medium text-base">分镜 {index + 1}</div>
                     <div className="flex gap-1">
@@ -259,9 +283,9 @@ export function ContentResultDisplay({
                   <div className="text-sm text-muted-foreground">{sb.description}</div>
                   {hasRefs && (
                     <div className="flex flex-wrap gap-1">
-                      {sb.scene_id && (
+                      {sb.scene && (
                         <Badge className="text-xs bg-green-100 text-green-700 hover:bg-green-100 border-green-200 shadow-none">
-                          {sb.scene_id}
+                          {sb.scene}
                         </Badge>
                       )}
                       {sb.characters && sb.characters.map((c, i) => (

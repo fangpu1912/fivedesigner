@@ -16,6 +16,9 @@ import {
   Image,
   Loader2,
   Pencil,
+  RotateCw,
+  RotateCcw,
+  Repeat,
   Search,
   Square,
   Tags,
@@ -48,10 +51,12 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useMediaAssets, useMediaCategories, useMediaCategoryCounts, useMediaAssetMutations, saveMediaCategory, deleteMediaCategory, mediaAssetKeys } from '@/hooks/useMediaAssets'
 import { useToast } from '@/hooks/useToast'
+import { buildFullPrompt } from '@/hooks/useVendorGeneration'
 import { cn } from '@/lib/utils'
 import { useQueryClient } from '@tanstack/react-query'
 import { workspaceService } from '@/services/workspace/WorkspaceService'
 import { getImageUrl, getVideoUrl } from '@/utils/asset'
+import { useUIStore } from '@/store/useUIStore'
 import type { MediaAsset } from '@/types'
 
 // 虚拟网格常量
@@ -276,6 +281,7 @@ function AssetCard({
 
 
 export default function MediaAssetManage() {
+  const { currentProjectId } = useUIStore()
   const [filterType, setFilterType] = useState<'all' | 'image' | 'video'>('all')
   const [filterTag, setFilterTag] = useState<string | null>(null)
   const [filterCategory, setFilterCategory] = useState<string | null>(null)
@@ -288,6 +294,9 @@ export default function MediaAssetManage() {
   const [editCategory, setEditCategory] = useState('')
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const [previewVideo, setPreviewVideo] = useState<string | null>(null)
+  const [videoRotation, setVideoRotation] = useState(0)
+  const [videoFlipH, setVideoFlipH] = useState(false)
+  const [videoFlipV, setVideoFlipV] = useState(false)
   const [importing, setImporting] = useState(false)
   const [exporting, setExporting] = useState<'prompt' | 'file' | 'json' | null>(null)
 
@@ -460,24 +469,34 @@ export default function MediaAssetManage() {
 
       if (images.length > 0) {
         lines.push('========== 图片提示词 ==========')
-        images.forEach((asset, index) => {
+        for (const [index, asset] of images.entries()) {
           lines.push(`【图片 ${index + 1}】${asset.name}`)
-          if (asset.prompt) lines.push(`${asset.prompt}`)
+          if (asset.prompt) {
+            const fullPrompt = currentProjectId
+              ? await buildFullPrompt(currentProjectId, asset.prompt)
+              : asset.prompt
+            lines.push(`${fullPrompt}`)
+          }
           if (asset.tags && asset.tags.length > 0) lines.push(`标签: ${asset.tags.join(', ')}`)
           if (asset.description) lines.push(`描述: ${asset.description}`)
           lines.push('')
-        })
+        }
       }
 
       if (videos.length > 0) {
         lines.push('========== 视频提示词 ==========')
-        videos.forEach((asset, index) => {
+        for (const [index, asset] of videos.entries()) {
           lines.push(`【视频 ${index + 1}】${asset.name}`)
-          if (asset.prompt) lines.push(`${asset.prompt}`)
+          if (asset.prompt) {
+            const fullPrompt = currentProjectId
+              ? await buildFullPrompt(currentProjectId, asset.prompt)
+              : asset.prompt
+            lines.push(`${fullPrompt}`)
+          }
           if (asset.tags && asset.tags.length > 0) lines.push(`标签: ${asset.tags.join(', ')}`)
           if (asset.description) lines.push(`描述: ${asset.description}`)
           lines.push('')
-        })
+        }
       }
 
       const content = lines.join('\n')
@@ -496,7 +515,7 @@ export default function MediaAssetManage() {
     } finally {
       setExporting(null)
     }
-  }, [toast])
+  }, [toast, currentProjectId])
 
   const handleExportFiles = useCallback(async () => {
     const currentAssets = assetsRef.current
@@ -1139,13 +1158,40 @@ export default function MediaAssetManage() {
         onClose={() => setPreviewImage(null)}
       />
 
-      <Dialog open={!!previewVideo} onOpenChange={(open) => !open && setPreviewVideo(null)}>
+      <Dialog open={!!previewVideo} onOpenChange={(open) => { if (!open) { setPreviewVideo(null); setVideoRotation(0); setVideoFlipH(false); setVideoFlipV(false) } }}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>视频预览</DialogTitle>
           </DialogHeader>
           {previewVideo && (
-            <video src={previewVideo} controls className="w-full max-h-[70vh] rounded-lg" autoPlay />
+            <div className="space-y-3">
+              <div className="flex items-center justify-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setVideoRotation(r => r - 90)} title="左旋90°">
+                  <RotateCcw className="w-4 h-4" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setVideoRotation(r => r + 90)} title="右旋90°">
+                  <RotateCw className="w-4 h-4" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setVideoFlipH(f => !f)} title="水平翻转">
+                  <Repeat className={`w-4 h-4 ${videoFlipH ? 'text-primary' : ''}`} style={{ transform: 'scaleX(-1)' }} />
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setVideoFlipV(f => !f)} title="垂直翻转">
+                  <Repeat className={`w-4 h-4 ${videoFlipV ? 'text-primary' : ''}`} />
+                </Button>
+                <span className="text-xs text-muted-foreground ml-2">{videoRotation % 360}°</span>
+              </div>
+              <div className="flex items-center justify-center overflow-hidden rounded-lg bg-black/5">
+                <video
+                  src={previewVideo}
+                  controls
+                  className="w-full max-h-[65vh] rounded-lg"
+                  autoPlay
+                  style={{
+                    transform: `rotate(${videoRotation}deg) scaleX(${videoFlipH ? -1 : 1}) scaleY(${videoFlipV ? -1 : 1})`,
+                  }}
+                />
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>

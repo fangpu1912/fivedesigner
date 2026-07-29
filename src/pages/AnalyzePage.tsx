@@ -267,7 +267,7 @@ export default function AnalyzePage() {
         description: sb.description,
         prompt: sb.prompt,
         videoPrompt: sb.videoPrompt,
-        scene_id: sb.scene_id,
+        scene: sb.scene,
         characters: sb.characters,
         props: sb.props,
         shotType: sb.shot_type,
@@ -431,6 +431,7 @@ export default function AnalyzePage() {
                     content={analysisContentData}
                     title="分析结果"
                     showExport
+                    projectId={currentProjectId || undefined}
                     actions={
                       <div className="space-y-4">
                         <div className="p-4 bg-muted/30 rounded-lg space-y-2">

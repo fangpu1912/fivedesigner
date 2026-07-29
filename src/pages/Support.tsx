@@ -1,4 +1,4 @@
-import { Heart, Coffee, Sparkles, ArrowRight } from 'lucide-react'
+import { Heart, Coffee, Sparkles, ArrowRight, MessageCircle, Users, ExternalLink } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -113,6 +113,56 @@ export default function Support() {
                 <div className="mt-6 text-center">
                   <p className="text-sm font-medium">扫码赞赏</p>
                   <p className="text-xs text-muted-foreground mt-1">金额不限，心意无价</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 联系方式 */}
+        <Card>
+          <CardContent className="p-8">
+            <div className="space-y-6">
+              <div className="flex items-center gap-2">
+                <Heart className="w-5 h-5 text-red-500" />
+                <h3 className="font-semibold">联系我们</h3>
+              </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
+                  <MessageCircle className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">作者 QQ</p>
+                    <p className="text-sm text-muted-foreground mt-1 select-all">1500493432</p>
+                    <Button variant="ghost" size="sm" className="h-6 text-xs mt-1 p-0" asChild>
+                      <a href="https://qm.qq.com/cgi-bin/qm/qr?k=1500493432" target="_blank" rel="noopener noreferrer">
+                        点击联系
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
+                  <Users className="w-5 h-5 text-green-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">QQ 群</p>
+                    <p className="text-sm text-muted-foreground mt-1 select-all">1035377010</p>
+                    <Button variant="ghost" size="sm" className="h-6 text-xs mt-1 p-0" asChild>
+                      <a href="https://qm.qq.com/cgi-bin/qm/qr?k=1035377010" target="_blank" rel="noopener noreferrer">
+                        加入群聊
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
+                  <ExternalLink className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">B站主页</p>
+                    <p className="text-sm text-muted-foreground mt-1 truncate">space.bilibili.com/86442951</p>
+                    <Button variant="ghost" size="sm" className="h-6 text-xs mt-1 p-0" asChild>
+                      <a href="https://space.bilibili.com/86442951" target="_blank" rel="noopener noreferrer">
+                        前往关注
+                      </a>
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>

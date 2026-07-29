@@ -70,7 +70,8 @@ import { useUIStore } from '@/store/useUIStore'
 import type { WorkflowConfig } from '@/types'
 import type { GenerationResult } from '@/types/generation'
 import { getImageUrl } from '@/utils/asset'
-import { readFile } from '@tauri-apps/plugin-fs'
+import { AIImageEditDialog } from '@/components/ai/AIImageEditDialog'
+import { ImageEditorDialog } from '@/plugins/storyboard-copilot/components'
 import { vendorConfigService } from '@/services/vendor'
 import type { VendorConfig, VideoModel } from '@/services/vendor'
 
@@ -221,13 +222,10 @@ export function StoryboardDraw() {
     description?: string
     aliases?: string[]
   }>>([])
-  const [localEditPrompt, setLocalEditPrompt] = useState('')
   const [isNegativePromptExpanded, setIsNegativePromptExpanded] = useState(false)
 
   const promptInputRef = useRef<MentionInputRef>(null)
-  const editPromptInputRef = useRef<MentionInputRef>(null)
   const [promptMentions, setPromptMentions] = useState<MentionData[]>([])
-  const [editPromptMentions, setEditPromptMentions] = useState<MentionData[]>([])
   const autoMentionInjectedRef = useRef<string | null>(null)
 
   // AI generation states
@@ -284,7 +282,10 @@ export function StoryboardDraw() {
   // 根据当前选择的模型获取模型配置
   const currentModelConfig = useMemo(() => {
     if (!selectedModelId) return null
-    const [vendorId, modelName] = selectedModelId.split(':')
+    const colonIndex = selectedModelId.indexOf(':')
+    if (colonIndex <= 0) return null
+    const vendorId = selectedModelId.substring(0, colonIndex)
+    const modelName = selectedModelId.substring(colonIndex + 1)
     if (!vendorId || !modelName) return null
     const vendor = vendors.find(v => v.id === vendorId)
     if (!vendor) return null
@@ -306,7 +307,7 @@ export function StoryboardDraw() {
 
   // 获取可用的分辨率列表
   const availableResolutions = useMemo(() => {
-    if (!currentModelConfig?.durationResolutionMap) return ['720p']
+    if (!currentModelConfig?.durationResolutionMap) return ['480p', '540p', '720p', '1080p']
     const resolutions = new Set<string>()
     for (const map of currentModelConfig.durationResolutionMap) {
       for (const r of map.resolution) {
@@ -316,6 +317,23 @@ export function StoryboardDraw() {
     return Array.from(resolutions)
   }, [currentModelConfig])
 
+  // 模型是否支持音频生成（视频专用）
+  const modelSupportsAudio = useMemo(() => {
+    if (generationType !== 'video') return false
+    return currentModelConfig?.audio === true || currentModelConfig?.audio === 'optional'
+  }, [generationType, currentModelConfig])
+
+  // 当切换模型或生成类型时，自动修正音频参数
+  useEffect(() => {
+    if (generationType === 'video') {
+      if (!modelSupportsAudio && modelParams.audio) {
+        setModelParams(prev => ({ ...prev, audio: false }))
+      } else if (currentModelConfig?.audio === true && !modelParams.audio) {
+        setModelParams(prev => ({ ...prev, audio: true }))
+      }
+    }
+  }, [modelSupportsAudio, currentModelConfig, generationType, modelParams.audio])
+
   // Asset data - now using React Query (useCharactersByEpisode, useScenesByEpisode, usePropsByEpisode)
   const [isLoadingAssets, _setIsLoadingAssets] = useState(false)
 
@@ -323,6 +341,13 @@ export function StoryboardDraw() {
   const [previewImages, setPreviewImages] = useState<string[]>([])
   const [previewCurrentIndex, setPreviewCurrentIndex] = useState(0)
   const [showPreviewDialog, setShowPreviewDialog] = useState(false)
+
+  // Image editor dialog
+  const [editingImageUrl, setEditingImageUrl] = useState<string | null>(null)
+  // 分镜参考图标注
+  const [editingRefImageUrl, setEditingRefImageUrl] = useState<string | null>(null)
+  // 标注版图片映射（原图 → 标注版，视频生成时使用）
+  const [annotatedImageMap, setAnnotatedImageMap] = useState<Record<string, string>>({})
 
   // Image history (per item) - 持久化到 localStorage
   const [imageHistoryMap, setImageHistoryMap] = usePersistentUIState<Record<string, string[]>>(
@@ -531,11 +556,11 @@ export function StoryboardDraw() {
     // 当项目变化或生成类型变化时，更新提示词和参考图
     if (isItemChanged || isTypeChanged) {
       // 🔑 加载参考图 - 根据生成类型选择不同的字段
-      const savedRefImages = generationType === 'video' 
-        ? (item.video_reference_images || []) 
+      const savedRefImages = generationType === 'video'
+        ? (item.video_reference_images || [])
         : (item.reference_images || [])
       const savedVideoRefImages = item.video_reference_images || []
-      
+
       console.log('[GenerationPage] useEffect 更新本地状态:', {
         isItemChanged,
         isTypeChanged,
@@ -553,6 +578,10 @@ export function StoryboardDraw() {
       setLocalNegativePrompt(item.negative_prompt || '')
       setLocalReferenceImages(savedRefImages)
       setLocalVideoReferenceImages(savedVideoRefImages)
+
+      // 🔑 切换项目或生成类型时清空 mentions，防止上一个类型的 mentions 污染下一个类型
+      // （MentionInput 的 value 同步不会触发 onMentionsChange，导致 promptMentions 状态残留）
+      setPromptMentions([])
     }
 
     // Only reset preview when item actually changes (not when data updates)
@@ -563,14 +592,14 @@ export function StoryboardDraw() {
         setGeneratedImage(item.image || null)
       }
 
-      // 加载参考图映射（从分镜的 character_ids, prop_ids, scene_id）
+      // 加载参考图映射（从分镜的 character_ids, prop_ids, scene）
       if (activeTab === 'storyboard' && item) {
         const storyboard = item as any
         console.log('[GenerationPage] 加载分镜关联资产:', {
           storyboardId: storyboard.id,
           character_ids: storyboard.character_ids,
           prop_ids: storyboard.prop_ids,
-          scene_id: storyboard.scene_id,
+          scene: storyboard.scene,
           characters: characters.length,
           scenes: scenes.length,
           props: props.length,
@@ -606,10 +635,10 @@ export function StoryboardDraw() {
           }
         }
 
-        // 获取场景（从 scene_id）
-        const sceneId = storyboard.scene_id
-        if (sceneId) {
-          const scene = scenes.find((s: any) => s.id === sceneId)
+        // 获取场景（从 scene，支持按名称或 ID 匹配）
+        const sceneRef = storyboard.scene
+        if (sceneRef) {
+          const scene = scenes.find((s: any) => s.name === sceneRef || s.id === sceneRef)
           if (scene) {
             linkedAssets.push({
               id: scene.id,
@@ -749,7 +778,9 @@ export function StoryboardDraw() {
       setSelectedConfigId(vendorId)
       setSelectedModelId(fullValue)
       // 切换模型时，自动调整时长和分辨率为可用值
-      const [vId, mName] = fullValue.split(':')
+      const colonIdx = fullValue.indexOf(':')
+      const vId = colonIdx > 0 ? fullValue.substring(0, colonIdx) : ''
+      const mName = colonIdx > 0 ? fullValue.substring(colonIdx + 1) : ''
       if (vId && mName) {
         const vendor = vendors.find(v => v.id === vId)
         const modelConfig = vendor?.models.find(m => m.modelName === mName && m.type === 'video') as VideoModel | undefined
@@ -810,6 +841,12 @@ export function StoryboardDraw() {
     try {
       let result: string
 
+      // 图片生成用原图，视频生成用标注版（人脸处理过审）
+      const getAnnotated = (url: string | undefined) => {
+        if (!url || generationType !== 'video') return url
+        return annotatedImageMap[url] || url
+      }
+
       if (generationType === 'video') {
         // 视频生成逻辑：
         // - 有分镜图+尾帧：首尾帧生视频
@@ -817,12 +854,14 @@ export function StoryboardDraw() {
         // - 无分镜图但有参考图：多图参考生视频（用第一张参考图作为首帧）
         // - 无分镜图无参考图：文生视频
         
-        const storyboardImage = (activeItem as any)?.image
+        const storyboardImage = getAnnotated((activeItem as any)?.image)
         const hasReferenceImages = localReferenceImages?.length > 0
         
-        // 合并参考图：手动选择 + 自动收集的资产参考图（去重）
-        const manualRefs = hasReferenceImages ? localReferenceImages : []
-        const allRefImages = [...new Set([...manualRefs, ...autoCollectedRefs, ...mentionedImages])]
+        // 合并参考图：手动选择 + 自动收集的资产参考图（去重），视频模式替换为标注版
+        const manualRefs = hasReferenceImages ? localReferenceImages.map(u => getAnnotated(u) || u) : []
+        const autoAnnotated = autoCollectedRefs.map(u => getAnnotated(u) || u)
+        const mentionedAnnotated = mentionedImages.map(u => getAnnotated(u) || u)
+        const allRefImages = [...new Set([...manualRefs, ...autoAnnotated, ...mentionedAnnotated])]
         
         // 确定首帧：分镜图 > 参考图第一张
         const firstFrame = storyboardImage || (allRefImages.length > 0 ? allRefImages[0] : undefined)
@@ -939,419 +978,6 @@ export function StoryboardDraw() {
     addImageToHistory,
     activeTab,
     toast,
-  ])
-
-  // 图生图 - 编辑图像
-  const handleEditImage = useCallback(async () => {
-    if (!activeItem || !currentProjectId) return
-
-    const editPrompt = localEditPrompt?.trim()
-    if (!editPrompt) {
-      toast({ title: '请输入编辑提示词', variant: 'destructive' })
-      return
-    }
-
-    // 解析提示词中的 @提及，提取图片URL
-    const mentionedImages = getMentionImageUrls(editPromptMentions)
-
-    const referenceImages = localReferenceImages || []
-    const firstFrame = (activeItem as any)?.image || referenceImages[0] || undefined
-
-    if (!firstFrame) {
-      toast({ title: '请先选择参考图或确保当前资产有图片', variant: 'destructive' })
-      return
-    }
-
-    // 去重：@提及的图片如果已在参考图中，则不重复添加
-    const uniqueMentionedImages = mentionedImages.filter(url => !referenceImages.includes(url))
-    const allReferenceImages = [...referenceImages, ...uniqueMentionedImages]
-
-    if (generationMode === 'comfyui') {
-      await handleEditImageComfyUI(localEditPrompt || '', firstFrame, allReferenceImages)
-    } else {
-      // AI 模式：@提及的图片如果和 firstFrame 相同，也不重复添加
-      const uniqueMentionedForAI = mentionedImages.filter(url => url !== firstFrame)
-      await handleEditImageAI(localEditPrompt || '', firstFrame, uniqueMentionedForAI)
-    }
-  }, [
-    activeItem,
-    currentProjectId,
-    currentEpisodeId,
-    localEditPrompt,
-    localReferenceImages,
-    generationMode,
-  ])
-
-  // 图生图 - AI 模式
-  const handleEditImageAI = useCallback(async (editPrompt: string, firstFrame: string, mentionedImages: string[] = []) => {
-    if (!activeItem || !currentProjectId) return
-
-    setIsGenerating(true)
-
-    try {
-      const imageUrl = await imageGeneration.mutateAsync({
-        projectId: currentProjectId,
-        episodeId: currentEpisodeId || undefined,
-        name: `${activeItem.name}_edit`,
-        prompt: editPrompt,
-        model: selectedModelId,
-        width: modelParams.width as number,
-        height: modelParams.height as number,
-        aspectRatio: modelParams.aspectRatio || '16:9',
-        imageUrl: firstFrame,
-        referenceImages: mentionedImages.length > 0 ? mentionedImages : undefined,
-      })
-
-      if (imageUrl) {
-        setGeneratedImage(imageUrl)
-        addImageToHistory(imageUrl)
-
-        // 自动保存到对应资产
-        if (activeTab === 'storyboard') {
-          await updateStoryboardAsync({ id: activeItem.id, data: { image: imageUrl } })
-        } else {
-          await updateLinkedAsset(activeTab, activeItem.id, { image: imageUrl })
-        }
-
-        toast({ title: '图像编辑成功', description: '已自动保存到资产' })
-
-        // 自动刷新数据（替代整页刷新）
-        setTimeout(() => {
-          refreshData()
-        }, 500) // 0.5秒后刷新数据
-      } else {
-        throw new Error('未返回图片 URL')
-      }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : '图像编辑失败'
-      toast({ title: '图像编辑失败', description: errorMsg, variant: 'destructive' })
-      console.error('图生图错误:', error)
-    } finally {
-      setIsGenerating(false)
-    }
-  }, [
-    activeItem,
-    currentProjectId,
-    currentEpisodeId,
-    selectedConfigId,
-    selectedModelId,
-    modelParams,
-    imageGeneration,
-    updateStoryboardAsync,
-    addImageToHistory,
-    activeTab,
-    toast,
-    refreshData,
-  ])
-
-  // 图生图 - ComfyUI 模式
-  const handleEditImageComfyUI = useCallback(async (editPrompt: string, firstFrame: string, referenceImages: string[]) => {
-    if (!activeItem || !selectedWorkflow || !comfyuiClientRef.current) {
-      toast({ title: '请先选择 ComfyUI 工作流', variant: 'destructive' })
-      return
-    }
-
-    setIsGenerating(true)
-
-    // 动态导入 useTaskQueueStore
-    const { useTaskQueueStore } = await import('@/store/useTaskQueueStore')
-    
-    // 创建任务
-    const taskId = useTaskQueueStore.getState().addTask({
-      type: 'image_generation',
-      name: 'ComfyUI 图生图',
-      metadata: { prompt: editPrompt, itemId: activeItem.id },
-    })
-    useTaskQueueStore.getState().updateTask(taskId, { status: 'running', startedAt: Date.now() })
-    
-    try {
-      let uploadedImageName: string | null = null
-      const uploadedReferenceImages: string[] = []
-
-      // 合并所有图片：firstFrame + referenceImages（去重）
-      const allImagesToUpload = [firstFrame, ...referenceImages.filter(img => img !== firstFrame)]
-      console.log('[ComfyUI 图生图] 主图片:', firstFrame)
-      console.log('[ComfyUI 图生图] 参考图片数量:', referenceImages.length, referenceImages)
-      console.log('[ComfyUI 图生图] 所有待上传图片:', allImagesToUpload)
-      
-      for (let i = 0; i < allImagesToUpload.length; i++) {
-        const image = allImagesToUpload[i]
-        if (!image) continue
-        
-        try {
-          let uploadedName: string | null = null
-          
-          // 检查是否是远程 URL（排除 asset 协议）
-          const isAssetProtocol = image.includes('asset.localhost') || image.startsWith('asset://')
-          const isRemoteUrl = (image.startsWith('http://') || image.startsWith('https://')) && !isAssetProtocol
-          
-          if (isRemoteUrl) {
-            // 远程图片需要先下载
-            console.log(`[ComfyUI 图生图] 图片 ${i + 1} - 检测到远程URL，正在下载...`)
-            const response = await fetch(image)
-            if (!response.ok) {
-              throw new Error(`下载远程图片失败: ${response.statusText}`)
-            }
-            const blob = await response.blob()
-            const arrayBuffer = await blob.arrayBuffer()
-            const filename = `edit_${Date.now()}_${i}.png`
-            
-            // 上传到 ComfyUI
-            const formData = new FormData()
-            formData.append('image', new Blob([arrayBuffer], { type: 'image/png' }), filename)
-            formData.append('type', 'input')
-            formData.append('subfolder', '')
-            
-            const serverUrl = getComfyUIServerUrl()
-            const uploadResponse = await fetch(`${serverUrl}/upload/image`, {
-              method: 'POST',
-              body: formData,
-            })
-            
-            if (!uploadResponse.ok) {
-              const errorData = await uploadResponse.json().catch(() => ({ message: 'Unknown error' }))
-              throw new Error(`上传失败: ${errorData.message || uploadResponse.statusText}`)
-            }
-            
-            const uploadResult = await uploadResponse.json()
-            uploadedName = uploadResult.name
-            console.log(`[ComfyUI 图生图] 图片 ${i + 1} 远程上传成功:`, uploadedName)
-          } else {
-            // 本地文件路径处理
-            let localPath = image
-            if (image.startsWith('asset://')) {
-              const match = image.match(/asset:\/\/[^/]+\/(.+)/)
-              if (match) {
-                localPath = decodeURIComponent(match[1]!)
-              }
-            }
-            
-            // 处理 asset.localhost 协议
-            if (localPath.includes('asset.localhost')) {
-              try {
-                const urlObj = new URL(localPath)
-                localPath = decodeURIComponent(urlObj.pathname)
-              } catch {
-                const match = localPath.match(/asset\.localhost\/(.+)/)
-                if (match) {
-                  localPath = decodeURIComponent(match[1]!)
-                }
-              }
-            }
-            
-            // 去掉前导斜杠
-            if (localPath.startsWith('/')) {
-              localPath = localPath.substring(1)
-            }
-            
-            // 处理 Windows 路径中的斜杠
-            localPath = localPath.replace(/\//g, '\\')
-            
-            console.log(`[ComfyUI 图生图] 图片 ${i + 1} - 处理后的本地路径:`, localPath)
-            
-            // 读取本地文件
-            const imageData = await readFile(localPath)
-            const filename = `edit_${Date.now()}_${i}.png`
-            
-            // 使用 FormData 上传到 ComfyUI
-            const blob = new Blob([imageData], { type: 'image/png' })
-            const formData = new FormData()
-            formData.append('image', blob, filename)
-            formData.append('type', 'input')
-            formData.append('subfolder', '')
-            
-            const serverUrl = getComfyUIServerUrl()
-            const response = await fetch(`${serverUrl}/upload/image`, {
-              method: 'POST',
-              body: formData,
-            })
-            
-            if (!response.ok) {
-              const errorData = await response.json().catch(() => ({ message: 'Unknown error' }))
-              throw new Error(`上传失败: ${errorData.message || response.statusText}`)
-            }
-            
-            const uploadResult = await response.json()
-            uploadedName = uploadResult.name
-            console.log(`[ComfyUI 图生图] 图片 ${i + 1} 上传成功:`, uploadedName)
-          }
-          
-          if (uploadedName) {
-            uploadedReferenceImages.push(uploadedName)
-            // 第一张图片作为主图
-            if (i === 0) {
-              uploadedImageName = uploadedName
-            }
-          }
-        } catch (error) {
-          console.error(`[ComfyUI 图生图] 上传图片 ${i + 1} 失败:`, error)
-          // 继续上传其他图片
-        }
-      }
-      
-      console.log('[ComfyUI 图生图] 所有图片上传完成:', {
-        mainImage: uploadedImageName,
-        allImages: uploadedReferenceImages
-      })
-
-      const currentParams = getComfyUIParamsRef.current ? getComfyUIParamsRef.current() : {}
-      
-      // 处理种子：如果参数面板中种子为 -1，则生成随机种子；否则使用面板中的固定种子
-      const effectiveSeed = currentParams.seed === -1 || currentParams.seed === undefined
-        ? Math.floor(Math.random() * 2147483647)
-        : currentParams.seed
-      console.log('[ComfyUI 图生图] 种子设置:', { panelSeed: currentParams.seed, effectiveSeed })
-      
-      const params: ComfyUIParams = {
-        ...currentParams,
-        prompt: editPrompt,
-        negativePrompt: localNegativePrompt,
-        // 使用处理后的种子（-1 表示随机，其他值表示固定）
-        seed: effectiveSeed,
-        width: currentParams.width || modelParams.width,
-        height: currentParams.height || modelParams.height,
-        imageInput: uploadedImageName || undefined,
-        // 多图参考 - 使用上传后的图片名称
-        referenceImages: uploadedReferenceImages.length > 0 ? uploadedReferenceImages : undefined,
-      }
-
-      console.log('[ComfyUI 图生图] 应用参数:', {
-        editPrompt,
-        negativePrompt: localNegativePrompt,
-        imageInput: uploadedImageName,
-        currentParams,
-      })
-
-      let workflowData = applyParamsToWorkflow(selectedWorkflow.workflow, params, selectedWorkflow.nodes)
-
-      // 如果没有上传图片，清空 LoadImage 节点（避免使用模板中的旧图片）
-      if (!uploadedImageName) {
-        for (const [nodeId, node] of Object.entries(workflowData)) {
-          const nodeData = node as any
-          if (nodeData.class_type === 'LoadImage' || nodeData.class_type?.includes('LoadImage')) {
-            if (nodeData.inputs?.image) {
-              console.log('[ComfyUI 图生图] 清空 LoadImage 节点:', nodeId, '原值:', nodeData.inputs.image)
-              nodeData.inputs.image = ''
-            }
-          }
-        }
-      }
-
-      // 调试：检查工作流中的提示词节点
-      for (const [nodeId, node] of Object.entries(workflowData)) {
-        const nodeData = node as any
-        if (
-          nodeData.class_type?.includes('CLIPTextEncode') ||
-          nodeData.class_type?.includes('Text') ||
-          nodeData.inputs?.text !== undefined
-        ) {
-          console.log('[ComfyUI 图生图] 提示词节点:', nodeId, nodeData.class_type, nodeData.inputs)
-        }
-      }
-
-      // 强制应用提示词到所有可能的提示词节点（确保图生图提示词被使用）
-      // 简单策略：第一个 CLIPTextEncode 节点是正向提示词，第二个是负向提示词
-      let textEncodeCount = 0
-      for (const [nodeId, node] of Object.entries(workflowData)) {
-        const nodeData = node as any
-        if (!nodeData.inputs) continue
-
-        // CLIPTextEncode 节点
-        if (
-          nodeData.class_type === 'CLIPTextEncode' ||
-          nodeData.class_type?.includes('CLIPTextEncode')
-        ) {
-          textEncodeCount++
-          if (textEncodeCount === 1) {
-            // 第一个通常是正向提示词
-            nodeData.inputs.text = editPrompt
-            console.log('[ComfyUI 图生图] 强制设置正向提示词:', nodeId, editPrompt)
-          } else if (textEncodeCount === 2 && localNegativePrompt) {
-            // 第二个通常是负向提示词
-            nodeData.inputs.text = localNegativePrompt
-            console.log('[ComfyUI 图生图] 强制设置负向提示词:', nodeId, localNegativePrompt)
-          }
-        }
-      }
-
-      // 🔍 调试：打印最终工作流中的所有种子节点
-      console.log('[ComfyUI 生成] 最终工作流中的种子节点:')
-      for (const [nodeId, node] of Object.entries(workflowData)) {
-        const nodeData = node as any
-        if (nodeData.inputs?.seed !== undefined) {
-          console.log(`  ${nodeId} (${nodeData.class_type}): seed = ${nodeData.inputs.seed}`)
-        }
-      }
-      
-      const queue = await comfyuiClientRef.current.queuePrompt(workflowData)
-      useTaskQueueStore.getState().updateTask(taskId, { progress: 40, stepName: 'ComfyUI 执行中' })
-      const historyItem = await pollComfyUIHistoryUntilDone(
-        comfyuiClientRef.current,
-        queue.prompt_id
-      )
-      const outputs = extractComfyUIMediaOutputs(historyItem)
-
-      const imageOutput = outputs.find(o => o.mediaType === 'image')
-      if (imageOutput) {
-        const imagePath = await comfyuiClientRef.current.getFile(
-          imageOutput.filename,
-          imageOutput.subfolder,
-          imageOutput.type,
-          'image'
-        )
-
-        setGeneratedImage(imagePath)
-        addImageToHistory(imagePath)
-
-        // Update item
-        if (activeTab === 'storyboard') {
-          await updateStoryboardAsync({ id: activeItem.id, data: { image: imagePath } })
-        } else {
-          await updateLinkedAsset(activeTab, activeItem.id, { image: imagePath })
-        }
-
-        useTaskQueueStore.getState().updateTask(taskId, {
-          status: 'completed',
-          progress: 100,
-          stepName: '完成',
-          completedAt: Date.now(),
-        })
-
-        toast({ title: 'ComfyUI 图像编辑成功' })
-
-        // 自动刷新数据（替代整页刷新）
-        setTimeout(() => {
-          refreshData()
-        }, 500) // 0.5秒后刷新数据
-      } else {
-        throw new Error('ComfyUI 未返回图片输出')
-      }
-    } catch (error) {
-      // 更新任务状态为失败
-      useTaskQueueStore.getState().updateTask(taskId, {
-        status: 'failed',
-        stepName: '失败',
-        errorMessage: error instanceof Error ? error.message : 'ComfyUI 图像编辑失败',
-      })
-
-      const errorMsg = error instanceof Error ? error.message : 'ComfyUI 图像编辑失败'
-      toast({ title: 'ComfyUI 图像编辑失败', description: errorMsg, variant: 'destructive' })
-      console.error('ComfyUI 图生图错误:', error)
-    } finally {
-      setIsGenerating(false)
-    }
-  }, [
-    activeItem,
-    selectedWorkflow,
-    currentProjectId,
-    currentEpisodeId,
-    localNegativePrompt,
-    modelParams,
-    activeTab,
-    addImageToHistory,
-    updateStoryboardAsync,
-    toast,
-    refreshData,
   ])
 
   // Generate with ComfyUI
@@ -1934,10 +1560,17 @@ export function StoryboardDraw() {
     try {
       // 🔑 保存参考图和提示词到数据库
       if (activeTab === 'storyboard') {
-        const savedMentions = promptMentions.length > 0 ? promptMentions : undefined
-        const savedEditMentions = editPromptMentions.length > 0 ? editPromptMentions : undefined
-        const promptJSON = promptMentions.length > 0 ? promptInputRef.current?.getJSON() : undefined
-        const editJSON = editPromptMentions.length > 0 ? editPromptInputRef.current?.getJSON() : undefined
+        const existingMetadata = ((activeItem as any).metadata || {}) as Record<string, unknown>
+        // 🔑 promptJSON 仅用于图片模式加载（@mention 注入），视频模式不读取
+        // 切换到视频模式时编辑器内容已变为视频提示词文本，若直接保存会污染图片 promptJSON
+        // 因此视频模式下保留已有的 promptJSON，不覆盖
+        const currentEditorJSON = promptMentions.length > 0 ? promptInputRef.current?.getJSON() : undefined
+        const promptJSON = generationType === 'image'
+          ? currentEditorJSON
+          : existingMetadata.promptJSON
+        const savedMentions = generationType === 'image'
+          ? (promptMentions.length > 0 ? promptMentions : undefined)
+          : (existingMetadata.promptMentions as MentionData[] | undefined)
 
         await updateStoryboardAsync({
           id: activeItem.id,
@@ -1946,16 +1579,14 @@ export function StoryboardDraw() {
             video_prompt: localVideoPrompt,
             negative_prompt: localNegativePrompt,
             // 根据当前生成类型保存到对应的字段
-            ...(generationType === 'video' 
+            ...(generationType === 'video'
               ? { video_reference_images: localReferenceImages }
               : { reference_images: localReferenceImages }
             ),
             metadata: {
-              ...((activeItem as any).metadata || {}),
+              ...existingMetadata,
               promptMentions: savedMentions,
-              editPromptMentions: savedEditMentions,
               promptJSON: promptJSON,
-              editJSON: editJSON,
             },
           },
         })
@@ -2597,6 +2228,8 @@ export function StoryboardDraw() {
                             props={props}
                             currentEpisodeId={currentEpisodeId || undefined}
                             displayMode="large"
+                            onEdit={(url) => setEditingImageUrl(url)}
+                            onAnnotate={(url) => setEditingRefImageUrl(url)}
                           />
                         </div>
                         {/* 尾帧 */}
@@ -2699,51 +2332,6 @@ export function StoryboardDraw() {
                         />
                       </div>
 
-                      {/* 编辑功能区 - 图生图 */}
-                      <div className="space-y-3 pt-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-muted-foreground">
-                            编辑提示词（将覆盖主提示词）
-                            <span className="text-[10px] text-muted-foreground ml-2">(输入 @ 引用参考图)</span>
-                          </span>
-                          {localEditPrompt && (
-                            <span className="text-xs text-primary">已输入</span>
-                          )}
-                        </div>
-
-                        <MentionInput
-                          ref={editPromptInputRef}
-                          value={localEditPrompt || ''}
-                          onChange={(val) => setLocalEditPrompt(val)}
-                          onMentionsChange={setEditPromptMentions}
-                          placeholder="输入编辑提示词，@ 引用参考图..."
-                          customSearch={referenceSearch}
-                          minRows={3}
-                          maxRows={6}
-                        />
-                        <Button
-                          className="w-full"
-                          size="sm"
-                          onClick={handleEditImage}
-                          disabled={
-                            isGenerating ||
-                            !localEditPrompt?.trim() ||
-                            (!localReferenceImages?.length && !(activeItem as any)?.image)
-                          }
-                        >
-                          {isGenerating ? (
-                            <>
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              生成中...
-                            </>
-                          ) : (
-                            <>
-                              <Wand2 className="w-4 h-4 mr-2" />
-                              编辑图像
-                            </>
-                          )}
-                        </Button>
-                      </div>
                     </div>
                   </TabsContent>
 
@@ -2896,7 +2484,8 @@ export function StoryboardDraw() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      {/* 自定义尺寸输入 */}
+                      {/* 自定义尺寸输入 - 仅图片模式显示 */}
+                      {generationType === 'image' && (
                       <div className="space-y-2">
                         <label className="text-sm font-medium">图片尺寸 (像素)</label>
                         <div className="flex items-center gap-2">
@@ -2926,6 +2515,7 @@ export function StoryboardDraw() {
                           建议尺寸: 256-4096，建议为64的倍数
                         </p>
                       </div>
+                      )}
 
                       {/* 快捷比例选择 */}
                       <div className="space-y-2">
@@ -3008,26 +2598,33 @@ export function StoryboardDraw() {
                             </div>
                           </div>
 
-                          {/* 音频开关 */}
-                          <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium">生成音频</label>
-                            <button
-                              onClick={() =>
-                                setModelParams({ ...modelParams, audio: !modelParams.audio })
-                              }
-                              className={cn(
-                                'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-                                modelParams.audio ? 'bg-primary' : 'bg-muted'
-                              )}
-                            >
-                              <span
-                                className={cn(
-                                  'inline-block h-3 w-3 transform rounded-full bg-white transition-transform',
-                                  modelParams.audio ? 'translate-x-5' : 'translate-x-1'
+                          {/* 音频开关 - 仅支持音频的模型显示 */}
+                          {modelSupportsAudio && (
+                            <div className="flex items-center justify-between">
+                              <label className="text-sm font-medium">
+                                生成音频
+                                {currentModelConfig?.audio === true && (
+                                  <span className="text-xs text-muted-foreground ml-2">(模型默认开启)</span>
                                 )}
-                              />
-                            </button>
-                          </div>
+                              </label>
+                              <button
+                                onClick={() =>
+                                  setModelParams({ ...modelParams, audio: !modelParams.audio })
+                                }
+                                className={cn(
+                                  'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
+                                  modelParams.audio ? 'bg-primary' : 'bg-muted'
+                                )}
+                              >
+                                <span
+                                  className={cn(
+                                    'inline-block h-3 w-3 transform rounded-full bg-white transition-transform',
+                                    modelParams.audio ? 'translate-x-5' : 'translate-x-1'
+                                  )}
+                                />
+                              </button>
+                            </div>
+                          )}
                         </>
                       )}
                     </CardContent>
@@ -3125,6 +2722,51 @@ export function StoryboardDraw() {
         isOpen={showPreviewDialog}
         onClose={() => setShowPreviewDialog(false)}
         onIndexChange={setPreviewCurrentIndex}
+      />
+
+      {/* 图片编辑弹窗（图生图） */}
+      <AIImageEditDialog
+        open={!!editingImageUrl}
+        imageUrl={editingImageUrl || ''}
+        onClose={() => setEditingImageUrl(null)}
+        onSave={async (newImageUrl) => {
+          try {
+            if (activeItem && activeTab === 'storyboard') {
+              await updateStoryboardAsync({
+                id: activeItem.id,
+                data: { image: newImageUrl },
+              })
+            } else if (activeItem && activeTab !== 'storyboard') {
+              await updateLinkedAsset(activeTab, activeItem.id, { image: newImageUrl })
+            }
+            setGeneratedImage(newImageUrl)
+            toast({ title: '编辑已保存' })
+            refreshData()
+          } catch (error) {
+            toast({ title: '保存失败', description: String(error), variant: 'destructive' })
+          }
+        }}
+      />
+
+      {/* 参考图标注弹窗（人脸网格+淡彩工笔） */}
+      <ImageEditorDialog
+        open={!!editingRefImageUrl}
+        imageUrl={editingRefImageUrl || ''}
+        onClose={() => setEditingRefImageUrl(null)}
+        onSave={async (annotatedImageUrl) => {
+          try {
+            const url = editingRefImageUrl
+            if (!url || !annotatedImageUrl) return
+            // 标注版保存为独立文件（不覆盖原图），图片生成用原图，视频生成用标注版
+            const { saveGeneratedImage } = await import('@/utils/mediaStorage')
+            const saved = await saveGeneratedImage(annotatedImageUrl, currentProjectId || '', currentEpisodeId || '', 'png')
+            setAnnotatedImageMap(prev => ({ ...prev, [url]: saved }))
+            setEditingRefImageUrl(null)
+            toast({ title: '标注已保存（图片用原图，视频用标注版）' })
+          } catch (error) {
+            toast({ title: '保存失败', description: String(error), variant: 'destructive' })
+          }
+        }}
       />
     </div>
   )

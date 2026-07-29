@@ -5,16 +5,26 @@
 
 // ==================== 核心 ViMax 类型 ====================
 
+/** 角色服装/状态（剧本提取产出，用于按状态独立生成图片） */
+export interface ViMaxCharacterOutfit {
+  name: string;          // 服装/状态名（如"战斗装"、"日常装"、"雨夜湿衣"）
+  description?: string;
+  prompt: string;        // 该服装/状态的独立提示词（含服装款式+颜色+材质+配饰+姿态+表情）
+  imageUrl?: string;     // 生成后回填
+  is_default?: boolean;
+}
+
 /** 角色在场景中的信息 */
 export interface ViMaxCharacterInScene {
   name: string;
   description: string;
-  prompt: string;
+  prompt: string;          // 只含静态外貌（年龄/体型/五官/发型/肤色），不含服装
   portraitUrl?: string;
   age?: string;
   gender?: string;
   appearance?: string;
-  clothing?: string;
+  clothing?: string;       // 保留作为描述用途
+  outfits?: ViMaxCharacterOutfit[];  // 从剧本提取的服装状态
 }
 
 /** 场景定义 */
@@ -322,5 +332,5 @@ export interface FDStoryboardData {
   video?: string;
   audio_url?: string;
   episode_id: string;
-  scene_id?: string;
+  scene?: string;
 }

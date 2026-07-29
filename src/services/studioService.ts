@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/**
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/**
  * 专业工作台服务
  * 基于项目现有架构实现
  * - 复用现有的 Project/Episode/Storyboard 结构
@@ -137,7 +137,6 @@ export const studioService = {
       const scene = s as Record<string, unknown>
       return {
         id: `shot_${i + 1}`,
-        scene_id: '',
         scene: String(scene.scene || `场景${i + 1}`),
         description: String(scene.description || ''),
         duration: String(scene.duration || '5秒'),

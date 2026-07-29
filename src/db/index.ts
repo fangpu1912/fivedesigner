@@ -535,10 +535,10 @@ class SQLiteDatabase {
     const now = new Date().toISOString()
     const id = uuidv4()
     await db.execute(
-      `INSERT INTO storyboards (id, episode_id, project_id, name, shot_type, scene, scene_id, location, time, description, prompt, negative_prompt, video_prompt, image, video, audio, duration, status, sort_order, character_ids, prop_ids, reference_images, video_reference_images, metadata, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`,
+      `INSERT INTO storyboards (id, episode_id, project_id, name, shot_type, scene, location, time, description, prompt, negative_prompt, video_prompt, image, video, audio, duration, status, sort_order, character_ids, prop_ids, reference_images, video_reference_images, metadata, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)`,
       [id, storyboard.episode_id, storyboard.project_id, storyboard.name,
-       storyboard.shot_type ?? null, storyboard.scene ?? null, storyboard.scene_id ?? null,
+       storyboard.shot_type ?? null, storyboard.scene ?? null,
        storyboard.location ?? null, storyboard.time ?? null, storyboard.description ?? null,
        storyboard.prompt ?? null, storyboard.negative_prompt ?? null, storyboard.video_prompt ?? null,
        storyboard.image ?? null, storyboard.video ?? null, storyboard.audio ?? null,
@@ -558,8 +558,8 @@ class SQLiteDatabase {
 
     const updated = { ...existing, ...data, updated_at: new Date().toISOString() }
     await db.execute(
-      `UPDATE storyboards SET name = $1, shot_type = $2, scene = $3, scene_id = $4, location = $5, time = $6, description = $7, prompt = $8, negative_prompt = $9, video_prompt = $10, image = $11, video = $12, audio = $13, duration = $14, status = $15, sort_order = $16, character_ids = $17, prop_ids = $18, reference_images = $19, video_reference_images = $20, metadata = $21, updated_at = $22 WHERE id = $23`,
-      [updated.name, updated.shot_type ?? null, updated.scene ?? null, updated.scene_id ?? null,
+      `UPDATE storyboards SET name = $1, shot_type = $2, scene = $3, location = $4, time = $5, description = $6, prompt = $7, negative_prompt = $8, video_prompt = $9, image = $10, video = $11, audio = $12, duration = $13, status = $14, sort_order = $15, character_ids = $16, prop_ids = $17, reference_images = $18, video_reference_images = $19, metadata = $20, updated_at = $21 WHERE id = $22`,
+      [updated.name, updated.shot_type ?? null, updated.scene ?? null,
        updated.location ?? null, updated.time ?? null, updated.description ?? null,
        updated.prompt ?? null, updated.negative_prompt ?? null, updated.video_prompt ?? null,
        updated.image ?? null, updated.video ?? null, updated.audio ?? null,

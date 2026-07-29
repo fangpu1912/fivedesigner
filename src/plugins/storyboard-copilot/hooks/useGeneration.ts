@@ -21,6 +21,8 @@ export interface ImageEditOptions {
   model?: string
   projectId?: string
   episodeId?: string
+  width?: number
+  height?: number
 }
 
 export function useGeneration() {
@@ -133,7 +135,7 @@ export function useGeneration() {
 
   const generateImageEdit = useCallback(
     async (options: ImageEditOptions): Promise<GenerationResult> => {
-      const { prompt, imageUrl, maskImage, referenceImages, model, projectId, episodeId } = options
+      const { prompt, imageUrl, maskImage, referenceImages, model, projectId, episodeId, width, height } = options
 
       if (!projectId || !episodeId) {
         return {
@@ -151,6 +153,8 @@ export function useGeneration() {
           model,
           projectId,
           episodeId,
+          width,
+          height,
           name: '分镜助手 - 图片编辑',
         })
 

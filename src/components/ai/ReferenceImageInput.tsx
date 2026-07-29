@@ -12,6 +12,8 @@ import {
   Video,
   Music,
   Shirt,
+  Pencil,
+  Palette,
 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
@@ -89,6 +91,9 @@ interface ReferenceImageInputProps {
   allowVideo?: boolean
   allowAudio?: boolean
   enableCharacterOutfits?: boolean
+  onEdit?: (url: string) => void
+  /** 标注按钮回调（人脸网格+淡彩工笔） */
+  onAnnotate?: (url: string) => void
 }
 
 // 角色衣橱选择按钮组件
@@ -262,6 +267,8 @@ export function ReferenceImageInput({
   allowVideo = true,
   allowAudio = true,
   enableCharacterOutfits = true,
+  onEdit,
+  onAnnotate,
 }: ReferenceImageInputProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<string>('storyboard')
@@ -573,6 +580,16 @@ export function ReferenceImageInput({
             )
           })()}
           <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+            {onEdit && value[0] && (
+              <Button variant="secondary" size="sm" onClick={() => onEdit(value[0]!)}>
+                <Pencil className="w-4 h-4" />
+              </Button>
+            )}
+            {onAnnotate && value[0] && (
+              <Button variant="secondary" size="sm" onClick={() => onAnnotate(value[0]!)} title="人脸网格+淡彩工笔">
+                <Palette className="w-4 h-4" />
+              </Button>
+            )}
             <Button variant="secondary" size="sm" onClick={() => setIsOpen(true)}>
               <Eye className="w-4 h-4" />
             </Button>

@@ -505,13 +505,9 @@ export function ProjectManage() {
                 </optgroup>
               </select>
               {newProject.visual_style && newProject.visual_style !== 'custom' && (
-                <div className="mt-2 p-2 bg-muted rounded text-xs">
+                <div className="mt-2 p-2 bg-muted rounded text-xs break-words">
                   <span className="font-medium">提示词预览：</span>
-                  {ART_STYLES_CONFIG.find(s => s.id === newProject.visual_style)?.prompt.substring(
-                    0,
-                    100
-                  )}
-                  ...
+                  {ART_STYLES_CONFIG.find(s => s.id === newProject.visual_style)?.prompt}
                 </div>
               )}
             </div>
@@ -705,13 +701,9 @@ export function ProjectManage() {
                 </optgroup>
               </select>
               {isEditing?.visual_style && isEditing.visual_style !== 'custom' && (
-                <div className="mt-2 p-2 bg-muted rounded text-xs">
+                <div className="mt-2 p-2 bg-muted rounded text-xs break-words">
                   <span className="font-medium">提示词预览：</span>
-                  {ART_STYLES_CONFIG.find(s => s.id === isEditing.visual_style)?.prompt.substring(
-                    0,
-                    100
-                  )}
-                  ...
+                  {ART_STYLES_CONFIG.find(s => s.id === isEditing.visual_style)?.prompt}
                 </div>
               )}
             </div>

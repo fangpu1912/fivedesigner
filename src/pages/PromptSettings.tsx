@@ -27,10 +27,9 @@ import {
   MapPin,
   Layers,
   Bot,
-  Users,
-  GitBranch,
-  ListTree,
   Video,
+  Camera,
+  Zap,
 } from 'lucide-react'
 
 import { PromptEditor } from '@/components/prompt/PromptEditor'
@@ -89,15 +88,17 @@ const TYPE_ICONS: Record<PromptType, React.ReactNode> = {
   assistant_chat: <Bot className="h-4 w-4" />,
   pipeline_scene_segmentation: <MapPin className="h-4 w-4" />,
   pipeline_asset_extraction: <Layers className="h-4 w-4" />,
-  pipeline_storyboard_breakdown: <Film className="h-4 w-4" />,
+  pipeline_storyboard_breakdown_batch: <Film className="h-4 w-4" />,
   pipeline_dubbing_generation: <Mic className="h-4 w-4" />,
-  script_structure_analysis: <BookOpen className="h-4 w-4" />,
-  script_character_arc: <Users className="h-4 w-4" />,
-  script_adaptation_strategy: <GitBranch className="h-4 w-4" />,
-  script_outline_generation: <ListTree className="h-4 w-4" />,
-  inspiration_creation: <Sparkles className="h-4 w-4" />,
   inspiration_story_generation: <BookOpen className="h-4 w-4" />,
+  inspiration_story_continuation: <BookOpen className="h-4 w-4" />,
   video_remake: <Video className="h-4 w-4" />,
+  refinement_cinematography: <Camera className="h-4 w-4" />,
+  refinement_performance: <Play className="h-4 w-4" />,
+  refinement_editing: <Edit3 className="h-4 w-4" />,
+  refinement_dubbing: <Sparkles className="h-4 w-4" />,
+  refinement_combat_anime: <Zap className="h-4 w-4" />,
+  refinement_combat_xianxia: <Zap className="h-4 w-4" />,
 }
 
 // 模板编辑器组件

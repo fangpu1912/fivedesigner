@@ -84,12 +84,68 @@ const saveAccounts = (accounts: BrowserAccount[]) => {
   } catch { /* ignore */ }
 }
 
+const BROWSER_RUNNING_KEY = 'browser_running'
+const BROWSER_ACTIVE_KEY = 'browser_active'
+
+function loadRunningAccounts(): Set<string> {
+  try {
+    const raw = localStorage.getItem(BROWSER_RUNNING_KEY)
+    if (!raw) return new Set()
+    return new Set(JSON.parse(raw) as string[])
+  } catch {
+    return new Set()
+  }
+}
+
+function saveRunningAccounts(set: Set<string>) {
+  try {
+    localStorage.setItem(BROWSER_RUNNING_KEY, JSON.stringify(Array.from(set)))
+  } catch {}
+}
+
+function loadActiveAccount(): string | null {
+  try {
+    return localStorage.getItem(BROWSER_ACTIVE_KEY)
+  } catch {
+    return null
+  }
+}
+
+function saveActiveAccount(id: string | null) {
+  try {
+    if (id) localStorage.setItem(BROWSER_ACTIVE_KEY, id)
+    else localStorage.removeItem(BROWSER_ACTIVE_KEY)
+  } catch {}
+}
+
+const BROWSER_URLS_KEY = 'browser_urls'
+
+function loadAccountUrls(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(BROWSER_URLS_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch {}
+  return {}
+}
+
+function saveAccountUrl(accountId: string, url: string) {
+  try {
+    const urls = loadAccountUrls()
+    urls[accountId] = url
+    localStorage.setItem(BROWSER_URLS_KEY, JSON.stringify(urls))
+  } catch {}
+}
+
 export default function BrowserManager() {
   const { toast } = useToast()
   const [accounts, setAccounts] = useState<BrowserAccount[]>(loadAccounts)
-  const [activeAccountId, setActiveAccountId] = useState<string | null>(null)
-  const [runningAccounts, setRunningAccounts] = useState<Set<string>>(new Set())
-  const [urlInput, setUrlInput] = useState('')
+  const [activeAccountId, setActiveAccountId] = useState<string | null>(loadActiveAccount)
+  const [runningAccounts, setRunningAccounts] = useState<Set<string>>(loadRunningAccounts)
+  const [urlInput, setUrlInput] = useState<string>(() => {
+    const activeId = loadActiveAccount()
+    if (activeId) return loadAccountUrls()[activeId] || ''
+    return ''
+  })
   const [downloadPanelOpen, setDownloadPanelOpen] = useState(true)
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [newAccount, setNewAccount] = useState<Partial<BrowserAccount>>({
@@ -148,7 +204,10 @@ export default function BrowserManager() {
 
   // 打开媒体预览时隐藏 WebView，关闭时恢复
   const openPreview = useCallback(async (item: ExtractedMedia, index = 0) => {
-    if (activeAccountId) await browser.hideWebview(activeAccountId)
+    // 先隐藏 WebView，确保 Dialog 出现时不被原生窗口覆盖
+    if (activeAccountId) {
+      await browser.hideWebview(activeAccountId)
+    }
     setPreviewMedia(item)
     setPreviewIndex(index)
     // 视频预览：预先获取 blob URL 解决黑屏
@@ -159,7 +218,10 @@ export default function BrowserManager() {
 
   const closePreview = useCallback(() => {
     setPreviewMedia(null)
-    if (activeAccountId) browser.showWebview(activeAccountId)
+    // Dialog 关闭后再显示 WebView
+    if (activeAccountId) {
+      setTimeout(() => browser.showWebview(activeAccountId), 100)
+    }
   }, [activeAccountId, browser.showWebview])
 
   // 组件卸载时释放所有 blob URL
@@ -187,6 +249,16 @@ export default function BrowserManager() {
     saveAccounts(accounts)
   }, [accounts])
 
+  // 持久化运行中账号
+  useEffect(() => {
+    saveRunningAccounts(runningAccounts)
+  }, [runningAccounts])
+
+  // 持久化活跃账号
+  useEffect(() => {
+    saveActiveAccount(activeAccountId)
+  }, [activeAccountId])
+
   // 当下载面板或活动账号变化时，重新定位 webview
   useEffect(() => {
     if (activeAccountId) {
@@ -200,12 +272,20 @@ export default function BrowserManager() {
 
   // 页面离开时隐藏所有 webview（仅在卸载时执行）
   useEffect(() => {
+    // 挂载时：如果有持久化的活跃账号，恢复 URL 并自动显示
+    if (activeAccountId && runningAccounts.has(activeAccountId)) {
+      browser.showWebview(activeAccountId)
+      // 恢复上次浏览的 URL 到地址栏
+      const savedUrl = loadAccountUrls()[activeAccountId]
+      if (savedUrl) setUrlInput(savedUrl)
+    }
+
     return () => {
       runningAccountsRef.current.forEach(accountId => {
         browser.hideWebview(accountId).catch(() => {})
       })
     }
-  }, [browser.hideWebview])
+  }, [activeAccountId, runningAccounts, browser.showWebview, browser.hideWebview])
 
   // 监听子 Webview URL 变化，同步到地址栏
   useEffect(() => {
@@ -215,7 +295,11 @@ export default function BrowserManager() {
     const setup = async () => {
       unlisten = await listen<{ url: string }>('webview-url-changed', (event) => {
         const url = event.payload.url
-        if (url) setUrlInput(url)
+        if (url) {
+          setUrlInput(url)
+          // 持久化当前账号的最后浏览 URL
+          if (activeAccountId) saveAccountUrl(activeAccountId, url)
+        }
       })
 
       // 每 3 秒轮询子 webview 的 URL（触发 report_url 事件）
@@ -248,7 +332,9 @@ export default function BrowserManager() {
       }
       await browser.showWebview(accountId)
       setActiveAccountId(accountId)
-      setUrlInput(account.url)
+      // 恢复该账号的最后 URL
+      const savedUrl = loadAccountUrls()[accountId]
+      setUrlInput(savedUrl || account.url)
       return
     }
 
@@ -290,7 +376,8 @@ export default function BrowserManager() {
         await browser.showWebview(nextAccount)
         setActiveAccountId(nextAccount)
         const acc = accounts.find(a => a.id === nextAccount)
-        setUrlInput(acc?.url || '')
+        const nextUrl = loadAccountUrls()[nextAccount]
+        setUrlInput(nextUrl || acc?.url || '')
       } else {
         setActiveAccountId(null)
         setUrlInput('')
@@ -339,7 +426,8 @@ export default function BrowserManager() {
         await browser.showWebview(nextAccount)
         setActiveAccountId(nextAccount)
         const nextAcc = remaining.find(a => a.id === nextAccount)
-        setUrlInput(nextAcc?.url || '')
+        const nextUrl = loadAccountUrls()[nextAccount]
+        setUrlInput(nextUrl || nextAcc?.url || '')
       } else {
         setActiveAccountId(null)
         setUrlInput('')

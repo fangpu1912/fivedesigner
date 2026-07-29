@@ -10,6 +10,7 @@ import modelscopeCode from './codes/modelscope.js?raw'
 import geekaiCode from './codes/geekai.js?raw'
 import kimiCode from './codes/kimi.js?raw'
 import runninghubCode from './codes/runninghub.js?raw'
+import agnesCode from './codes/agnes.js?raw'
 
 const vendorCodes: Record<string, string> = {
   toonflow: toonflowCode,
@@ -24,6 +25,7 @@ const vendorCodes: Record<string, string> = {
   geekai: geekaiCode,
   kimi: kimiCode,
   runninghub: runninghubCode,
+  agnes: agnesCode,
 }
 
 export function getVendorCode(vendorId: string): string | undefined {

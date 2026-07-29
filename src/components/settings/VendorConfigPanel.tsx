@@ -379,25 +379,6 @@ export function VendorConfigPanel() {
     toast({ title: '配置已删除' })
   }
 
-  const handleAddVendor = async () => {
-    const newVendor: VendorConfig = {
-      id: generateId(),
-      name: '新供应商',
-      description: '',
-      inputs: [{ key: 'apiKey', label: 'API密钥', type: 'password', required: true }],
-      inputValues: { apiKey: '' },
-      models: [],
-      code: '',
-      enable: false,
-      createTime: Date.now(),
-    }
-    await vendorConfigService.saveVendor(newVendor)
-    setVendors(prev => [...prev, newVendor])
-    setSelectedVendorId(newVendor.id)
-    setIsEditing(true)
-    toast({ title: '新供应商已创建' })
-  }
-
   const handleAgentChange = (agentId: string, updatedAgent: AgentDeploy) => {
     setAgents(prev => prev.map(a => a.id === agentId ? updatedAgent : a))
   }
@@ -462,11 +443,7 @@ export function VendorConfigPanel() {
       </TabsList>
 
       <TabsContent value="vendors" className="flex-1 mt-4 flex flex-col">
-        <div className="flex justify-end gap-2 mb-4">
-          <Button variant="outline" size="sm" onClick={handleAddVendor}>
-            <Plus className="w-4 h-4 mr-1" />
-            添加供应商
-          </Button>
+        <div className="flex justify-end mb-4">
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleRefreshDefaults} title="刷新默认供应商（保留API密钥）">
             <RefreshCw className="w-4 h-4" />
           </Button>

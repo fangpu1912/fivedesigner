@@ -3,7 +3,33 @@ import { getActivePrompt } from '@/services/promptConfigService'
 import { parseJSON, callAI, splitContentIntoChunks, mergeSceneChunks } from '@/utils/aiHelper'
 import type { PipelineSceneInput } from '@/utils/aiHelper'
 import logger from '@/utils/logger'
-import { matchAssetsByName } from '@/utils/storyboardReferences'
+import { matchAssetsByName, isNameMatch } from '@/utils/storyboardReferences'
+
+/** 通用精修调用 */ 
+async function runRefinement<T>(type: string, inputData: T): Promise<T> {
+  // 检查精修开关
+  try {
+    const { settingsDB } = await import('@/db')
+    const settings = await settingsDB.get()
+    if (settings.refinement_enabled === false) {
+      return inputData
+    }
+  } catch {
+    // 加载失败则默认执行
+  }
+  const prompt = getActivePrompt(type as any, { inputData: JSON.stringify(inputData, null, 2) })
+  const result = await callAI(prompt, { maxTokens: 16384 })
+  return parseJSON<T>(result)
+}
+
+// 模糊匹配 Map 的 key（AI 生成的名称可能和资产库名称有细微差异）
+function fuzzyMatchId(map: Map<string, string>, name: string): string | undefined {
+  if (!name) return undefined
+  for (const [key, id] of map) {
+    if (isNameMatch(name, key)) return id
+  }
+  return undefined
+}
 
 export interface PipelineScene {
   name: string
@@ -41,7 +67,7 @@ export interface PipelineShot {
   prompt: string
   videoPrompt: string
   characters: string[]
-  scene_id: string
+  scene: string
   props: string[]
   shot_type: string
   duration: number
@@ -269,61 +295,72 @@ export async function runPipeline(
     `道具: ${assets.props.map(p => p.name).join(', ')}`,
   ].join('\n')
 
-  // ====== Step 2: 逐场景串行分镜拆解（保证连续性） ======
+  // ====== Step 2: 分镜拆解（3场景一批） ======
   advanceStep('分镜拆解', 25)
 
   const allShots: PipelineShot[] = []
   const allDubbing: PipelineDubbingResult[] = []
   let previousShotDesc = '（这是第一个场景，没有上一场景）'
+  const BATCH_SIZE = 3
+  const totalBatches = Math.ceil(scenes.length / BATCH_SIZE)
 
-  for (let sceneIdx = 0; sceneIdx < scenes.length; sceneIdx++) {
-    const scene = scenes[sceneIdx]!
-    const scenePercent = 25 + Math.floor((sceneIdx / scenes.length) * 55)
+  for (let batchStart = 0; batchStart < scenes.length; batchStart += BATCH_SIZE) {
+    const batchEnd = Math.min(batchStart + BATCH_SIZE, scenes.length)
+    const batchScenes = scenes.slice(batchStart, batchEnd)
+
+    const batchPercent = 25 + Math.floor((batchEnd / scenes.length) * 55)
 
     onProgress?.({
       step: currentStep,
-      stepName: `分镜拆解 (${sceneIdx + 1}/${scenes.length}): ${scene.name}`,
-      percent: scenePercent,
-      currentScene: sceneIdx + 1,
+      stepName: `分镜拆解 (${batchEnd}/${scenes.length})`,
+      percent: batchPercent,
+      currentScene: batchEnd,
       totalScenes: scenes.length,
-      sceneName: scene.name,
+      sceneName: batchScenes.map(s => s.name).join(', '),
       totalSteps: 0,
     })
 
-    const sceneInfo = `--- 场景${sceneIdx + 1}: ${scene.name} ---\n地点: ${scene.location}\n时间: ${scene.time}\n氛围: ${scene.mood}\n出场角色: ${scene.characters.join(', ')}\n叙事功能: ${scene.narrativeFunction}\n概要: ${scene.summary}`
+    // 拼接本次批次所有场景的信息
+    const batchScenesStr = batchScenes.map((scene, idx) => {
+      const globalIdx = batchStart + idx
+      const sceneCharacterNames = [...new Set(scene.characters)]
+      const characterPromptsStr = sceneCharacterNames
+        .map(name => `${name}: ${characterPromptMap.get(name) || '未知角色'}`)
+        .join('\n')
 
-    // 下一场景预告（用于场景退出铺垫）
-    const nextScene = scenes[sceneIdx + 1]
-    const nextSceneInfo = nextScene
-      ? `下一场景: ${nextScene.name}\n地点: ${nextScene.location}\n时间: ${nextScene.time}\n氛围: ${nextScene.mood}\n概要: ${nextScene.summary}`
-      : '（这是最后一个场景，无需退出铺垫）'
-
-    const sceneOriginalText = scene.originalText || scene.summary
-
-    const sceneCharacterNames = [...new Set(scene.characters)]
-    const characterPromptsStr = sceneCharacterNames
-      .map(name => `${name}: ${characterPromptMap.get(name) || '未知角色'}`)
-      .join('\n')
-    const scenePromptsStr = `${scene.name}: ${scenePromptMap.get(scene.name) || '未知场景'}`
-    const propPromptsStr = assets.props
-      .map(p => `${p.name}: ${p.prompt}`)
-      .join('\n')
+      return [
+        `=== 场景${globalIdx + 1}: ${scene.name} ===`,
+        `地点: ${scene.location}`,
+        `时间: ${scene.time}`,
+        `氛围: ${scene.mood}`,
+        `出场角色: ${scene.characters.join(', ')}`,
+        `叙事功能: ${scene.narrativeFunction}`,
+        `概要: ${scene.summary}`,
+        ``,
+        `【原文片段】`,
+        scene.originalText || scene.summary,
+        ``,
+        `【角色视觉描述】`,
+        characterPromptsStr,
+        ``,
+        `【场景视觉描述】`,
+        `${scene.name}: ${scenePromptMap.get(scene.name) || '未知场景'}`,
+        ``,
+        `【道具视觉描述】`,
+        assets.props.map(p => `${p.name}: ${propPromptMap.get(p.name) || ''}`).join('\n'),
+      ].join('\n')
+    }).join('\n\n---\n\n')
 
     try {
-      const breakdownPrompt = getActivePrompt('pipeline_storyboard_breakdown', {
-        sceneContent: sceneOriginalText,
-        sceneInfo,
+      const breakdownPrompt = getActivePrompt('pipeline_storyboard_breakdown_batch', {
+        batchScenes: batchScenesStr,
         previousShot: previousShotDesc,
-        nextSceneInfo,
         assetList: assetListStr,
-        characterPrompts: characterPromptsStr,
-        scenePrompts: scenePromptsStr,
-        propPrompts: propPromptsStr,
       })
 
       const breakdownResult = await callAI(breakdownPrompt, { maxTokens: 16384 })
       const shots: PipelineShot[] = parseJSON<PipelineShot[]>(breakdownResult)
-      logger.info(`[Pipeline] 场景${sceneIdx + 1} "${scene.name}" 拆解了 ${shots.length} 个镜头`)
+      logger.info(`[Pipeline] 批次 ${batchStart / BATCH_SIZE + 1}/${totalBatches} 拆解了 ${shots.length} 个镜头`)
 
       if (shots.length > 0) {
         allShots.push(...shots)
@@ -335,12 +372,13 @@ export async function runPipeline(
         ].join('\n')
       }
 
+      // 配音生成
       try {
         const shotsDescription = shots.map((shot, i) => {
           const parts = [
             `镜头${i + 1}:`,
             `  画面: ${shot.description}`,
-            `  场景: ${shot.scene_id}`,
+            `  场景: ${shot.scene}`,
             `  景别运镜: ${shot.shot_type}`,
             `  时长: ${shot.duration}秒`,
             `  出场角色: ${shot.characters.join(', ')}`,
@@ -362,10 +400,62 @@ export async function runPipeline(
         const dubbing: PipelineDubbingResult[] = parseJSON<PipelineDubbingResult[]>(dubbingResult)
         allDubbing.push(...dubbing)
       } catch (e) {
-        logger.error(`[Pipeline] 配音生成失败，场景${sceneIdx + 1}`, e)
+        logger.error(`[Pipeline] 配音生成失败，批次${batchStart / BATCH_SIZE + 1}`, e)
       }
     } catch (e) {
-      logger.error(`[Pipeline] 分镜拆解失败，场景${sceneIdx + 1} "${scene.name}"`, e)
+      logger.error(`[Pipeline] 分镜拆解失败，批次${batchStart / BATCH_SIZE + 1}`, e)
+    }
+  }
+
+  // ====== 精修阶段：摄影方案 ======
+  if (allShots.length > 0) {
+    onProgress?.({ step: currentStep, stepName: '精修摄影方案', percent: 82, totalSteps: 0 })
+    try {
+      const refined = await runRefinement<typeof allShots>('refinement_cinematography', allShots)
+      if (refined && refined.length === allShots.length) {
+        allShots.splice(0, allShots.length, ...refined)
+      }
+    } catch (e) {
+      logger.error('[Pipeline] 摄影精修失败:', e)
+    }
+  }
+
+  // ====== 精修阶段：表演 ======
+  if (allShots.length > 0) {
+    onProgress?.({ step: currentStep, stepName: '精修表演细节', percent: 84, totalSteps: 0 })
+    try {
+      const refined = await runRefinement<typeof allShots>('refinement_performance', allShots)
+      if (refined && refined.length === allShots.length) {
+        allShots.splice(0, allShots.length, ...refined)
+      }
+    } catch (e) {
+      logger.error('[Pipeline] 表演精修失败:', e)
+    }
+  }
+
+  // ====== 精修阶段：剪辑节奏 ======
+  if (allShots.length > 0) {
+    onProgress?.({ step: currentStep, stepName: '精修剪辑节奏', percent: 86, totalSteps: 0 })
+    try {
+      const refined = await runRefinement<typeof allShots>('refinement_editing', allShots)
+      if (refined && refined.length === allShots.length) {
+        allShots.splice(0, allShots.length, ...refined)
+      }
+    } catch (e) {
+      logger.error('[Pipeline] 剪辑精修失败:', e)
+    }
+  }
+
+  // ====== 精修阶段：配音方案 ======
+  if (allDubbing.length > 0) {
+    onProgress?.({ step: currentStep, stepName: '精修配音方案', percent: 88, totalSteps: 0 })
+    try {
+      const refined = await runRefinement<typeof allDubbing>('refinement_dubbing', allDubbing)
+      if (refined && refined.length === allDubbing.length) {
+        allDubbing.splice(0, allDubbing.length, ...refined)
+      }
+    } catch (e) {
+      logger.error('[Pipeline] 配音精修失败:', e)
     }
   }
 
@@ -382,11 +472,10 @@ export async function runPipeline(
     const videoPromptText = shot.videoPrompt || shot.description
 
     const characterIds = shot.characters
-      .map(name => characterIdMap.get(name))
+      .map(name => characterIdMap.get(name) || fuzzyMatchId(characterIdMap, name))
       .filter((id): id is string => !!id)
-    const sceneId = sceneIdMap.get(shot.scene_id) || undefined
     const propIds = shot.props
-      .map(name => propIdMap.get(name))
+      .map(name => propIdMap.get(name) || fuzzyMatchId(propIdMap, name))
       .filter((id): id is string => !!id)
 
     let createdStoryboard
@@ -401,7 +490,7 @@ export async function runPipeline(
         sort_order: globalShotIndex - 1,
         status: 'pending',
         character_ids: characterIds,
-        scene_id: sceneId,
+        scene: shot.scene,
         prop_ids: propIds,
         reference_images: [],
         video_reference_images: [],

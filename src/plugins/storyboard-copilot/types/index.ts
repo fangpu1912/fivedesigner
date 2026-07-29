@@ -153,21 +153,6 @@ export interface StoryboardSplitNodeData extends NodeDisplayData {
 }
 
 // ==================== 场景编排器类型 ====================
-// 角色姿态类型
-export type CharacterPose = 'front' | 'side' | 'back' | '3/4'
-
-// 场景中的人物
-export interface SceneCharacter {
-  id: string
-  name: string
-  imageUrl: string
-  position: { x: number; y?: number; z?: number }
-  rotation: number
-  scale: number
-  layer: 'foreground' | 'midground' | 'background'
-  pose?: CharacterPose
-}
-
 // 相机参数
 export interface CameraConfig {
   position: { x: number; y: number; z: number }
@@ -187,7 +172,6 @@ export interface SceneScreenshot {
 export interface SceneDirectorNodeData extends NodeDisplayData {
   panoramaUrl: string | null
   imageUrl: string | null
-  characters: SceneCharacter[]
   camera: CameraConfig
   screenshots: SceneScreenshot[]
   gridSize: number

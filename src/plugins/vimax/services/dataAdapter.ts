@@ -8,6 +8,7 @@ import {
   sceneDB,
   storyboardDB,
   episodeDB,
+  outfitDB,
 } from '@/db';
 import type {
   ViMaxScript,
@@ -50,7 +51,7 @@ export async function saveScriptToDatabase(
 }
 
 /**
- * 保存角色到 FD 数据库
+ * 保存角色到 FD 数据库，并把 outfits 写入 outfitDB
  */
 export async function saveCharacterToDatabase(
   character: ViMaxCharacterInScene,
@@ -68,7 +69,24 @@ export async function saveCharacterToDatabase(
   };
 
   const result = await characterDB.create(characterData);
-  return result.id;
+  const characterId = result.id;
+
+  // 把 outfits 写入 outfitDB
+  if (character.outfits && character.outfits.length > 0) {
+    for (const outfit of character.outfits) {
+      await outfitDB.create({
+        character_id: characterId,
+        name: outfit.name,
+        description: outfit.description,
+        prompt: outfit.prompt,
+        image: outfit.imageUrl,
+        tags: [],
+        is_default: outfit.is_default ?? false,
+      });
+    }
+  }
+
+  return characterId;
 }
 
 /**
@@ -111,7 +129,7 @@ export async function saveShotsToDatabase(
       episode_id: episodeId,
       project_id: _projectId,
       name: shot.description || '未命名分镜',
-      scene_id: shot.sceneId,
+      scene: shot.sceneId,
       description: shot.description,
       prompt: shot.prompt,
       video_prompt: shot.videoPrompt,
@@ -175,7 +193,7 @@ export async function loadShotsFromDatabase(
 
   return shots.map((shot) => ({
     id: shot.id,
-    sceneId: shot.scene_id || '',
+    sceneId: shot.scene || '',
     sequence: 0,
     description: shot.description || '',
     cameraAngle: '中景',

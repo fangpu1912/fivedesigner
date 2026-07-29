@@ -85,6 +85,12 @@ export const UploadNode = memo(({ id, data, selected }: UploadNodeProps) => {
         return null
       }
       try {
+        // Tauri 环境下 File 对象有 path 属性，直接引用原路径，不复制到剧集目录
+        const filePath = (file as any).path
+        if (filePath && typeof filePath === 'string') {
+          return { savedPath: filePath, fileName: file.name }
+        }
+        // 无法获取原路径时回退到复制
         const arrayBuffer = await file.arrayBuffer()
         const uint8Array = new Uint8Array(arrayBuffer)
         const ext = file.name.split('.').pop() || 'png'
