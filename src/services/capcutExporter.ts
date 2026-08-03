@@ -12,50 +12,7 @@ import { join, homeDir } from '@tauri-apps/api/path'
 import { writeTextFile, mkdir, exists } from '@tauri-apps/plugin-fs'
 
 import type { SampleClip } from '@/types'
-
-// 将 asset URL 转换为本地绝对路径
-function convertAssetUrlToPath(url: string): string {
-  if (!url) return ''
-
-  try {
-    // 1. 处理 http://asset.localhost/ 格式
-    if (url.startsWith('http://asset.localhost/')) {
-      const pathPart = url.replace('http://asset.localhost/', '')
-      let decodedPath = decodeURIComponent(pathPart)
-      decodedPath = decodedPath.replace(/\.$/, '')
-      return decodedPath
-    }
-
-    // 2. 处理 asset://localhost/ 格式
-    if (url.startsWith('asset://localhost/')) {
-      const pathPart = url.replace('asset://localhost/', '')
-      let decodedPath = decodeURIComponent(pathPart)
-      decodedPath = decodedPath.replace(/^\//, '')
-      return decodedPath
-    }
-
-    // 3. 处理 asset:/// 格式（三斜杠）
-    if (url.startsWith('asset:///')) {
-      const pathPart = url.replace('asset:///', '')
-      let decodedPath = decodeURIComponent(pathPart)
-      decodedPath = decodedPath.replace(/^\//, '')
-      return decodedPath
-    }
-
-    // 4. 处理 asset:// 格式（双斜杠）
-    if (url.startsWith('asset://')) {
-      const pathPart = url.replace('asset://', '')
-      let decodedPath = decodeURIComponent(pathPart)
-      decodedPath = decodedPath.replace(/^\//, '')
-      return decodedPath
-    }
-  } catch {
-    // 解码失败，返回原始值
-  }
-
-  // 已经是本地路径或其他格式
-  return url
-}
+import { assetUrlToPath as convertAssetUrlToPath } from '@/utils/asset'
 
 // 剪映草稿路径配置
 const CAPCUT_DRAFT_DIR = {

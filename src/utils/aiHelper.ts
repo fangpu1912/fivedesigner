@@ -55,7 +55,7 @@ export async function callAI(prompt: string, options?: CallAIOptions): Promise<s
     const result = await AI.Text.generate({
       messages,
       temperature: options?.temperature ?? 0.7,
-      maxTokens: options?.maxTokens ?? 16384,
+      maxTokens: options?.maxTokens ?? 32768,
     })
     if (!result) {
       throw new Error('AI 返回了空结果')

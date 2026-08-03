@@ -31,6 +31,16 @@ import type {
   ViMaxShotDescription,
 } from '@/plugins/vimax/types';
 
+/** Agent 中文名称映射（用于 sendMessage 的引导提示） */
+const agentNames: Record<AgentType, string> = {
+  screenwriter: '编剧',
+  characterExtractor: '角色提取',
+  storyboardArtist: '分镜设计',
+  cameraPlanner: '机位规划',
+  characterPortrait: '角色肖像',
+  referenceImageSelector: '参考图',
+};
+
 export interface UseViMaxAgentsReturn {
   isRunning: boolean;
   error: string | null;
@@ -277,7 +287,13 @@ export function useViMaxAgents(
   const sendMessage = useCallback(
     (agentType: AgentType, content: string) => {
       addMessage(agentType, 'user', content);
-      // TODO: 实现 Agent 对话逻辑
+      // Agent 为结构化任务执行器（非对话式 LLM），暂不支持自由对话。
+      // 引导用户通过 Pipeline 标签页使用完整工作流。
+      addMessage(
+        agentType,
+        'system',
+        `${agentNames[agentType]} 是结构化任务执行器，暂不支持自由对话。请前往 Pipeline 标签页选择对应工作流（创意→视频 / 小说→视频 / 剧本→视频）一键执行完整流程。`
+      );
     },
     [addMessage]
   );

@@ -32,7 +32,13 @@ class Vendor {
         throw new Error("API错误: " + (data.error.message || JSON.stringify(data.error)));
       }
 
-      return data.choices?.[0]?.message?.content || "";
+      // 优先返回 content；o1/o3 等推理模型可能将结果放在 reasoning_content
+      var msg = data.choices && data.choices[0] && data.choices[0].message;
+      var content = (msg && msg.content) || "";
+      var reasoning = (msg && msg.reasoning_content) || "";
+      if (content) return content;
+      if (reasoning) return reasoning;
+      throw new Error("API 返回空结果（content 和 reasoning_content 均为空），请检查 maxTokens 或模型配置");
     };
   }
 }

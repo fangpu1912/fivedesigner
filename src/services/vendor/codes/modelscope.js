@@ -57,7 +57,12 @@ class Vendor {
       });
 
       if (response && response.choices && response.choices.length > 0) {
-        return response.choices[0].message.content;
+        var msg = response.choices[0].message;
+        var content = (msg && msg.content) || "";
+        var reasoning = (msg && msg.reasoning_content) || "";
+        if (content) return content;
+        if (reasoning) return reasoning;
+        throw new Error("魔搭返回空结果（content 和 reasoning_content 均为空），请检查 maxTokens 或模型配置");
       }
 
       throw new Error("魔搭对话API返回异常: " + JSON.stringify(response));

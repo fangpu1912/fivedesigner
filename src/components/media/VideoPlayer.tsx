@@ -3,7 +3,7 @@ import { useRef, useState, useEffect } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { save } from '@tauri-apps/plugin-dialog'
 import { readFile, writeFile } from '@tauri-apps/plugin-fs'
-import { Download, Loader2, Maximize2, Minimize2 } from 'lucide-react'
+import { Download, Loader2, Maximize2, Minimize2, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/useToast'
@@ -19,6 +19,8 @@ interface VideoPlayerProps {
   onEnded?: () => void
   className?: string
   objectFit?: 'contain' | 'cover'
+  /** 解绑回调：提供后在按钮组最右侧渲染 X 解绑按钮（仅移除引用，不删除本地文件） */
+  onRemove?: () => void
 }
 
 export function VideoPlayer({
@@ -31,6 +33,7 @@ export function VideoPlayer({
   onEnded,
   className,
   objectFit: _objectFit = 'cover',
+  onRemove,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -171,6 +174,17 @@ export function VideoPlayer({
         >
           {isDownloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
         </Button>
+        {onRemove && (
+          <Button
+            variant="secondary"
+            size="icon"
+            onClick={onRemove}
+            className="shadow-lg hover:scale-110 bg-red-600/90 hover:bg-red-600 text-white"
+            title="解绑视频（不删除本地文件）"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
       </div>
     </div>
   )

@@ -107,23 +107,6 @@ function saveHistory(history: HistoryItem[]) {
   }
 }
 
-/** 通用精修调用：取精修提示词 → 调用AI → 解析JSON */
-async function runRefinement<T>(type: string, inputData: T): Promise<T> {
-  // 检查精修开关
-  try {
-    const { settingsDB } = await import('@/db')
-    const settings = await settingsDB.get()
-    if (settings.refinement_enabled === false) {
-      return inputData
-    }
-  } catch {
-    // 加载失败则默认执行精修
-  }
-  const prompt = getActivePrompt(type as any, { inputData: JSON.stringify(inputData, null, 2) })
-  const result = await callAI(prompt, { maxTokens: 16384 })
-  return parseJSON<T>(result)
-}
-
 export function InspirationCreator() {
   const { toast } = useToast()
   const [topic, setTopic] = useState('')
@@ -294,47 +277,8 @@ export function InspirationCreator() {
         }
       }
 
-      // ====== Step 4: 摄影方案精修（精修 prompt 首帧描述） ======
-      if (allShots.length > 0) {
-        setPipelineStep({ step: 4, totalSteps: 7, label: '精修摄影方案' })
-        try {
-          const refined = await runRefinement<typeof allShots>('refinement_cinematography', allShots)
-          if (refined && refined.length === allShots.length) {
-            allShots.splice(0, allShots.length, ...refined)
-          }
-        } catch (e) {
-          logger.error('[Inspiration] 摄影精修失败', e)
-        }
-      }
-
-      // ====== Step 5: 表演精修（精修 videoPrompt 表演描述） ======
-      if (allShots.length > 0) {
-        setPipelineStep({ step: 5, totalSteps: 7, label: '精修表演细节' })
-        try {
-          const refined = await runRefinement<typeof allShots>('refinement_performance', allShots)
-          if (refined && refined.length === allShots.length) {
-            allShots.splice(0, allShots.length, ...refined)
-          }
-        } catch (e) {
-          logger.error('[Inspiration] 表演精修失败', e)
-        }
-      }
-
-      // ====== Step 6: 剪辑节奏精修 ======
-      if (allShots.length > 0) {
-        setPipelineStep({ step: 6, totalSteps: 7, label: '精修剪辑节奏' })
-        try {
-          const refined = await runRefinement<typeof allShots>('refinement_editing', allShots)
-          if (refined && refined.length === allShots.length) {
-            allShots.splice(0, allShots.length, ...refined)
-          }
-        } catch (e) {
-          logger.error('[Inspiration] 剪辑精修失败', e)
-        }
-      }
-
-      // ====== Step 7: 配音生成 ======
-      setPipelineStep({ step: 7, totalSteps: 7, label: '生成配音提示词' })
+      // ====== Step 4: 配音生成 ======
+      setPipelineStep({ step: 4, totalSteps: 4, label: '生成配音提示词' })
       const allDubbing: Array<{ character: string; line: string; emotion: string; audio_prompt: string }> = []
 
       const shotsDescription = allShots.map((shot, i) => {
@@ -365,19 +309,6 @@ export function InspirationCreator() {
         allDubbing.push(...dubbing)
       } catch (e) {
         logger.error('[Inspiration] 配音生成失败', e)
-      }
-
-      // 配音精修
-      if (allDubbing.length > 0) {
-        setPipelineStep({ step: 7, totalSteps: 7, label: '精修配音方案' })
-        try {
-          const refined = await runRefinement<typeof allDubbing>('refinement_dubbing', allDubbing)
-          if (refined && refined.length === allDubbing.length) {
-            allDubbing.splice(0, allDubbing.length, ...refined)
-          }
-        } catch (e) {
-          logger.error('[Inspiration] 配音精修失败', e)
-        }
       }
 
       // 保存中间状态（用于分步重试）
@@ -614,45 +545,6 @@ ${direction}
         }
       }
 
-      // ====== Step 4: 摄影方案精修 ======
-      if (newShots.length > 0) {
-        setPipelineStep({ step: 4, totalSteps: 6, label: '精修摄影方案' })
-        try {
-          const refined = await runRefinement<typeof newShots>('refinement_cinematography', newShots)
-          if (refined && refined.length === newShots.length) {
-            newShots.splice(0, newShots.length, ...refined)
-          }
-        } catch (e) {
-          logger.error('[Inspiration] 延伸摄影精修失败', e)
-        }
-      }
-
-      // ====== Step 5: 表演精修 ======
-      if (newShots.length > 0) {
-        setPipelineStep({ step: 5, totalSteps: 6, label: '精修表演细节' })
-        try {
-          const refined = await runRefinement<typeof newShots>('refinement_performance', newShots)
-          if (refined && refined.length === newShots.length) {
-            newShots.splice(0, newShots.length, ...refined)
-          }
-        } catch (e) {
-          logger.error('[Inspiration] 延伸表演精修失败', e)
-        }
-      }
-
-      // ====== Step 6: 剪辑节奏精修 ======
-      if (newShots.length > 0) {
-        setPipelineStep({ step: 6, totalSteps: 6, label: '精修剪辑节奏' })
-        try {
-          const refined = await runRefinement<typeof newShots>('refinement_editing', newShots)
-          if (refined && refined.length === newShots.length) {
-            newShots.splice(0, newShots.length, ...refined)
-          }
-        } catch (e) {
-          logger.error('[Inspiration] 延伸剪辑精修失败', e)
-        }
-      }
-
       // ====== 合并结果 ======
       const mergedContent: GeneratedContent = {
         characters: [...generatedContent.characters, ...addedCharacters.map(c => ({
@@ -813,16 +705,6 @@ ${direction}
         allShots.push(...shots)
         const last = shots[shots.length - 1]!
         prevShot = `景别: ${last.shot_type || '固定'}\n画面: ${last.prompt || ''}\n动态: ${last.videoPrompt || ''}`
-      }
-    }
-
-    // 精修
-    if (allShots.length > 0) {
-      for (const refinementType of ['refinement_cinematography', 'refinement_performance', 'refinement_editing']) {
-        try {
-          const refined = await runRefinement<typeof allShots>(refinementType, allShots)
-          if (refined && refined.length === allShots.length) allShots.splice(0, allShots.length, ...refined)
-        } catch {}
       }
     }
 

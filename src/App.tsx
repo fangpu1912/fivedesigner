@@ -90,6 +90,8 @@ function AppContent() {
 
     registerDefaultExecutors()
     startTaskProcessor()
+    // 预热豆包配额（service 懒加载守卫，幂等；任务队列 executor 启动前确保配额已就绪）
+    void import('@/services/doubaoQuotaService').then(m => m.load())
 
     // 启动时检查更新（不阻塞）
     const checkForUpdates = async () => {

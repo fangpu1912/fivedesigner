@@ -10,6 +10,7 @@ export type TaskQueueType =
   | 'voice_clone'
   | 'script_analysis'
   | 'batch_operation'
+  | 'doubao_video_generation'
   | 'export'
   | 'import'
   | 'other'

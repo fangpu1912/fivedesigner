@@ -4,6 +4,7 @@
  */
 
 import type { SampleClip } from '@/types'
+import { assetUrlToPath as convertAssetUrlToPath } from '@/utils/asset'
 
 // 渲染设置
 export interface RenderOptions {
@@ -40,53 +41,6 @@ export interface RenderResult {
   message: string
   outputPath?: string
   ffmpegCommand?: string
-}
-
-/**
- * 将 Tauri asset URL 转换为本地文件路径
- * 支持多种格式：asset://, asset:///localhost/, http://asset.localhost/
- */
-function convertAssetUrlToPath(url: string): string {
-  if (!url) return ''
-
-  try {
-    // 1. 处理 http://asset.localhost/ 格式
-    if (url.startsWith('http://asset.localhost/')) {
-      const pathPart = url.replace('http://asset.localhost/', '')
-      let decodedPath = decodeURIComponent(pathPart)
-      decodedPath = decodedPath.replace(/\.$/, '')
-      return decodedPath
-    }
-
-    // 2. 处理 asset://localhost/ 格式
-    if (url.startsWith('asset://localhost/')) {
-      const pathPart = url.replace('asset://localhost/', '')
-      let decodedPath = decodeURIComponent(pathPart)
-      decodedPath = decodedPath.replace(/^\//, '')
-      return decodedPath
-    }
-
-    // 3. 处理 asset:/// 格式（三斜杠）
-    if (url.startsWith('asset:///')) {
-      const pathPart = url.replace('asset:///', '')
-      let decodedPath = decodeURIComponent(pathPart)
-      decodedPath = decodedPath.replace(/^\//, '')
-      return decodedPath
-    }
-
-    // 4. 处理 asset:// 格式（双斜杠）
-    if (url.startsWith('asset://')) {
-      const pathPart = url.replace('asset://', '')
-      let decodedPath = decodeURIComponent(pathPart)
-      decodedPath = decodedPath.replace(/^\//, '')
-      return decodedPath
-    }
-  } catch {
-    // 解码失败，返回原始值
-  }
-
-  // 已经是本地路径或其他格式
-  return url
 }
 
 /**

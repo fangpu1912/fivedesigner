@@ -13,6 +13,9 @@
   var processedUrls = new Set();
   var MAX_DEDUP_SIZE = 100;
   var seenVideoUrls = new Set();
+  // fallback_api URL 去重表：同一个 fallback_api 已处理过就不再重复调用
+  // 这样旧视频的 fallback_api 不会重复请求，即使返回的视频 URL 带时效 token 变化也不会被重复 emit
+  var seenFallbackApis = new Set();
 
   // ========== 工具函数 ==========
 
@@ -383,6 +386,16 @@
     }
   }
 
+  // ========== 清空状态接口（供 buildClearScript 调用）==========
+  // 只清空 __EXTRACTED_MEDIA__ 缓冲，保留 seenVideoUrls 和 seenFallbackApis 去重表
+  // 保留去重表的原因：旧视频的 fallback_api 已处理过，不会重复调用，
+  // 新视频的 fallback_api 不在去重表中，会被正确处理并 emit
+  // 如果清空去重表，旧视频会被重新 emit，导致 waitForVideo 误拿到旧视频（URL 已过期，下载失败）
+  window.__clearDewatermarkState__ = function() {
+    window.__EXTRACTED_MEDIA__ = [];
+    console.log("[dewatermark] Buffer cleared (__EXTRACTED_MEDIA__ only, keeping seenVideoUrls + seenFallbackApis)");
+  };
+
   // ========== 核心提取逻辑 ==========
   // 只按媒体 URL 去重，避免重复添加同一个视频/图片
   // 对话切换检测：比较当前 URL，只在进入新对话时清空旧媒体
@@ -406,6 +419,7 @@
       _lastConversationUrl = currentUrl;
       emitToMain('clear', {});
       seenVideoUrls = new Set();
+      seenFallbackApis = new Set();
     }
   }, 1000);
 
@@ -415,6 +429,7 @@
       console.log("[dewatermark] New conversation detected, clearing old media");
       emitToMain('clear', {});
       seenVideoUrls = new Set();
+      seenFallbackApis = new Set();
     }
 
     var images = [];
@@ -431,6 +446,13 @@
     console.log("[dewatermark] extractAndPublish: found", fallbackApis.length, "fallback_api URL(s)");
     for (var j = 0; j < fallbackApis.length; j++) {
       (function(fallbackApi) {
+        // 按 fallback_api URL 去重：同一个 fallback_api 已处理过就不再重复调用
+        // 这样旧视频不会因 token 变化而被重复 emit
+        if (seenFallbackApis.has(fallbackApi)) {
+          console.log("[dewatermark] fallback_api already processed, skipping:", fallbackApi.substring(0, 60));
+          return;
+        }
+        seenFallbackApis.add(fallbackApi);
         getDoubaoVideoUrlFromFallbackApi(fallbackApi).then(function(videoUrl) {
           if (videoUrl && isHttpUrl(videoUrl) && !seenVideoUrls.has(videoUrl)) {
             seenVideoUrls.add(videoUrl);

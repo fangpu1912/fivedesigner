@@ -31,7 +31,9 @@ class Vendor {
       }
       
       const data = await response.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      var text = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text;
+      if (text) return text;
+      throw new Error("Google 返回空结果（candidates 中无 text），请检查 maxOutputTokens 或模型配置");
     };
   }
 

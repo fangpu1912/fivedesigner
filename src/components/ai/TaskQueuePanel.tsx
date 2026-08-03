@@ -1,4 +1,5 @@
 import { useState } from 'react'
+
 import {
   X,
   Loader2,
@@ -21,11 +22,11 @@ import {
   Package,
 } from 'lucide-react'
 
-import { useTaskQueueStore, type Task, type TaskQueueStatus, type TaskQueueType } from '@/store/useTaskQueueStore'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
+import { useTaskQueueStore, type Task, type TaskQueueStatus, type TaskQueueType } from '@/store/useTaskQueueStore'
 import { getImageUrl, getVideoUrl, getAudioUrl } from '@/utils/asset'
 
 const STATUS_CONFIG: Record<TaskQueueStatus, { icon: typeof Clock; label: string; color: string; bgColor: string }> = {
@@ -44,6 +45,7 @@ const TYPE_CONFIG: Record<TaskQueueType, { label: string; icon: typeof Image }> 
   voice_clone: { label: '音色复刻', icon: Mic },
   script_analysis: { label: '剧本分析', icon: FileText },
   batch_operation: { label: '批量操作', icon: Package },
+  doubao_video_generation: { label: '豆包视频', icon: Video },
   export: { label: '导出', icon: Package },
   import: { label: '导入', icon: Package },
   other: { label: '其他', icon: FileText },
@@ -131,7 +133,7 @@ function TaskItem({ task }: { task: Task }) {
                   className="w-full h-auto max-h-48 object-contain"
                 />
               )}
-              {task.type === 'video_generation' && (
+              {(task.type === 'video_generation' || task.type === 'doubao_video_generation') && (
                 <video
                   src={getVideoUrl(task.result.outputUrl) || task.result.outputUrl}
                   controls

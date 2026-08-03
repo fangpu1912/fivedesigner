@@ -1,6 +1,7 @@
-import { useTaskQueueStore, type Task, type TaskResult, type TaskQueueType } from '@/store/useTaskQueueStore'
-import { queryClient } from '@/providers/QueryProvider'
 import { buildFullPrompt } from '@/hooks/useVendorGeneration'
+import logger from '@/utils/logger'
+import { queryClient } from '@/providers/QueryProvider'
+import { useTaskQueueStore, type Task, type TaskResult, type TaskQueueType } from '@/store/useTaskQueueStore'
 
 export type TaskExecutor = (
   task: Task,
@@ -57,6 +58,28 @@ async function executeTask(taskId: string) {
   const state = useTaskQueueStore.getState()
   const task = state.getTask(taskId)
   if (!task || task.status !== 'pending') return
+
+  return doExecuteTask(taskId)
+}
+
+/**
+ * 立即执行指定任务（绕过 maxConcurrent 并发检查）
+ *
+ * 用于豆包任务等需要即时执行的场景：点击生成后立即执行自动化，
+ * 不等队列调度。executor 内部通过 accountLock 保证同一账号串行。
+ */
+export async function executeTaskNow(taskId: string) {
+  const state = useTaskQueueStore.getState()
+  const task = state.getTask(taskId)
+  if (!task || task.status !== 'pending') return
+
+  return doExecuteTask(taskId)
+}
+
+async function doExecuteTask(taskId: string) {
+  const state = useTaskQueueStore.getState()
+  const task = state.getTask(taskId)
+  if (!task) return
 
   const executor = getExecutor(task.type)
   if (!executor) {
@@ -441,7 +464,7 @@ export function registerDefaultExecutors() {
         workflowParams.referenceImages = uploadedImages.slice(1)
       }
 
-      let workflowData = applyParamsToWorkflow(
+      const workflowData = applyParamsToWorkflow(
         workflow.workflow,
         workflowParams,
         workflow.nodes
@@ -533,5 +556,99 @@ export function registerDefaultExecutors() {
     }
   })
 
-  console.log('[TaskQueue] 默认执行器已注册')
+  // 豆包网页视频生成执行器（通过已登录的豆包账号自动化生成，支持账号轮换 + 取消）
+  registerExecutor('doubao_video_generation', async (task, updateProgress, signal) => {
+    const doubaoBrowserService = await import('@/services/doubaoBrowserService')
+    const { storyboardDB } = await import('@/db')
+
+    const {
+      prompt,
+      firstFrame,
+      lastFrame,
+      referenceImages,
+      aspectRatio,
+      duration,
+      model,
+      projectId,
+      episodeId,
+      preferAccountId,
+      itemId,
+      itemType,
+    } = task.metadata as {
+      prompt: string
+      firstFrame?: string
+      lastFrame?: string
+      referenceImages?: string[]
+      aspectRatio?: string
+      duration?: number
+      model?: string
+      projectId: string
+      episodeId: string
+      preferAccountId?: string
+      itemId?: string
+      itemType?: string
+    }
+
+    // phase -> progress 映射（service 的 onProgress 回调桥接到任务队列进度）
+    const PHASE_PROGRESS: Record<string, number> = {
+      starting: 5,
+      navigating: 10,
+      filling: 20,
+      uploading: 30,
+      submitting: 40,
+      submitted: 50,
+      detecting: 60,
+      saving: 90,
+    }
+    const onProgress = (info: { phase: string; accountId: string; msg?: string }) => {
+      if (info.phase === 'error') return // 错误由抛错处理，不更新 progress
+      const progress = PHASE_PROGRESS[info.phase] ?? 50
+      updateProgress(progress, info.msg || info.phase)
+    }
+
+    if (signal?.aborted) return { success: false, error: '已取消' }
+
+    // 调用 service 生成视频（内部已 saveMediaFile，返回本地路径；signal 透传支持取消）
+    const savedPath = await doubaoBrowserService.generateVideo(
+      {
+        prompt,
+        firstFrame,
+        lastFrame,
+        referenceImages,
+        aspectRatio,
+        duration,
+        model,
+        projectId,
+        episodeId,
+        preferAccountId,
+        onProgress,
+      },
+      signal
+    )
+
+    if (signal?.aborted) return { success: false, error: '已取消' }
+
+    // 落库（仅 storyboard 类型，参照 batch_operation executor）
+    let dbUpdateFailed = false
+    if (itemType === 'storyboard' && itemId) {
+      try {
+        await storyboardDB.update(itemId, { video: savedPath, status: 'completed' })
+        queryClient.invalidateQueries({ queryKey: ['storyboards', episodeId] })
+      } catch (err) {
+        // 视频已生成保存到本地，不因落库失败而标记任务失败（避免重试浪费配额）
+        dbUpdateFailed = true
+        logger.warn('[TaskQueue] 豆包视频落库失败，视频已保存到本地:', err)
+      }
+    }
+
+    updateProgress(100, '完成')
+    return {
+      success: true,
+      outputPath: savedPath,
+      outputUrl: savedPath,
+      data: { savedPath, itemId, dbUpdateFailed },
+    }
+  })
+
+  logger.info('[TaskQueue] 默认执行器已注册')
 }

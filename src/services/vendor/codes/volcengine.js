@@ -25,7 +25,12 @@ class Vendor {
         }),
       });
       const data = await response.json();
-      return data.choices?.[0]?.message?.content || "";
+      var msg = data.choices && data.choices[0] && data.choices[0].message;
+      var content = (msg && msg.content) || "";
+      var reasoning = (msg && msg.reasoning_content) || "";
+      if (content) return content;
+      if (reasoning) return reasoning;
+      throw new Error("火山引擎返回空结果（content 和 reasoning_content 均为空），请检查 maxTokens 或模型配置");
     };
   }
 

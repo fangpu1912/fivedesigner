@@ -35,7 +35,6 @@ import {
   Settings2,
   Download,
   Shield,
-  Wand2,
 } from 'lucide-react'
 
 import { APP_VERSION } from '@/config/constants'
@@ -242,9 +241,6 @@ export function Settings() {
   // 剪映路径配置
   const [capcutPath, setCapcutPath] = useState<string>('')
 
-  // AI 精修开关
-  const [refinementEnabled, setRefinementEnabled] = useState(true)
-
   // 管理员密码设置
   const [adminPassword, setAdminPassword] = useState<string>('')
   const [newAdminPassword, setNewAdminPassword] = useState<string>('')
@@ -288,7 +284,7 @@ export function Settings() {
     setWorkflows(getWorkflowConfigs())
   }, [])
 
-  // 加载剪映路径配置 + AI精修开关
+  // 加载剪映路径配置
   useEffect(() => {
     const loadSettings = async () => {
       try {
@@ -296,9 +292,6 @@ export function Settings() {
         const settings = await settingsDB.get()
         if (settings.capcutPath) {
           setCapcutPath(settings.capcutPath as string)
-        }
-        if (typeof settings.refinement_enabled === 'boolean') {
-          setRefinementEnabled(settings.refinement_enabled as boolean)
         }
       } catch (error) {
         console.error('Failed to load settings:', error)
@@ -1044,17 +1037,6 @@ export function Settings() {
     const { settingsDB } = await import('@/db')
     await settingsDB.save({ capcutPath: '' })
     toast({ title: '剪映路径已清除，将使用自动检测' })
-  }
-
-  // 切换 AI 精修开关
-  const handleToggleRefinement = async (enabled: boolean) => {
-    setRefinementEnabled(enabled)
-    try {
-      const { settingsDB } = await import('@/db')
-      await settingsDB.save({ refinement_enabled: enabled })
-    } catch (error) {
-      console.error('Failed to save refinement setting:', error)
-    }
   }
 
   // 保存管理员密码
@@ -2184,33 +2166,6 @@ export function Settings() {
                   <p className="text-xs text-muted-foreground">
                     例如：C:\Program Files\JianyingPro\JianyingPro.exe
                   </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* AI 精修开关 */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Wand2 className="h-5 w-5 text-purple-500" />
-                  AI 专业精修
-                </CardTitle>
-                <CardDescription>
-                  用影视级专业知识精修分镜的摄影/表演/剪辑/配音方案（会增加 AI 调用次数和 token 消耗）
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <label className="text-sm font-medium">启用专业精修</label>
-                    <p className="text-xs text-muted-foreground">
-                      关闭后跳过精修步骤，使用基础分镜和配音结果
-                    </p>
-                  </div>
-                  <Switch
-                    checked={refinementEnabled}
-                    onCheckedChange={handleToggleRefinement}
-                  />
                 </div>
               </CardContent>
             </Card>

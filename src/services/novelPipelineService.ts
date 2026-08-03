@@ -5,23 +5,6 @@ import type { PipelineSceneInput } from '@/utils/aiHelper'
 import logger from '@/utils/logger'
 import { matchAssetsByName, isNameMatch } from '@/utils/storyboardReferences'
 
-/** 通用精修调用 */ 
-async function runRefinement<T>(type: string, inputData: T): Promise<T> {
-  // 检查精修开关
-  try {
-    const { settingsDB } = await import('@/db')
-    const settings = await settingsDB.get()
-    if (settings.refinement_enabled === false) {
-      return inputData
-    }
-  } catch {
-    // 加载失败则默认执行
-  }
-  const prompt = getActivePrompt(type as any, { inputData: JSON.stringify(inputData, null, 2) })
-  const result = await callAI(prompt, { maxTokens: 16384 })
-  return parseJSON<T>(result)
-}
-
 // 模糊匹配 Map 的 key（AI 生成的名称可能和资产库名称有细微差异）
 function fuzzyMatchId(map: Map<string, string>, name: string): string | undefined {
   if (!name) return undefined
@@ -94,17 +77,17 @@ export type PipelineProgressCallback = (progress: PipelineProgress) => void
 
 async function segmentScenesForChunk(chunk: string): Promise<PipelineScene[]> {
   const prompt = getActivePrompt('pipeline_scene_segmentation', { content: chunk })
-  const result = await callAI(prompt)
+  const result = await callAI(prompt, { maxTokens: 32768 })
   return parseJSON<PipelineScene[]>(result)
 }
 
 async function segmentScenesFullContent(content: string, onProgress?: (msg: string) => void): Promise<PipelineScene[]> {
-  if (content.length <= 12000) {
+  if (content.length <= 30000) {
     onProgress?.('场景划分（单次）')
     return segmentScenesForChunk(content)
   }
 
-  const chunks = splitContentIntoChunks(content, 10000)
+  const chunks = splitContentIntoChunks(content, 15000)
   onProgress?.(`场景划分（分 ${chunks.length} 块处理）`)
 
   const allScenes: PipelineScene[] = []
@@ -127,13 +110,13 @@ async function extractAssetsForContent(
   content: string,
   scenesSummary: string,
 ): Promise<{ characters: PipelineCharacter[]; scenes: PipelineSceneAsset[]; props: PipelineProp[] }> {
-  if (content.length <= 12000) {
+  if (content.length <= 30000) {
     const prompt = getActivePrompt('pipeline_asset_extraction', { content, scenes: scenesSummary })
-    const result = await callAI(prompt)
+    const result = await callAI(prompt, { maxTokens: 32768 })
     return parseJSON(result)
   }
 
-  const chunks = splitContentIntoChunks(content, 10000)
+  const chunks = splitContentIntoChunks(content, 15000)
   const allAssets: { characters: PipelineCharacter[]; scenes: PipelineSceneAsset[]; props: PipelineProp[] } = {
     characters: [], scenes: [], props: [],
   }
@@ -144,7 +127,7 @@ async function extractAssetsForContent(
         content: chunks[i]!,
         scenes: scenesSummary,
       })
-      const result = await callAI(prompt)
+      const result = await callAI(prompt, { maxTokens: 32768 })
       const chunkAssets = parseJSON<{
         characters: PipelineCharacter[]
         scenes: PipelineSceneAsset[]
@@ -358,7 +341,7 @@ export async function runPipeline(
         assetList: assetListStr,
       })
 
-      const breakdownResult = await callAI(breakdownPrompt, { maxTokens: 16384 })
+      const breakdownResult = await callAI(breakdownPrompt, { maxTokens: 32768 })
       const shots: PipelineShot[] = parseJSON<PipelineShot[]>(breakdownResult)
       logger.info(`[Pipeline] 批次 ${batchStart / BATCH_SIZE + 1}/${totalBatches} 拆解了 ${shots.length} 个镜头`)
 
@@ -396,7 +379,7 @@ export async function runPipeline(
           shotsDescription,
           characterVoices: characterVoicesStr || '无角色声音描述',
         })
-        const dubbingResult = await callAI(dubbingPrompt)
+        const dubbingResult = await callAI(dubbingPrompt, { maxTokens: 32768 })
         const dubbing: PipelineDubbingResult[] = parseJSON<PipelineDubbingResult[]>(dubbingResult)
         allDubbing.push(...dubbing)
       } catch (e) {
@@ -404,58 +387,6 @@ export async function runPipeline(
       }
     } catch (e) {
       logger.error(`[Pipeline] 分镜拆解失败，批次${batchStart / BATCH_SIZE + 1}`, e)
-    }
-  }
-
-  // ====== 精修阶段：摄影方案 ======
-  if (allShots.length > 0) {
-    onProgress?.({ step: currentStep, stepName: '精修摄影方案', percent: 82, totalSteps: 0 })
-    try {
-      const refined = await runRefinement<typeof allShots>('refinement_cinematography', allShots)
-      if (refined && refined.length === allShots.length) {
-        allShots.splice(0, allShots.length, ...refined)
-      }
-    } catch (e) {
-      logger.error('[Pipeline] 摄影精修失败:', e)
-    }
-  }
-
-  // ====== 精修阶段：表演 ======
-  if (allShots.length > 0) {
-    onProgress?.({ step: currentStep, stepName: '精修表演细节', percent: 84, totalSteps: 0 })
-    try {
-      const refined = await runRefinement<typeof allShots>('refinement_performance', allShots)
-      if (refined && refined.length === allShots.length) {
-        allShots.splice(0, allShots.length, ...refined)
-      }
-    } catch (e) {
-      logger.error('[Pipeline] 表演精修失败:', e)
-    }
-  }
-
-  // ====== 精修阶段：剪辑节奏 ======
-  if (allShots.length > 0) {
-    onProgress?.({ step: currentStep, stepName: '精修剪辑节奏', percent: 86, totalSteps: 0 })
-    try {
-      const refined = await runRefinement<typeof allShots>('refinement_editing', allShots)
-      if (refined && refined.length === allShots.length) {
-        allShots.splice(0, allShots.length, ...refined)
-      }
-    } catch (e) {
-      logger.error('[Pipeline] 剪辑精修失败:', e)
-    }
-  }
-
-  // ====== 精修阶段：配音方案 ======
-  if (allDubbing.length > 0) {
-    onProgress?.({ step: currentStep, stepName: '精修配音方案', percent: 88, totalSteps: 0 })
-    try {
-      const refined = await runRefinement<typeof allDubbing>('refinement_dubbing', allDubbing)
-      if (refined && refined.length === allDubbing.length) {
-        allDubbing.splice(0, allDubbing.length, ...refined)
-      }
-    } catch (e) {
-      logger.error('[Pipeline] 配音精修失败:', e)
     }
   }
 

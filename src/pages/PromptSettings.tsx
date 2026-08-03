@@ -28,8 +28,6 @@ import {
   Layers,
   Bot,
   Video,
-  Camera,
-  Zap,
 } from 'lucide-react'
 
 import { PromptEditor } from '@/components/prompt/PromptEditor'
@@ -93,12 +91,6 @@ const TYPE_ICONS: Record<PromptType, React.ReactNode> = {
   inspiration_story_generation: <BookOpen className="h-4 w-4" />,
   inspiration_story_continuation: <BookOpen className="h-4 w-4" />,
   video_remake: <Video className="h-4 w-4" />,
-  refinement_cinematography: <Camera className="h-4 w-4" />,
-  refinement_performance: <Play className="h-4 w-4" />,
-  refinement_editing: <Edit3 className="h-4 w-4" />,
-  refinement_dubbing: <Sparkles className="h-4 w-4" />,
-  refinement_combat_anime: <Zap className="h-4 w-4" />,
-  refinement_combat_xianxia: <Zap className="h-4 w-4" />,
 }
 
 // 模板编辑器组件

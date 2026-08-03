@@ -10,6 +10,7 @@ import { X, Bot, Play, MessageSquare, Film, Users, Settings } from 'lucide-react
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useViMaxPipeline } from '@/plugins/vimax/hooks/useViMaxPipeline';
 import { useViMaxStore } from '@/plugins/vimax/stores/vimaxStore';
 import type {
   ViMaxAgentPanelProps,
@@ -49,8 +50,11 @@ export function ViMaxAgentPanel({ projectId, episodeId, onClose }: ViMaxAgentPan
     setSelectedAgent,
   } = useViMaxStore();
 
+  const pipeline = useViMaxPipeline(projectId, episodeId);
+
   const [inputValue, setInputValue] = useState('');
   const [selectedPipeline, setSelectedPipeline] = useState<PipelineType>('idea2video');
+  const [lastPipelineInput, setLastPipelineInput] = useState<{ type: PipelineType; content: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const messages = selectedAgent ? agentMessages[selectedAgent] || [] : [];
@@ -66,9 +70,60 @@ export function ViMaxAgentPanel({ projectId, episodeId, onClose }: ViMaxAgentPan
     setInputValue('');
   }, [inputValue, selectedAgent]);
 
-  const handleStartPipeline = useCallback(() => {
-    // TODO: 实现 Pipeline 启动逻辑
-  }, [selectedPipeline, projectId, episodeId]);
+  const handleStartPipeline = useCallback(async () => {
+    const content = inputValue.trim();
+    if (!content) return;
+
+    setLastPipelineInput({ type: selectedPipeline, content });
+
+    try {
+      if (selectedPipeline === 'idea2video') {
+        await pipeline.startIdea2Video({ content });
+      } else if (selectedPipeline === 'novel2video') {
+        await pipeline.startNovel2Video({ title: '用户输入', content });
+      } else if (selectedPipeline === 'script2video') {
+        // script2video 需要结构化剧本，用户输入的文本作为 summary 传入
+        await pipeline.startScript2Video({
+          title: '用户输入',
+          summary: content,
+          scenes: [],
+          shots: [],
+          characters: [],
+        });
+      }
+    } catch {
+      // 错误已在 hook 内部处理（setError），此处无需重复
+    }
+  }, [inputValue, selectedPipeline, projectId, episodeId, pipeline]);
+
+  const handleCancelPipeline = useCallback(() => {
+    pipeline.cancel();
+  }, [pipeline]);
+
+  const handleRetryPipeline = useCallback(async () => {
+    pipeline.reset();
+    // 使用上次的输入重新启动
+    if (lastPipelineInput) {
+      const { type, content } = lastPipelineInput;
+      try {
+        if (type === 'idea2video') {
+          await pipeline.startIdea2Video({ content });
+        } else if (type === 'novel2video') {
+          await pipeline.startNovel2Video({ title: '用户输入', content });
+        } else if (type === 'script2video') {
+          await pipeline.startScript2Video({
+            title: '用户输入',
+            summary: content,
+            scenes: [],
+            shots: [],
+            characters: [],
+          });
+        }
+      } catch {
+        // 错误已在 hook 内部处理
+      }
+    }
+  }, [pipeline, lastPipelineInput]);
 
   if (!isPanelOpen) {
     return (
@@ -176,12 +231,8 @@ export function ViMaxAgentPanel({ projectId, episodeId, onClose }: ViMaxAgentPan
           {activePipeline ? (
             <PipelineExecutor
               pipeline={activePipeline}
-              onCancel={() => {
-                // TODO: 取消 Pipeline
-              }}
-              onRetry={() => {
-                // TODO: 重试 Pipeline
-              }}
+              onCancel={handleCancelPipeline}
+              onRetry={handleRetryPipeline}
             />
           ) : (
             <div className="flex-1 p-4 space-y-4">

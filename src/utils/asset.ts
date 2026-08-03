@@ -185,6 +185,58 @@ export const getVideoUrl = getAssetUrl
 export const getImageUrl = getAssetUrl
 
 /**
+ * 将 Tauri asset URL 转换为本地文件路径（getAssetUrl 的反向操作）
+ *
+ * 支持多种格式：http://asset.localhost/、asset://localhost/、asset:///、asset://
+ * 用于需要本地绝对路径的场景（如 FFmpeg 命令、剪映导出等）
+ *
+ * @param url asset URL 或本地路径
+ * @returns 本地绝对路径；若已是本地路径则原样返回
+ */
+export function assetUrlToPath(url: string | null | undefined): string {
+  if (!url) return ''
+
+  try {
+    // 1. 处理 http://asset.localhost/ 格式
+    if (url.startsWith('http://asset.localhost/')) {
+      const pathPart = url.replace('http://asset.localhost/', '')
+      let decodedPath = decodeURIComponent(pathPart)
+      decodedPath = decodedPath.replace(/\.$/, '')
+      return decodedPath
+    }
+
+    // 2. 处理 asset://localhost/ 格式
+    if (url.startsWith('asset://localhost/')) {
+      const pathPart = url.replace('asset://localhost/', '')
+      let decodedPath = decodeURIComponent(pathPart)
+      decodedPath = decodedPath.replace(/^\//, '')
+      return decodedPath
+    }
+
+    // 3. 处理 asset:/// 格式（三斜杠）
+    if (url.startsWith('asset:///')) {
+      const pathPart = url.replace('asset:///', '')
+      let decodedPath = decodeURIComponent(pathPart)
+      decodedPath = decodedPath.replace(/^\//, '')
+      return decodedPath
+    }
+
+    // 4. 处理 asset:// 格式（双斜杠）
+    if (url.startsWith('asset://')) {
+      const pathPart = url.replace('asset://', '')
+      let decodedPath = decodeURIComponent(pathPart)
+      decodedPath = decodedPath.replace(/^\//, '')
+      return decodedPath
+    }
+  } catch {
+    // 解码失败，返回原始值
+  }
+
+  // 已经是本地路径或其他格式
+  return url
+}
+
+/**
  * 获取文件扩展名
  *
  * @param path 文件路径或 URL

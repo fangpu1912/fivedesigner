@@ -2436,6 +2436,7 @@ pub fn run() {
             embedded_browser::get_webview_url,
             embedded_browser::report_url,
             embedded_browser::report_scan_result,
+            embedded_browser::report_doubao_auto_status,
             embedded_browser::set_scan_url,
             embedded_browser::take_scan_url,
             generate_jianying_draft,

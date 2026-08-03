@@ -15,17 +15,37 @@ function formatMessage(message: string, args: unknown[]): string {
   if (args.length === 0) return message
   const formatted = args
     .map(arg => {
-      if (typeof arg === 'object') {
-        try {
-          return JSON.stringify(arg)
-        } catch {
-          return String(arg)
+      if (arg instanceof Error) {
+        // Error 的 message/stack 不可枚举，JSON.stringify 会输出 {}，
+        // 需要手动提取
+        const parts = [arg.message]
+        const cause = (arg as Error & { cause?: unknown }).cause
+        if (cause) {
+          parts.push(`cause: ${formatSingle(cause)}`)
         }
+        if (isDev) {
+          // 开发环境附带堆栈前几行，方便定位
+          const stack = arg.stack?.split('\n').slice(0, 4).join('\n')
+          if (stack) parts.push(stack)
+        }
+        return parts.join('\n')
       }
-      return String(arg)
+      return formatSingle(arg)
     })
     .join(' ')
   return `${message} ${formatted}`
+}
+
+/** 格式化单个参数（非 Error） */
+function formatSingle(arg: unknown): string {
+  if (typeof arg === 'object') {
+    try {
+      return JSON.stringify(arg)
+    } catch {
+      return String(arg)
+    }
+  }
+  return String(arg)
 }
 
 export const logger = {

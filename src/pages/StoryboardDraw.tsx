@@ -17,6 +17,11 @@ import {
   Video,
   ChevronLeft,
   ChevronRight,
+  Eye,
+  EyeOff,
+  Search,
+  Monitor,
+  Upload,
 } from 'lucide-react'
 
 import {
@@ -71,7 +76,12 @@ import type { WorkflowConfig } from '@/types'
 import type { GenerationResult } from '@/types/generation'
 import { getImageUrl } from '@/utils/asset'
 import { AIImageEditDialog } from '@/components/ai/AIImageEditDialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ImageEditorDialog } from '@/plugins/storyboard-copilot/components'
+import { useDoubaoBrowserGeneration } from '@/hooks/useDoubaoBrowserGeneration'
+import { useDoubaoQuota } from '@/hooks/useDoubaoQuota'
+import { useTaskQueueStore } from '@/store/useTaskQueueStore'
+import { executeTaskNow } from '@/services/taskQueue'
 import { vendorConfigService } from '@/services/vendor'
 import type { VendorConfig, VideoModel } from '@/services/vendor'
 
@@ -79,7 +89,7 @@ type GenerationType = 'image' | 'video'
 type TabType = 'storyboard' | 'character' | 'scene' | 'prop'
 type ViewMode = 'single' | 'batch' | 'generate'
 type MainViewMode = 'preview' | 'list' | 'grid'
-type GenerationMode = 'ai' | 'comfyui'
+type GenerationMode = 'ai' | 'comfyui' | 'doubao'
 
 interface GenerationParams {
   prompt: string
@@ -92,6 +102,7 @@ interface GenerationParams {
   seed?: number
   randomSeed?: boolean
   resolutionScale?: number
+  doubaoModel?: string
 }
 
 const DEFAULT_IMAGE_PARAMS: GenerationParams = {
@@ -267,6 +278,27 @@ export function StoryboardDraw() {
     'generationPage.paramCollapsed',
     false
   )
+
+  // 豆包网页视频生成相关
+  const doubaoGen = useDoubaoBrowserGeneration()
+  const doubaoQuota = useDoubaoQuota()
+  const { addTask } = useTaskQueueStore()
+  const [activeDoubaoAccountId, setActiveDoubaoAccountId] = useState<string | null>(null)
+  const [showDoubaoBrowser, setShowDoubaoBrowser] = useState(false)
+  const [doubaoProbeResult, setDoubaoProbeResult] = useState<string>('')
+
+  // 切换到豆包模式时设置豆包默认参数（不强制视频类型，图片/视频均可）
+  useEffect(() => {
+    if (generationMode === 'doubao') {
+      // 豆包默认参数：Fast模型、10s时长、自动比例（仅在未设置时填充，幂等）
+      setModelParams(prev => ({
+        ...prev,
+        doubaoModel: prev.doubaoModel || 'fast',
+        duration: prev.duration || 10,
+        aspectRatio: prev.aspectRatio || 'auto',
+      }))
+    }
+  }, [generationMode, setModelParams])
 
   // 供应商配置（用于获取模型可用参数）
   const [vendors, setVendors] = useState<VendorConfig[]>([])
@@ -925,7 +957,7 @@ export function StoryboardDraw() {
           model: selectedModelId,
           width: modelParams.width as number,
           height: modelParams.height as number,
-          aspectRatio: modelParams.aspectRatio || '16:9',
+          aspectRatio: modelParams.aspectRatio || 'auto',
           imageUrl: firstImage,
           referenceImages: otherReferenceImages.length > 0 ? otherReferenceImages : undefined,
         })
@@ -1432,6 +1464,277 @@ export function StoryboardDraw() {
     generatedImage,
     refreshData,
   ])
+
+  // ===== 视频结果管理（解绑/上传） =====
+
+  // 解绑视频结果（仅移除引用，不删除本地文件，与首帧图片删除逻辑一致）
+  const handleDeleteVideo = useCallback(async () => {
+    if (!activeItem) return
+    const { confirm } = await import('@tauri-apps/plugin-dialog')
+    const ok = await confirm('确定要解绑该视频吗？（仅移除关联，不删除本地文件）', {
+      title: '解绑确认',
+      kind: 'warning',
+      okLabel: '确定',
+      cancelLabel: '取消',
+    })
+    if (!ok) return
+
+    try {
+      if (activeTab === 'storyboard') {
+        await updateStoryboardAsync({ id: activeItem.id, data: { video: '' } })
+      } else {
+        await updateLinkedAsset(activeTab, activeItem.id, { video: '' } as any)
+      }
+      setPreviewVideo(null)
+      toast({ title: '视频已解绑' })
+      refreshData()
+    } catch (err) {
+      toast({ title: '解绑失败', description: String(err), variant: 'destructive' })
+    }
+  }, [activeItem, activeTab, updateStoryboardAsync, updateLinkedAsset, toast, refreshData])
+
+  // 上传本地视频作为生成结果
+  const handleUploadVideo = useCallback(async () => {
+    if (!activeItem || !currentProjectId) return
+    const { open } = await import('@tauri-apps/plugin-dialog')
+    const { saveMediaFile } = await import('@/utils/mediaStorage')
+    const { readFile } = await import('@tauri-apps/plugin-fs')
+
+    const selected = await open({
+      multiple: false,
+      filters: [
+        { name: '视频文件', extensions: ['mp4', 'webm', 'mov', 'avi', 'mkv'] },
+        { name: '所有文件', extensions: ['*'] },
+      ],
+      title: '选择视频文件',
+    })
+    if (!selected || Array.isArray(selected)) return
+
+    try {
+      const fileData = await readFile(selected)
+      const savedPath = await saveMediaFile(fileData, {
+        projectId: currentProjectId,
+        episodeId: currentEpisodeId || '',
+        type: 'video',
+        extension: 'mp4',
+        fileName: `upload_${Date.now()}.mp4`,
+      })
+
+      if (activeTab === 'storyboard') {
+        await updateStoryboardAsync({
+          id: activeItem.id,
+          data: { video: savedPath, status: 'completed' },
+        })
+      } else {
+        await updateLinkedAsset(activeTab, activeItem.id, { video: savedPath } as any)
+      }
+      setPreviewVideo(savedPath)
+      toast({ title: '视频已上传' })
+      refreshData()
+    } catch (err) {
+      toast({ title: '上传失败', description: String(err), variant: 'destructive' })
+    }
+  }, [activeItem, activeTab, currentProjectId, currentEpisodeId, updateStoryboardAsync, updateLinkedAsset, toast, refreshData])
+
+  // ===== 豆包网页视频生成 =====
+
+  // 单条豆包生成：提交到任务队列
+  const handleGenerateDoubao = useCallback(async () => {
+    if (!activeItem || !currentProjectId) return
+
+    const prompt = localVideoPrompt.trim()
+    if (!prompt) {
+      toast({ title: '错误', description: '请输入视频提示词', variant: 'destructive' })
+      return
+    }
+
+    // 收集参考图（@提及 + 自动收集分镜关联资产 + 手动添加的参考图）
+    const mentionedImages = getMentionImageUrls(promptMentions)
+    let autoCollectedRefs: string[] = []
+    if (activeTab === 'storyboard' && activeItem) {
+      try {
+        const { collectStoryboardReferences, getReferenceImageUrls } = await import('@/utils/storyboardReferences')
+        const refs = await collectStoryboardReferences(activeItem as any)
+        autoCollectedRefs = getReferenceImageUrls(refs)
+      } catch {}
+    }
+
+    // 分镜图作为首帧（用标注版过审）
+    const firstFrame = activeItem.image
+      ? (annotatedImageMap[activeItem.image] || activeItem.image)
+      : undefined
+
+    // 合并所有参考图（去重）
+    const allRefs = [...new Set([...localReferenceImages, ...mentionedImages, ...autoCollectedRefs])]
+      .filter(url => url !== firstFrame)
+
+    // 提交到任务队列
+    const taskId = addTask({
+      type: 'doubao_video_generation',
+      name: `豆包视频：${activeItem.name.substring(0, 20)}`,
+      metadata: {
+        prompt,
+        firstFrame,
+        referenceImages: allRefs,
+        aspectRatio: modelParams.aspectRatio || 'auto',
+        duration: modelParams.duration || 10,
+        model: modelParams.doubaoModel || 'fast',
+        projectId: currentProjectId,
+        episodeId: currentEpisodeId || '',
+        preferAccountId: activeDoubaoAccountId || undefined,
+        itemId: activeItem.id,
+        itemType: activeTab,
+      },
+    })
+
+    // 立即执行，不等队列调度（豆包任务支持并行等待视频）
+    executeTaskNow(taskId)
+
+    toast({ title: '已提交到任务队列', description: '豆包视频生成任务已加入队列' })
+
+    // 自动弹出浏览器，让用户观看自动化过程并手动发送
+    const accountId = activeDoubaoAccountId || doubaoQuota.getDoubaoAccounts()[0]?.id
+    if (accountId) {
+      setShowDoubaoBrowser(true)
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          doubaoGen.showBrowser(accountId)
+        }, 300)
+      })
+    }
+  }, [
+    activeItem,
+    currentProjectId,
+    currentEpisodeId,
+    localVideoPrompt,
+    localReferenceImages,
+    promptMentions,
+    modelParams,
+    activeTab,
+    activeDoubaoAccountId,
+    annotatedImageMap,
+    addTask,
+    toast,
+    doubaoGen,
+    doubaoQuota,
+  ])
+
+  // 批量豆包生成：遍历选中的分镜，逐条提交到任务队列
+  const handleGenerateBatchDoubao = useCallback(async () => {
+    const items = getBatchItems()
+    if (items.length === 0) {
+      toast({ title: '提示', description: '请先选择要生成的分镜' })
+      return
+    }
+
+    for (const item of items) {
+      const prompt = (item as any).video_prompt || (item as any).prompt || ''
+      if (!prompt) continue
+
+      const firstFrame = (item as any).image
+        ? (annotatedImageMap[(item as any).image] || (item as any).image)
+        : undefined
+
+      let autoCollectedRefs: string[] = []
+      try {
+        const { collectStoryboardReferences, getReferenceImageUrls } = await import('@/utils/storyboardReferences')
+        const refs = await collectStoryboardReferences(item as any)
+        autoCollectedRefs = getReferenceImageUrls(refs)
+      } catch {}
+
+      const taskId = addTask({
+        type: 'doubao_video_generation',
+        name: `豆包视频：${item.name.substring(0, 20)}`,
+        metadata: {
+          prompt,
+          firstFrame,
+          referenceImages: autoCollectedRefs.filter(url => url !== firstFrame),
+          aspectRatio: modelParams.aspectRatio || 'auto',
+          duration: modelParams.duration || 10,
+          model: modelParams.doubaoModel || 'fast',
+          projectId: currentProjectId || '',
+          episodeId: currentEpisodeId || '',
+          preferAccountId: activeDoubaoAccountId || undefined,
+          itemId: item.id,
+          itemType: activeTab,
+        },
+      })
+      // 立即执行，不等队列调度（豆包任务支持并行等待视频）
+      executeTaskNow(taskId)
+    }
+
+    toast({ title: '批量提交完成', description: `已提交 ${items.length} 个豆包视频生成任务` })
+
+    // 自动弹出浏览器，让用户观看自动化过程并手动发送
+    const accountId = activeDoubaoAccountId || doubaoQuota.getDoubaoAccounts()[0]?.id
+    if (accountId) {
+      setShowDoubaoBrowser(true)
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          doubaoGen.showBrowser(accountId)
+        }, 300)
+      })
+    }
+  }, [
+    modelParams,
+    currentProjectId,
+    currentEpisodeId,
+    activeDoubaoAccountId,
+    activeTab,
+    annotatedImageMap,
+    addTask,
+    toast,
+    doubaoGen,
+    doubaoQuota,
+  ])
+
+  // 显示/隐藏豆包浏览器
+  const handleToggleDoubaoBrowser = useCallback(async () => {
+    if (!activeDoubaoAccountId) {
+      const accounts = doubaoQuota.getDoubaoAccounts()
+      if (accounts.length === 0) {
+        toast({ title: '提示', description: '请先在浏览器管理页添加豆包账号' })
+        return
+      }
+      setActiveDoubaoAccountId(accounts[0]!.id)
+    }
+
+    const accountId = activeDoubaoAccountId || doubaoQuota.getDoubaoAccounts()[0]?.id
+    if (!accountId) return
+
+    if (showDoubaoBrowser) {
+      // 隐藏：先隐藏 WebView，再更新 state
+      doubaoGen.hideBrowser(accountId)
+      setShowDoubaoBrowser(false)
+    } else {
+      // 显示：先设置 state 让 Dialog 渲染 containerRef div，等 DOM 更新后再 showBrowser
+      // Dialog 使用 Portal 渲染，需要更长等待时间
+      setShowDoubaoBrowser(true)
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          doubaoGen.showBrowser(accountId)
+        }, 300)
+      })
+    }
+  }, [activeDoubaoAccountId, showDoubaoBrowser, doubaoGen, doubaoQuota, toast])
+
+  // 探测豆包页面（调试用）
+  const handleProbeDoubao = useCallback(async () => {
+    const accountId = activeDoubaoAccountId || doubaoQuota.getDoubaoAccounts()[0]?.id
+    if (!accountId) {
+      toast({ title: '提示', description: '请先选择账号' })
+      return
+    }
+    try {
+      setDoubaoProbeResult('探测中...')
+      const result = await doubaoGen.probePage(accountId, true)
+      setDoubaoProbeResult(result)
+      toast({ title: '探测完成', description: '查看控制台或下方文本框' })
+    } catch (err) {
+      setDoubaoProbeResult(`探测失败: ${err}`)
+      toast({ title: '探测失败', description: String(err), variant: 'destructive' })
+    }
+  }, [activeDoubaoAccountId, doubaoGen, doubaoQuota, toast])
 
   // Batch generation
   const getBatchItems = () => {
@@ -1977,16 +2280,18 @@ export function StoryboardDraw() {
                       <div className="h-full flex flex-col">
                         {/* 图片/视频显示区域 */}
                         <div className="flex-1 relative bg-muted/30 rounded-lg overflow-hidden">
-                          {/* 优先显示视频（如果有） */}
+                          {/* 优先显示视频（如果有），X 解绑按钮通过 onRemove 集成到 VideoPlayer 按钮组 */}
                           {(activeItem as any).video ? (
                             <VideoPlayer
                               src={(activeItem as any).video}
                               className="w-full h-full"
+                              onRemove={handleDeleteVideo}
                             />
                           ) : generationType === 'video' && previewVideo ? (
                             <VideoPlayer
                               src={previewVideo}
                               className="w-full h-full"
+                              onRemove={handleDeleteVideo}
                             />
                           ) : getCurrentDisplayImage() ? (
                             <img
@@ -2011,12 +2316,25 @@ export function StoryboardDraw() {
                       <div className="h-full flex items-center justify-center bg-muted/30 rounded-lg overflow-hidden">
                         <div className="text-center text-muted-foreground">
                           {generationType === 'video' ? (
-                            <Video className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                            <>
+                              <Video className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                              <p>暂无生成结果</p>
+                              <p className="text-sm mt-1">在右侧配置参数并生成</p>
+                              <button
+                                onClick={handleUploadVideo}
+                                className="mt-4 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-sm transition-colors inline-flex items-center gap-1.5"
+                              >
+                                <Upload className="w-4 h-4" />
+                                上传视频
+                              </button>
+                            </>
                           ) : (
-                            <ImageIcon className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                            <>
+                              <ImageIcon className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                              <p>暂无生成结果</p>
+                              <p className="text-sm mt-1">在右侧配置参数并生成</p>
+                            </>
                           )}
-                          <p>暂无生成结果</p>
-                          <p className="text-sm mt-1">在右侧配置参数并生成</p>
                         </div>
                       </div>
                     )}
@@ -2353,7 +2671,7 @@ export function StoryboardDraw() {
                       onValueChange={v => setGenerationMode(v as GenerationMode)}
                       className="w-full"
                     >
-                      <TabsList className="grid w-full grid-cols-2 h-9 bg-transparent p-0">
+                      <TabsList className="grid w-full grid-cols-3 h-9 bg-transparent p-0">
                         <TabsTrigger
                           value="ai"
                           className="text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm"
@@ -2368,12 +2686,19 @@ export function StoryboardDraw() {
                           <Settings2 className="w-3.5 h-3.5 mr-1.5" />
                           ComfyUI
                         </TabsTrigger>
+                        <TabsTrigger
+                          value="doubao"
+                          className="text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                        >
+                          <Monitor className="w-3.5 h-3.5 mr-1.5" />
+                          豆包网页
+                        </TabsTrigger>
                       </TabsList>
                     </Tabs>
                   </CardContent>
                 </Card>
 
-                {/* Model Selector / Workflow Selector - First */}
+                {/* Model Selector / Workflow Selector / Doubao Panel - First */}
                     {generationMode === 'ai' ? (
                       <Card>
                         <CardHeader className="pb-3">
@@ -2391,7 +2716,7 @@ export function StoryboardDraw() {
                           />
                         </CardContent>
                       </Card>
-                    ) : (
+                    ) : generationMode === 'comfyui' ? (
                       <Card>
                         <CardHeader className="pb-3">
                           <CardTitle className="text-sm text-muted-foreground">工作流</CardTitle>
@@ -2410,6 +2735,77 @@ export function StoryboardDraw() {
                               </option>
                             ))}
                           </select>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      /* 豆包模式：账号选择 + 参数面板 */
+                      <Card>
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground">
+                            <Monitor className="w-4 h-4" />
+                            豆包账号
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          {/* 3列：账号下拉 | 显示/隐藏浏览器 | 探测 */}
+                          <div className="flex gap-2 items-center">
+                            <select
+                              value={activeDoubaoAccountId || ''}
+                              onChange={e => setActiveDoubaoAccountId(e.target.value)}
+                              className="flex-1 h-9 rounded-md border border-input bg-background px-2 text-xs truncate"
+                            >
+                              {doubaoQuota.getDoubaoAccounts().length === 0 ? (
+                                <option value="">请先添加账号</option>
+                              ) : (
+                                <>
+                                  <option value="">选择账号</option>
+                                  {doubaoQuota.getAccountsWithQuota().map(account => {
+                                    const remaining = account.remaining ?? 0
+                                    const isBroken = account.quota?.broken
+                                    return (
+                                      <option key={account.id} value={account.id}>
+                                        {account.name}（{isBroken ? '异常' : `${remaining}/${account.quota?.limit ?? 3}`}）
+                                      </option>
+                                    )
+                                  })}
+                                </>
+                              )}
+                            </select>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-9 px-2.5 text-xs shrink-0"
+                              onClick={handleToggleDoubaoBrowser}
+                              disabled={!activeDoubaoAccountId}
+                              title={showDoubaoBrowser ? '隐藏浏览器' : '显示浏览器'}
+                            >
+                              {showDoubaoBrowser ? (
+                                <EyeOff className="w-3.5 h-3.5" />
+                              ) : (
+                                <Eye className="w-3.5 h-3.5" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-9 px-2.5 text-xs shrink-0"
+                              onClick={handleProbeDoubao}
+                              disabled={!activeDoubaoAccountId}
+                              title="探测豆包页面DOM结构（调试用）"
+                            >
+                              <Search className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+
+                          {/* 探测结果（调试用） */}
+                          {doubaoProbeResult && (
+                            <Textarea
+                              value={doubaoProbeResult}
+                              readOnly
+                              className="text-[10px] h-24 font-mono"
+                              placeholder="探测结果将显示在这里..."
+                            />
+                          )}
                         </CardContent>
                       </Card>
                     )}
@@ -2629,7 +3025,7 @@ export function StoryboardDraw() {
                       )}
                     </CardContent>
                   </Card>
-                ) : (
+                ) : generationMode === 'comfyui' ? (
                   <Card>
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground">
@@ -2657,6 +3053,91 @@ export function StoryboardDraw() {
                       />
                     </CardContent>
                   </Card>
+                ) : null}
+
+                {/* 豆包参数面板 */}
+                {generationMode === 'doubao' && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm text-muted-foreground">豆包视频参数</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {/* 模型选择 */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">视频模型</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {([
+                            { value: 'seedance_2.5', label: 'Seedance 2.5', desc: '旗舰・5倍消耗' },
+                            { value: 'seedance_2.0_pro', label: 'Seedance 2.0', desc: '进阶・2倍消耗' },
+                            { value: 'fast', label: 'Fast', desc: '快速出片' },
+                            { value: 'mini', label: 'Mini', desc: '日常生成' },
+                          ] as const).map(m => (
+                            <button
+                              key={m.value}
+                              onClick={() => setModelParams({ ...modelParams, doubaoModel: m.value })}
+                              className={cn(
+                                'flex flex-col items-start p-2 rounded-md border text-xs transition-colors',
+                                (modelParams.doubaoModel || 'fast') === m.value
+                                  ? 'bg-primary text-primary-foreground border-primary'
+                                  : 'bg-background border-input hover:bg-accent'
+                              )}
+                            >
+                              <span className="font-medium">{m.label}</span>
+                              <span className={cn(
+                                'text-[10px]',
+                                (modelParams.doubaoModel || 'fast') === m.value
+                                  ? 'text-primary-foreground/80'
+                                  : 'text-muted-foreground'
+                              )}>{m.desc}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 时长（滑块，默认10s） */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm font-medium">时长</label>
+                          <span className="text-xs text-muted-foreground">{modelParams.duration || 10}s</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={4}
+                          max={15}
+                          step={1}
+                          value={modelParams.duration || 10}
+                          onChange={e => setModelParams({ ...modelParams, duration: Number(e.target.value) })}
+                          className="w-full accent-primary"
+                        />
+                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                          <span>4s</span>
+                          <span>10s</span>
+                          <span>15s</span>
+                        </div>
+                      </div>
+
+                      {/* 比例选择 */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">画面比例</label>
+                        <div className="flex flex-wrap gap-2">
+                          {['auto', '3:4', '4:3', '9:16', '16:9', '1:1', '21:9'].map(r => (
+                            <button
+                              key={r}
+                              onClick={() => setModelParams({ ...modelParams, aspectRatio: r })}
+                              className={cn(
+                                'px-3 py-2 text-xs rounded-md border transition-colors',
+                                (modelParams.aspectRatio || 'auto') === r
+                                  ? 'bg-primary text-primary-foreground border-primary'
+                                  : 'bg-background border-input hover:bg-accent'
+                              )}
+                            >
+                              {r === 'auto' ? '自动' : r}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 )}
 
                 {/* Action Buttons */}
@@ -2680,7 +3161,7 @@ export function StoryboardDraw() {
                         </>
                       )}
                     </Button>
-                  ) : (
+                  ) : generationMode === 'comfyui' ? (
                     <Button
                       className="w-full"
                       size="lg"
@@ -2692,10 +3173,26 @@ export function StoryboardDraw() {
                       <Play className="w-4 h-4 mr-2" />
                       {isGenerating ? '生成中...' : '运行工作流'}
                     </Button>
+                  ) : (
+                    /* 豆包模式生成按钮 */
+                    <div className="flex flex-col w-full gap-2">
+                      <Button
+                        className="w-full"
+                        size="default"
+                        onClick={viewMode === 'batch' ? handleGenerateBatchDoubao : handleGenerateDoubao}
+                        disabled={!activeItem || !currentProjectId}
+                      >
+                        <Monitor className="w-4 h-4 mr-2" />
+                        {viewMode === 'batch' ? `批量生成(${getBatchItems().length})` : '豆包生成视频'}
+                      </Button>
+                    </div>
                   )}
 
 
                 </div>
+
+                {/* 豆包浏览器预览容器 — 已移至 Dialog 弹窗 */}
+
 
                 </div>
               </div>
@@ -2768,6 +3265,41 @@ export function StoryboardDraw() {
           }
         }}
       />
+
+      {/* 豆包浏览器弹窗（眼睛按钮触发） */}
+      <Dialog
+        open={generationMode === 'doubao' && showDoubaoBrowser}
+        onOpenChange={(open) => {
+          if (!open) {
+            const accountId = activeDoubaoAccountId || doubaoQuota.getDoubaoAccounts()[0]?.id
+            if (accountId) doubaoGen.hideBrowser(accountId)
+            setShowDoubaoBrowser(false)
+          }
+        }}
+      >
+        <DialogContent className="max-w-[90vw] w-[90vw] h-[85vh] p-0 flex flex-col">
+          <DialogHeader className="px-4 py-2 border-b">
+            <DialogTitle className="text-sm flex items-center gap-2">
+              <Monitor className="w-4 h-4" />
+              豆包浏览器
+              {activeDoubaoAccountId && (
+                <span className="text-xs text-muted-foreground ml-2">
+                  {doubaoQuota.getDoubaoAccounts().find(a => a.id === activeDoubaoAccountId)?.name}
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div
+            ref={doubaoGen.containerRef}
+            className="flex-1 w-full overflow-hidden bg-muted/20 relative"
+            style={{ minHeight: '400px' }}
+          >
+            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm pointer-events-none">
+              浏览器加载中...
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

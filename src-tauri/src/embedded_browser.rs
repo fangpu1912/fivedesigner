@@ -602,3 +602,20 @@ pub async fn inject_cookies_to_webview(
 
     Ok(())
 }
+
+/// 接收豆包自动化脚本回传的状态
+/// 由 WebView 内 JS 通过 __TAURI_INTERNALS__.invoke('report_doubao_auto_status', {...}) 调用
+/// 前端通过 listen('doubao-auto-status') 接收 { accountId, status }
+#[command]
+pub async fn report_doubao_auto_status(
+    app: AppHandle,
+    account_id: String,
+    status: serde_json::Value,
+) -> Result<(), String> {
+    app.emit("doubao-auto-status", serde_json::json!({
+        "accountId": account_id,
+        "status": status,
+    }))
+    .map_err(|e| format!("发送事件失败: {}", e))?;
+    Ok(())
+}

@@ -60,7 +60,9 @@ Vendor.prototype.textRequest = function(model) {
         var reasoning = msg.reasoning_content || "";
         var content = msg.content || "";
         console.log("[Kimi] reasoning length:", reasoning.length, "content length:", content.length);
-        return content || reasoning;
+        if (content) return content;
+        if (reasoning) return reasoning;
+        throw new Error("Kimi 返回空结果（content 和 reasoning_content 均为空），请检查 maxTokens 或模型配置");
       }
       throw new Error("Kimi API unexpected response: " + JSON.stringify(data));
     }).catch(function(err) {
